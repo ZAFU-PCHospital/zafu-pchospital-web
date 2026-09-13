@@ -161,26 +161,30 @@ node tools/console-probe.mjs http://localhost:3000/
 ### shots/ 的命名
 
 `shots/` 里的截图一律以 `<编号>-<页面>-<视图>-<模式>.png` 命名，模式取
-`normal` / `dark`，与 `<html data-mode>` 一致：
+`normal` / `dark`，与 `<html data-mode>` 一致。
+
+**每个视图两种模式各一张，同一编号成对出现**，文件排序也天然相邻：
 
 ```text
-01-home-desktop-normal.png      首页首屏，正常模式
-14-join-signup-done-normal.png  /join 提交完成，正常模式
-16-join-signup-done-dark.png    同上，深色模式
+01-home-desktop-normal.png       01-home-desktop-dark.png
+14-join-signup-done-normal.png   14-join-signup-done-dark.png
 ```
 
-**必须写模式后缀。** 站点有两套主题（见 design-system 第 9 节），
-不带后缀的截图没人知道拍的是哪一套；主题只改颜色、不改结构，
-所以绝大多数视图只拍默认的 `normal`，
-只有「同一次交互在两种模式下看到的东西不一样」时才另拍一张 `dark`
-（例如 `/join` 提交后的二维码：正常模式是浅底原色版，深色模式是深底黄码版）。
+站点有两套主题（见 design-system 第 9 节）。主题改的不只是颜色 —— 走线栅格、
+扫描线、水印描边、索引栏面板色、准星混合模式都随主题变，所以**每个视图都要
+两种模式各拍一张**，不能只留一套。
 
-截图前先在浏览器里把模式恢复成默认，否则 `localStorage` 里记住的选择
-会把整批截图都拍成深色：
+模式用 `THEME_MODE` 指定，成对拍：
 
-```js
-localStorage.removeItem("zafu-pchospital:theme-mode");
+```bash
+THEME_MODE=normal CAP_SEL="#services" node tools/inspect.mjs URL shots/02-home-services-normal.png
+THEME_MODE=dark   CAP_SEL="#services" node tools/inspect.mjs URL shots/02-home-services-dark.png
 ```
+
+站点把用户的选择存在 `localStorage` 里、引导脚本在 hydration 之前就读它，
+所以模式必须在**文档创建之前**写进去。`tools/inspect.mjs` 已经处理好这件事；
+**不传 `THEME_MODE` 时它会主动清掉那个键**，避免上一轮留下的深色选择
+把后面所有截图都拍成深色（这个坑踩过一次）。
 
 ---
 

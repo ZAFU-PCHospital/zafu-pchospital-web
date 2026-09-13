@@ -11,6 +11,8 @@
      CAP_W/H    截图区域尺寸，默认取视口宽高
      CAP_SCALE  截图缩放，默认 1（>1 可放大看细节）
      WAIT_MS    载入后等待时长，默认 1600
+     REDUCED_MOTION=1  以 prefers-reduced-motion: reduce 渲染
+     THEME_MODE normal|dark  指定显示模式；不设则清掉本地选择，走默认模式
 */
 const [, , url, out, w = "1440", h = "900", expr = ""] = process.argv;
 const PORT = process.env.CDP_PORT || "9222";
@@ -20,6 +22,10 @@ const capW = +(process.env.CAP_W || w);
 const capH = +(process.env.CAP_H || h);
 const capScale = +(process.env.CAP_SCALE || 1);
 const waitMs = +(process.env.WAIT_MS || 1600);
+const themeMode = process.env.THEME_MODE || "";
+
+/** 与 src/lib/theme.ts 的 THEME_STORAGE_KEY 保持一致（工具是独立脚本，不 import 源码） */
+const THEME_STORAGE_KEY = "zafu-pchospital:theme-mode";
 
 const list = await (await fetch(`http://127.0.0.1:${PORT}/json/list`)).json();
 const page = list.find((t) => t.type === "page");
@@ -112,6 +118,19 @@ if (process.env.REDUCED_MOTION === "1") {
     features: [{ name: "prefers-reduced-motion", value: "reduce" }],
   });
 }
+
+// 显示模式：站点把用户的选择存在 localStorage 里，引导脚本在 hydration 之前就读它，
+// 所以必须在文档创建之前写入 —— 等页面加载完再改 data-theme 会让主题切换控件的
+// 选中状态对不上。不设 THEME_MODE 时反过来主动清掉这个键，否则上一轮跑 dark
+// 留下的选择会把后面所有截图都拍成深色（这个坑踩过一次）。
+await send("Page.addScriptToEvaluateOnNewDocument", {
+  source:
+    "try{" +
+    (themeMode
+      ? `localStorage.setItem(${JSON.stringify(THEME_STORAGE_KEY)},${JSON.stringify(themeMode)})`
+      : `localStorage.removeItem(${JSON.stringify(THEME_STORAGE_KEY)})`) +
+    "}catch(e){}",
+});
 
 const loaded = once("Page.loadEventFired");
 await send("Page.navigate", { url });
