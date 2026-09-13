@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 
+import { MemberSignup } from "@/components/join/MemberSignup";
 import { PageHead } from "@/components/layout/PageHead";
 import { Card } from "@/components/ui/Card";
 import { Reveal } from "@/components/ui/Reveal";
@@ -18,16 +19,19 @@ import {
 export const metadata: Metadata = {
   title: "加入我们",
   description:
-    "浙江农林大学电脑医院招新说明：我们希望新成员具备什么、加入流程是怎样的，以及当前阶段的内容边界。",
+    "浙江农林大学电脑医院招新：填写新社员登记信息并扫码加入招新群，以及我们希望新成员具备什么、加入流程与当前的内容边界。",
 };
 
 /**
  * /join 加入我们
  *
- * 本页目前是内容骨架：在线招新系统属于后续阶段，本阶段不实现。
- * 页面用设计系统既有的编号列表、步骤列表与提示框拼装，没有新增视觉语言。
+ * 内容顺序：登记（唯一需要动手的部分）→ 我们希望你具备 → 加入流程 → 加入须知。
+ * 登记表放在最前面，是这一页唯一的主行动点；后面三个区块沿用原有的
+ * 编号列表、步骤列表与提示框，没有新增视觉语言。
+ *
+ * 登记表本身是客户端组件（components/join/MemberSignup.tsx），
+ * 本文件只负责拼装。
  */
-
 export default function JoinPage() {
   return (
     <>
@@ -38,6 +42,9 @@ export default function JoinPage() {
         title={joinPage.title}
         lead={joinPage.lead}
       />
+
+      {/* -------------------------------------------------- 新社员信息登记 */}
+      <MemberSignup />
 
       {/* ------------------------------------------------ 我们希望你具备 */}
       <Section id="expect" labelledBy="join-expect-title">

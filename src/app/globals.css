@@ -1787,6 +1787,148 @@ html[data-theme="black-yellow"] {
     margin-bottom: 0;
   }
 
+  /* ----------------------------------------------- 新社员信息登记（/join）
+     登记表 + 提交完成后的招新群二维码。视觉全部沿用既有令牌：
+     1px 描边、2px 圆角、无阴影；控件边界用 --line-strong（保证 3:1）。
+
+     校验反馈只用唯一的强调色（描边 --accent、说明文字 --accent-deep），
+     语义就是「这一项需要你处理」，与强调色原本的语义一致。
+     这仍然没有引入第二强调色 / 语义色：Success、Warning、Danger 属于语义色，
+     按第 1.5 节必须先在设计系统里定义，不允许由页面自行挑选。 */
+  .signup {
+    display: grid;
+    gap: clamp(2.5rem, 6vw, 5rem);
+    align-items: start;
+  }
+
+  .signup__form {
+    display: grid;
+    gap: var(--s-6);
+    margin: 0;
+  }
+
+  .field {
+    display: grid;
+    gap: var(--s-2);
+  }
+  .field__label {
+    display: flex;
+    align-items: baseline;
+    gap: var(--s-2);
+    font-size: 0.9375rem;
+    font-weight: 700;
+    letter-spacing: 0.005em;
+    color: var(--ink-2);
+  }
+  .field__num {
+    font-family: var(--font-latin);
+    font-size: var(--t-micro);
+    font-weight: 800;
+    font-stretch: 112%;
+    letter-spacing: 0.12em;
+    color: var(--accent);
+  }
+  .field__req {
+    font-family: var(--font-latin);
+    font-size: 0.5625rem;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    color: var(--accent-deep);
+  }
+
+  .field__input {
+    width: 100%;
+    min-height: 46px; /* 与 .btn 同高，保证移动端可点面积 */
+    padding: 0.7rem 0.85rem;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--r-base);
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: var(--t-base); /* 16px：更小会让 iOS Safari 聚焦时把整页放大 */
+    line-height: 1.5;
+    transition:
+      border-color var(--d-fast) var(--ease-quart),
+      background var(--d-mid) var(--ease-quart);
+  }
+  .field__input::placeholder {
+    color: var(--ink-4);
+  }
+  .field__input:hover {
+    border-color: var(--ink-4);
+  }
+  .field__input:focus {
+    background: var(--surface-1);
+  }
+  /* 只在用户交互过且仍不合法时标黄，避免一进页面就是满屏警告 */
+  .field__input:user-invalid {
+    border-color: var(--accent);
+  }
+  .field__hint {
+    margin: 0;
+    font-size: var(--t-xs);
+    line-height: 1.7;
+    color: var(--ink-4);
+  }
+
+  .signup__actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--s-4) var(--s-5);
+    padding-top: var(--s-5);
+    border-top: 1px solid var(--line-soft);
+  }
+  .signup__status {
+    flex: 1 1 20ch;
+    max-width: 46ch;
+    margin: 0;
+    font-size: var(--t-xs);
+    line-height: 1.75;
+    color: var(--ink-4);
+    text-wrap: pretty;
+  }
+  .signup__status--alert {
+    flex-basis: 100%;
+    color: var(--accent-deep);
+  }
+
+  /* 右栏：提交前是登记说明，提交后换成招新群二维码 */
+  .signup__aside {
+    display: grid;
+    align-content: start;
+    gap: var(--s-5);
+  }
+  /* 招新群二维码的尺寸见响应式段：≥760px 时按「与左侧登记表等高」反推宽度。
+     小屏沿用 .qr__img 的既有上限，不再单独覆盖。 */
+
+  /* 提交完成面板：中性 surface 面板 + 强调色标记。
+     刻意不用 .notice —— 它只服务「须知 / 风险 / 待补充」，不做成功反馈。 */
+  .signup__done {
+    display: grid;
+    justify-items: start;
+    gap: var(--s-4);
+    padding: clamp(1.25rem, 3vw, 1.75rem);
+    border: 1px solid var(--line);
+    border-radius: var(--r-mid);
+    background: var(--surface-1);
+  }
+  .signup__done-title {
+    margin: 0;
+    font-size: var(--t-lg);
+    font-weight: 750;
+    line-height: 1.3;
+    letter-spacing: -0.012em;
+  }
+  .signup__done-note {
+    max-width: 48ch;
+    margin: 0;
+    font-size: 0.9375rem;
+    line-height: 1.82;
+    color: var(--ink-3);
+    text-wrap: pretty;
+  }
+
   /* -------------------------------------------------------------- 文档 */
   .docs__grid {
     display: grid;
@@ -2190,6 +2332,18 @@ html[data-theme="black-yellow"] {
       grid-template-columns: minmax(0, 1fr) auto;
       gap: clamp(2rem, 6vw, 6rem);
     }
+    /* 登记表：左侧表单为主体，右侧登记说明 / 招新群二维码辅助 */
+    .signup {
+      grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+      gap: clamp(2rem, 5vw, 5rem);
+    }
+    /* 招新群二维码：图形 + 图注的总高与左侧「提交完成」面板齐平。
+       图片已裁掉纯黑底，只留卡片（宽高比 1044 / 1323 ≈ 0.7891），
+       按提交完成面板 336px、图注约 74px 反推：262 × 0.7891 ≈ 207px。
+       列窄于此值时按 max-width 收缩，不会溢出。 */
+    .signup__aside .qr__img {
+      max-width: 207px;
+    }
   }
 
   @media (max-width: 759px) {
@@ -2278,6 +2432,15 @@ html[data-theme="black-yellow"] {
       grid-row: 2;
       grid-column: 2;
       margin-top: var(--s-2);
+    }
+
+    /* 小屏登记表：提交按钮与说明各占一行，说明不再挤在按钮旁边 */
+    .signup__actions {
+      gap: var(--s-4);
+      padding-top: var(--s-4);
+    }
+    .signup__status {
+      flex-basis: 100%;
     }
 
     /* 小屏联系方式收束：群号换行到整块宽度，二维码居中跟随 */
