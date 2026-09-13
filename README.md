@@ -96,7 +96,7 @@ pnpm dev
 │   └── data/              # 文档仓库清单（构建脚本生成）
 │
 ├── public/fonts/          # 品牌字体
-├── shots/                 # 视觉验证截图（设计基准对照）
+├── shots/                 # 视觉验证截图（按显示模式命名，见「本地验证」）
 ├── tools/                 # 本地验证脚本（CDP 诊断）
 └── zafu-pchospital-site/  # 【只读】设计基准 Demo
 ```
@@ -148,8 +148,8 @@ pnpm dev
 chrome --headless=new --remote-debugging-port=9222 --user-data-dir=./.chrome-profile about:blank
 
 # 2. 诊断某个页面并截图
-node tools/inspect.mjs http://localhost:3000/ shots/home.png 1440 900
-CAP_SEL="#services" node tools/inspect.mjs http://localhost:3000/ shots/services.png
+node tools/inspect.mjs http://localhost:3000/ shots/01-home-desktop-normal.png 1440 900
+CAP_SEL="#services" node tools/inspect.mjs http://localhost:3000/ shots/02-home-services-normal.png
 
 # 3. 收集 console 报错与运行时异常
 node tools/console-probe.mjs http://localhost:3000/
@@ -157,6 +157,30 @@ node tools/console-probe.mjs http://localhost:3000/
 
 脚本会输出 `PAGE_PROBLEMS`（页面异常 / console 错误）与 `BAD_REQUESTS`（失败请求），
 两项都为空才算通过。
+
+### shots/ 的命名
+
+`shots/` 里的截图一律以 `<编号>-<页面>-<视图>-<模式>.png` 命名，模式取
+`normal` / `dark`，与 `<html data-mode>` 一致：
+
+```text
+01-home-desktop-normal.png      首页首屏，正常模式
+14-join-signup-done-normal.png  /join 提交完成，正常模式
+16-join-signup-done-dark.png    同上，深色模式
+```
+
+**必须写模式后缀。** 站点有两套主题（见 design-system 第 9 节），
+不带后缀的截图没人知道拍的是哪一套；主题只改颜色、不改结构，
+所以绝大多数视图只拍默认的 `normal`，
+只有「同一次交互在两种模式下看到的东西不一样」时才另拍一张 `dark`
+（例如 `/join` 提交后的二维码：正常模式是浅底原色版，深色模式是深底黄码版）。
+
+截图前先在浏览器里把模式恢复成默认，否则 `localStorage` 里记住的选择
+会把整批截图都拍成深色：
+
+```js
+localStorage.removeItem("zafu-pchospital:theme-mode");
+```
 
 ---
 
