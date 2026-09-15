@@ -6,8 +6,5 @@ pnpm-lock.yaml
 package-lock.json
 next-env.d.ts
 
-# 设计基准 Demo：只读参考，不格式化
-zafu-pchospital-site
-
 # 站点数据由构建脚本生成，不参与格式化
 src/data/doc-manifest.json

@@ -92,8 +92,7 @@ git push -u origin feat/about
    - 编辑器与系统临时文件
    - 密钥、令牌、社长密钥、手机号等敏感信息
 5. **不要把格式化改动混进功能 PR。** 需要全量格式化时单独开 `chore/` PR。
-6. **不要修改 `zafu-pchospital-site/`**（设计基准 Demo）。它只读。
-7. **不要直接修改 `src/data/doc-manifest.json`**，该文件由文档仓库构建脚本生成。
+6. **不要直接修改 `src/data/doc-manifest.json`**，该文件由文档仓库构建脚本生成。
 
 ---
 
@@ -177,7 +176,6 @@ pnpm dev            # 手动检查以下项目
 - [ ] pnpm lint 通过
 - [ ] pnpm build 通过
 - [ ] Desktop / Mobile 已手动检查
-- [ ] 未修改 `zafu-pchospital-site/`
 - [ ] 未修改公共组件 API（如修改，已在下方说明影响）
 
 ## 相关 Issue

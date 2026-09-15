@@ -15,6 +15,3 @@
 # 锁文件：由包管理器生成，不参与合并冲突的人工解决
 pnpm-lock.yaml -diff merge=ours
 package-lock.json -diff
-
-# 设计基准 Demo 为只读参考，保持原样
-zafu-pchospital-site/** -text

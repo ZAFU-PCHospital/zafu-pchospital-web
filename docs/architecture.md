@@ -82,8 +82,7 @@
 │   └── console-probe.mjs      # 收集 console 报错与运行时异常（CDP）
 │
 ├── .docs-source/              # 【本地产物】文档仓库检出，docs:build 缺省时自动浅克隆，已 gitignore
-│
-└── zafu-pchospital-site/      # 【只读】设计基准 Demo，不再改动
+└── shots/                     # 视觉验证截图（tools/inspect.mjs 产出，每个视图 normal / dark 各一张）
 ```
 
 ---
@@ -301,14 +300,14 @@ src/lib/*.ts    ──┘         （拼装）              （渲染）
 
 ---
 
-## 7. 设计基准 Demo
+## 7. 设计系统的来源
 
-`zafu-pchospital-site/` 是团队已确认的视觉基准，**只读参考**：
+**`docs/design-system.md` 是视觉的唯一来源**（颜色 / 字号 / 间距 / 圆角 / 动效 / 对比度实测），
+工程落地在 `src/app/globals.css` 的令牌层与组件层。
 
-- 它**不参与**构建（Next.js 只处理 `src/`），但仍在仓库中保留以便比对。
-- ESLint 与 Prettier 已忽略该目录。
-- **不要修改、不要删除、不要重构它。**
-- 需要确认某个视觉细节时，直接读其中的 `assets/css/style.css`。
+早期用于比对的设计基准 Demo（`zafu-pchospital-site/`）已在架构整理中移除：它的设计取值
+已逐值固化进上述两处，而它自身不参与构建、不被任何脚本引用。需要新增或修改视觉规则时，
+改 `docs/design-system.md` 与 `globals.css`，不要再引入第二份基准。
 
 ---
 

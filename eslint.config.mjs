@@ -21,8 +21,6 @@ const eslintConfig = [
       // tools/inspect.mjs 的本地 Chrome 配置与扩展缓存
       ".chrome-profile/**",
       "next-env.d.ts",
-      // 设计基准 Demo：只读参考，不参与正式工程质量检查
-      "zafu-pchospital-site/**",
     ],
   },
   ...compat.extends("next/core-web-vitals", "next/typescript"),
