@@ -1,0 +1,235 @@
+generator client {
+  provider   = "prisma-client"
+  output     = "../src/generated/prisma"
+  engineType = "client"
+  moduleFormat = "esm"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+model User {
+  id                  String               @id @db.Char(36)
+  status              String               @db.VarChar(32)
+  displayName         String?              @map("display_name") @db.VarChar(80)
+  createdAt           DateTime             @map("created_at") @db.DateTime(3)
+  updatedAt           DateTime             @updatedAt @map("updated_at") @db.DateTime(3)
+  deletedAt           DateTime?            @map("deleted_at") @db.DateTime(3)
+  identities          UserIdentity[]
+  passwordCredential  PasswordCredential?
+  roles               UserRole[]           @relation("UserRoles")
+  rolesGranted        UserRole[]           @relation("GrantedBy")
+  memberProfile       MemberProfile?
+  reviews             JoinApplicationReview[]
+  inviteCodesCreated  InviteCode[]
+  redemptions         InviteCodeRedemption[]
+  provisions          AccountProvision[]
+  auditLogs           AuditLog[]
+
+  @@index([status, deletedAt], map: "users_status_deleted_idx")
+  @@map("users")
+}
+
+model UserIdentity {
+  id                   String    @id @db.Char(36)
+  userId               String    @map("user_id") @db.Char(36)
+  type                 String    @db.VarChar(32)
+  identifierNormalized String    @map("identifier_normalized") @db.VarChar(191)
+  verifiedAt           DateTime? @map("verified_at") @db.DateTime(3)
+  createdAt            DateTime  @map("created_at") @db.DateTime(3)
+  updatedAt            DateTime  @updatedAt @map("updated_at") @db.DateTime(3)
+  deletedAt            DateTime? @map("deleted_at") @db.DateTime(3)
+  user                 User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@unique([type, identifierNormalized], map: "user_identities_type_identifier_uq")
+  @@index([userId, deletedAt], map: "user_identities_user_deleted_idx")
+  @@map("user_identities")
+}
+
+model PasswordCredential {
+  userId             String    @id @map("user_id") @db.Char(36)
+  passwordHash       String    @map("password_hash") @db.VarChar(255)
+  mustChangePassword Boolean   @default(true) @map("must_change_password")
+  passwordChangedAt  DateTime? @map("password_changed_at") @db.DateTime(3)
+  createdAt          DateTime  @map("created_at") @db.DateTime(3)
+  updatedAt          DateTime  @updatedAt @map("updated_at") @db.DateTime(3)
+  user               User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@map("password_credentials")
+}
+
+model Role {
+  id        String     @id @db.Char(36)
+  code      String     @unique(map: "roles_code_uq") @db.VarChar(32)
+  name      String     @db.VarChar(64)
+  createdAt DateTime   @map("created_at") @db.DateTime(3)
+  users     UserRole[]
+
+  @@map("roles")
+}
+
+model UserRole {
+  id         String    @id @db.Char(36)
+  userId     String    @map("user_id") @db.Char(36)
+  roleId     String    @map("role_id") @db.Char(36)
+  sourceType String    @map("source_type") @db.VarChar(32)
+  sourceId   String?   @map("source_id") @db.Char(36)
+  grantedBy  String?   @map("granted_by") @db.Char(36)
+  grantedAt  DateTime  @map("granted_at") @db.DateTime(3)
+  revokedAt  DateTime? @map("revoked_at") @db.DateTime(3)
+  activeKey  String?   @unique(map: "user_roles_active_key_uq") @map("active_key") @db.VarChar(80)
+  user       User      @relation("UserRoles", fields: [userId], references: [id], onDelete: Restrict)
+  role       Role      @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  grantor    User?     @relation("GrantedBy", fields: [grantedBy], references: [id], onDelete: Restrict)
+
+  @@index([userId, revokedAt], map: "user_roles_user_revoked_idx")
+  @@index([roleId], map: "user_roles_role_idx")
+  @@map("user_roles")
+}
+
+model MemberProfile {
+  id            String                 @id @db.Char(36)
+  userId        String                 @unique(map: "member_profiles_user_uq") @map("user_id") @db.Char(36)
+  realName      String                 @map("real_name") @db.VarChar(64)
+  studentId     String?                @map("student_id") @db.VarChar(32)
+  className     String?                @map("class_name") @db.VarChar(80)
+  nickname      String?                @db.VarChar(64)
+  avatarUrl     String?                @map("avatar_url") @db.VarChar(500)
+  status        String                 @db.VarChar(32)
+  joinedAt      DateTime               @map("joined_at") @db.DateTime(3)
+  createdAt     DateTime               @map("created_at") @db.DateTime(3)
+  updatedAt     DateTime               @updatedAt @map("updated_at") @db.DateTime(3)
+  deletedAt     DateTime?              @map("deleted_at") @db.DateTime(3)
+  user          User                   @relation(fields: [userId], references: [id], onDelete: Restrict)
+  redemptions   InviteCodeRedemption[]
+  provisions    AccountProvision[]
+
+  @@index([status, deletedAt], map: "member_profiles_status_deleted_idx")
+  @@map("member_profiles")
+}
+
+model JoinApplication {
+  id                   String                    @id @db.Char(36)
+  ticketNo             String                    @unique(map: "join_applications_ticket_uq") @map("ticket_no") @db.VarChar(32)
+  recruitmentCycle     String                    @map("recruitment_cycle") @db.VarChar(32)
+  realName             String                    @map("real_name") @db.VarChar(64)
+  qqNormalized         String                    @map("qq_normalized") @db.VarChar(32)
+  phoneNormalized      String                    @map("phone_normalized") @db.VarChar(32)
+  selfIntroduction     String?                   @map("self_introduction") @db.Text
+  preferredDirection   String?                   @map("preferred_direction") @db.VarChar(120)
+  applicantRemark      String?                   @map("applicant_remark") @db.VarChar(500)
+  status               String                    @db.VarChar(32)
+  provisionStatus      String                    @map("provision_status") @db.VarChar(32)
+  privacyConsentAt     DateTime                  @map("privacy_consent_at") @db.DateTime(3)
+  submittedAt          DateTime                  @map("submitted_at") @db.DateTime(3)
+  lastReviewedAt       DateTime?                 @map("last_reviewed_at") @db.DateTime(3)
+  createdAt            DateTime                  @map("created_at") @db.DateTime(3)
+  updatedAt            DateTime                  @updatedAt @map("updated_at") @db.DateTime(3)
+  deletedAt            DateTime?                 @map("deleted_at") @db.DateTime(3)
+  reviews              JoinApplicationReview[]
+
+  @@unique([recruitmentCycle, qqNormalized], map: "join_applications_cycle_qq_uq")
+  @@unique([recruitmentCycle, phoneNormalized], map: "join_applications_cycle_phone_uq")
+  @@index([status, submittedAt], map: "join_applications_status_submitted_idx")
+  @@index([provisionStatus, updatedAt], map: "join_applications_provision_updated_idx")
+  @@map("join_applications")
+}
+
+model JoinApplicationReview {
+  id               String          @id @db.Char(36)
+  applicationId    String          @map("application_id") @db.Char(36)
+  result           String          @db.VarChar(32)
+  interviewedAt    DateTime        @map("interviewed_at") @db.DateTime(3)
+  reviewerUserId   String          @map("reviewer_user_id") @db.Char(36)
+  internalNote     String?         @map("internal_note") @db.VarChar(2000)
+  createdAt        DateTime        @map("created_at") @db.DateTime(3)
+  application      JoinApplication @relation(fields: [applicationId], references: [id], onDelete: Restrict)
+  reviewer         User            @relation(fields: [reviewerUserId], references: [id], onDelete: Restrict)
+
+  @@index([applicationId, createdAt], map: "join_reviews_application_created_idx")
+  @@map("join_application_reviews")
+}
+
+model InviteCode {
+  id                   String                 @id @db.Char(36)
+  codeDigest           Bytes                  @unique(map: "invite_codes_digest_uq") @map("code_digest") @db.Binary(32)
+  displayPrefix        String                 @map("display_prefix") @db.VarChar(12)
+  status               String                 @db.VarChar(32)
+  activeFrom           DateTime?              @map("active_from") @db.DateTime(3)
+  expiresAt            DateTime?              @map("expires_at") @db.DateTime(3)
+  maxUses              Int                    @map("max_uses")
+  usedCount            Int                    @default(0) @map("used_count")
+  boundQqNormalized    String?                @map("bound_qq_normalized") @db.VarChar(32)
+  boundPhoneNormalized String?                @map("bound_phone_normalized") @db.VarChar(32)
+  createdByUserId      String                 @map("created_by_user_id") @db.Char(36)
+  createdAt            DateTime               @map("created_at") @db.DateTime(3)
+  updatedAt            DateTime               @updatedAt @map("updated_at") @db.DateTime(3)
+  revokedAt            DateTime?              @map("revoked_at") @db.DateTime(3)
+  deletedAt            DateTime?              @map("deleted_at") @db.DateTime(3)
+  creator              User                   @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
+  redemptions          InviteCodeRedemption[]
+
+  @@index([status, expiresAt], map: "invite_codes_status_expires_idx")
+  @@map("invite_codes")
+}
+
+model InviteCodeRedemption {
+  id              String        @id @db.Char(36)
+  inviteCodeId    String        @map("invite_code_id") @db.Char(36)
+  userId          String        @map("user_id") @db.Char(36)
+  memberProfileId String        @map("member_profile_id") @db.Char(36)
+  idempotencyKey  String        @unique(map: "invite_redemptions_idempotency_uq") @map("idempotency_key") @db.VarChar(128)
+  redeemedAt      DateTime      @map("redeemed_at") @db.DateTime(3)
+  inviteCode      InviteCode    @relation(fields: [inviteCodeId], references: [id], onDelete: Restrict)
+  user            User          @relation(fields: [userId], references: [id], onDelete: Restrict)
+  memberProfile   MemberProfile @relation(fields: [memberProfileId], references: [id], onDelete: Restrict)
+
+  @@index([inviteCodeId, redeemedAt], map: "invite_redemptions_code_redeemed_idx")
+  @@index([userId], map: "invite_redemptions_user_idx")
+  @@map("invite_code_redemptions")
+}
+
+model AccountProvision {
+  id              String         @id @db.Char(36)
+  sourceType      String         @map("source_type") @db.VarChar(32)
+  sourceId        String         @map("source_id") @db.Char(36)
+  idempotencyKey  String         @unique(map: "account_provisions_idempotency_uq") @map("idempotency_key") @db.VarChar(128)
+  status          String         @db.VarChar(32)
+  userId          String?        @map("user_id") @db.Char(36)
+  memberProfileId String?        @map("member_profile_id") @db.Char(36)
+  attemptCount    Int            @default(0) @map("attempt_count")
+  lastErrorCode   String?        @map("last_error_code") @db.VarChar(64)
+  createdAt       DateTime       @map("created_at") @db.DateTime(3)
+  updatedAt       DateTime       @updatedAt @map("updated_at") @db.DateTime(3)
+  completedAt     DateTime?      @map("completed_at") @db.DateTime(3)
+  user            User?          @relation(fields: [userId], references: [id], onDelete: Restrict)
+  memberProfile   MemberProfile? @relation(fields: [memberProfileId], references: [id], onDelete: Restrict)
+
+  @@unique([sourceType, sourceId], map: "account_provisions_source_uq")
+  @@index([status, updatedAt], map: "account_provisions_status_updated_idx")
+  @@map("account_provisions")
+}
+
+model AuditLog {
+  id              String   @id @db.Char(36)
+  actorType       String   @map("actor_type") @db.VarChar(16)
+  actorUserId     String?  @map("actor_user_id") @db.Char(36)
+  action          String   @db.VarChar(80)
+  targetType      String   @map("target_type") @db.VarChar(80)
+  targetId        String   @map("target_id") @db.Char(36)
+  requestId       String   @map("request_id") @db.VarChar(64)
+  result          String   @db.VarChar(16)
+  beforeSummary   Json?    @map("before_summary")
+  afterSummary    Json?    @map("after_summary")
+  errorCode       String?  @map("error_code") @db.VarChar(64)
+  ipDigest        Bytes?   @map("ip_digest") @db.Binary(32)
+  userAgentDigest Bytes?   @map("user_agent_digest") @db.Binary(32)
+  createdAt       DateTime @map("created_at") @db.DateTime(3)
+  actor           User?    @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([targetType, targetId, createdAt], map: "audit_logs_target_created_idx")
+  @@index([actorUserId, createdAt], map: "audit_logs_actor_created_idx")
+  @@index([requestId], map: "audit_logs_request_idx")
+  @@map("audit_logs")
+}

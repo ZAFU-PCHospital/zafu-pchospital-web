@@ -5,13 +5,13 @@
   "description": "浙江农林大学电脑医院 · 社团综合服务平台官网",
   "packageManager": "pnpm@12.4.1+sha512.2e81e399d73fe8390dab25e06aa788ab7a5908248d2f5a370f82b481147a6a7a367bf8048f9a6fdb6460f21a66f0542dedb8b94ca2c8723596741920b1656d4c",
   "engines": {
-    "node": ">=20.9.0"
+    "node": "^20.19 || ^22.12 || >=24.0"
   },
   "scripts": {
-    "postinstall": "node tools/ensure-doc-manifest.mjs",
+    "postinstall": "prisma generate && node tools/ensure-doc-manifest.mjs",
     "predev": "node tools/ensure-doc-manifest.mjs",
     "dev": "next dev",
-    "build": "pnpm docs:build && next build",
+    "build": "node tools/build-docs.mjs && next build",
     "prebuild:site": "node tools/ensure-doc-manifest.mjs",
     "build:site": "next build",
     "docs:build": "node tools/build-docs.mjs",
@@ -19,9 +19,20 @@
     "lint": "eslint . && node tools/check-theme-palette.mjs",
     "check:palette": "node tools/check-theme-palette.mjs",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "db:generate": "prisma generate",
+    "db:migrate:dev": "prisma migrate dev",
+    "db:migrate:deploy": "prisma migrate deploy",
+    "db:seed": "prisma db seed",
+    "db:health": "tsx tools/db-health.ts",
+    "test": "tsx --test tests/**/*.test.ts",
+    "test:unit": "tsx --test tests/unit/**/*.test.ts",
+    "test:db": "tsx --test tests/integration/**/*.test.ts"
   },
   "dependencies": {
+    "@prisma/adapter-mariadb": "7.10.0",
+    "@prisma/client": "7.10.0",
+    "mariadb": "3.4.5",
     "next": "^15.5.4",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
@@ -36,7 +47,9 @@
     "eslint-config-next": "^15.5.4",
     "prettier": "^3.6.2",
     "prettier-plugin-tailwindcss": "^0.6.14",
+    "prisma": "7.10.0",
     "tailwindcss": "^4.1.13",
+    "tsx": "4.20.6",
     "typescript": "^5.8.3"
   }
 }

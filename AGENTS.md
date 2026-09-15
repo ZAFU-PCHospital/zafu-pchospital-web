@@ -1,7 +1,8 @@
 # AGENTS.md
 
 > 本文件是给后续 AI Agent（Codex / Claude Code / Kimi / Cursor 等）阅读的**项目规则**。
-> 开始任何改动前，先读完本文件，再读 `docs/design-system.md`。
+> 开始任何改动前，先读完本文件，再读 `docs/design-system.md`。涉及 Phase 2 服务端或数据时，
+> 还必须读 `docs/architecture.md`、`docs/database.md` 与 `docs/contracts/`。
 >
 > 你是这个项目的协作者，不是重写者。**已有且能正常工作的代码优先复用。**
 >
@@ -13,8 +14,8 @@
 
 ## 0. 项目一句话
 
-浙江农林大学电脑医院官网（社团综合服务平台）的第一阶段基础框架。
-目标是**风格统一、目录清晰、易于多人并行开发**，而不是把页面做完。
+浙江农林大学电脑医院官网与社团综合服务平台。第一阶段官网框架保持稳定，当前进入
+**Phase 2 模块化开发**；M0 已建立 GreatSQL、统一账户/招募数据契约以及权限与审计骨架。
 
 ---
 
@@ -25,8 +26,10 @@
 | 框架     | Next.js 15（App Router）                       |
 | 语言     | TypeScript（strict）                           |
 | 样式     | Tailwind CSS v4 + `src/app/globals.css` 组件层 |
+| 数据库   | **GreatSQL 8.0.32-27**（InnoDB / UTC）         |
+| 数据访问 | **Prisma 7.10.0** + MariaDB driver adapter     |
 | 包管理器 | **pnpm**（锁文件 `pnpm-lock.yaml`）            |
-| 规范     | ESLint（eslint-config-next）+ Prettier         |
+| 测试规范 | Node test runner（tsx）+ ESLint + Prettier     |
 
 **禁止 Agent 擅自：**
 
@@ -36,6 +39,7 @@
 - ❌ 引入另一套 UI Framework（不要引入 MUI / Ant Design / Chakra / Bootstrap）
 - ❌ 引入状态管理库、动画库、图标库、`clsx` / `tailwind-merge`
 - ❌ 安装大型新依赖（新增任何运行时依赖都必须在 PR 中单独说明理由）
+- ❌ 更换 GreatSQL / Prisma 或改用另一套 ORM；禁止用 `prisma db push`、手工 DDL 代替 Migration
 
 如果确实认为需要引入某个依赖，**先问，不要直接装**。
 
@@ -90,17 +94,28 @@
 
 **关于业务范围（重要）：**
 
-本项目后续会承载报修、活动报名、维修备案、志愿时长、成员系统、管理后台等业务，
-但**这些属于后续阶段，本阶段一律不实现**：
+Phase 2 按 M0–M7 分模块实施，状态和依赖见 `docs/phase2-development.md`。当前任务没有明确要求时：
 
-- ❌ 不要引入数据库、ORM、鉴权、会话
-- ❌ 不要实现登录、用户系统、成员系统、权限系统
-- ❌ 不要实现报修系统、活动报名、备案、评价、志愿时长
-- ❌ 不要实现 API 路由与后台管理界面
+- ❌ 不要提前实现其他里程碑的完整业务页面或状态机
+- ❌ 不要让页面组件或 Route Handler 直接查询 Prisma；必须经过 Feature Service / Repository
+- ❌ 不要把 QQ、手机号、学号作为 User 本体、主键或跨领域外键
+- ❌ 不要绕过统一 API 信封、错误码、权限与审计入口
+- ❌ 不要改写已经提交或执行过的 Migration；修复必须新增前向 Migration
 
-业务规则以仓库根目录的《电脑医院社团综合服务平台需求分析.md》为准。
-**目录结构已经为这些模块预留了位置**（见 `docs/architecture.md` 第 6 节），
-但不要为了「考虑未来」提前实现不存在的业务。
+业务规则以 `docs/第二期需求分析文档.md` 和当前模块任务书为准。只完成当前模块要求，
+不要为了「考虑未来」提前实现不存在的业务。
+
+### 公共契约变更规则
+
+以下属于高冲突公共契约：
+
+- `prisma/schema.prisma` 与 `prisma/migrations/`
+- `src/types/contracts.ts` 与 `src/lib/api/errors.ts`
+- `docs/contracts/`、权限枚举、API 信封和跨模块 Service 接口
+
+修改不强制走单独评审，但**必须先搜索并记录影响范围**。若影响其他模块，必须在同一变更中
+同步贯通 Schema、前向 Migration、生成客户端、实现、调用方、Contract、测试与文档；不能只让
+当前模块通过。无法安全贯通时停止修改并在 Issue / PR 中说明依赖。
 
 ---
 
@@ -125,7 +140,11 @@
 | `src/components/ui/`     | 跨页面复用的 UI 原语                                             | 只被一个页面用的东西     |
 | `src/components/<页面>/` | 该页面专属区块                                                   | 跨页面复用的东西         |
 | `src/config/`            | 站点配置、导航、页面文案数据                                     | 组件、逻辑               |
-| `src/lib/`               | 纯函数、数据读取                                                 | React 组件               |
+| `src/features/<领域>/`   | 领域 Service / Repository、事务边界                              | React 组件、页面文案     |
+| `src/lib/`               | DB、API、权限、审计、安全与通用逻辑                              | React 组件               |
+| `src/types/`             | 公共 Enum 与 API / Service Contract                              | Feature 私有实现         |
+| `prisma/`                | Schema、前向 Migration、幂等 Seed                                | 手工生产数据修补         |
+| `tests/`                 | 单元、Contract 与 GreatSQL 集成测试                              | 未隔离的生产数据访问     |
 | `src/data/`              | 构建脚本生成的结构化数据                                         | 手写内容                 |
 | `src/app/globals.css`    | 设计令牌 + 基础层 + 组件层                                       | 页面专属样式             |
 | `public/`                | 字体、图片等静态资源                                             | 源码里能 import 的东西   |
@@ -145,25 +164,30 @@
 
 ## 6. 环境与命令
 
-需要 **Node ≥ 20.9**（见 `package.json` 的 `engines`）与 **pnpm**。
+需要符合 `package.json` `engines` 的 Node.js（Prisma 7 要求 `^20.19 || ^22.12 || >=24.0`）与 **pnpm**。
 本机未启用 Corepack 时先执行一次：
 
 ```bash
 corepack enable   # 之后 pnpm 会自动使用 packageManager 里固定的版本
 ```
 
-| 命令                 | 说明                                                             |
-| -------------------- | ---------------------------------------------------------------- |
-| `pnpm install`       | 安装依赖（`postinstall` 会补占位文档清单，见第 7 节）            |
-| `pnpm dev`           | 启动开发服务器（`predev` 同样补清单）                            |
-| `pnpm build`         | 生产构建，**含站内技术文档**（需要 mdBook，见第 7 节）           |
-| `pnpm build:site`    | 只编译官网，跳过文档构建（用当时磁盘上的清单，**不要用于部署**） |
-| `pnpm docs:build`    | 只生成站内技术文档到 `public/handbook/`                          |
-| `pnpm start`         | 以生产模式启动（需先 build）                                     |
-| `pnpm lint`          | `eslint .` + 主题调色板一致性校验，**必须 0 error**              |
-| `pnpm check:palette` | 只跑调色板校验（官网与文档站两份令牌是否逐值一致）               |
-| `pnpm format`        | Prettier 格式化                                                  |
-| `pnpm format:check`  | 检查格式是否符合规范                                             |
+| 命令                     | 说明                                                             |
+| ------------------------ | ---------------------------------------------------------------- |
+| `pnpm install`           | 安装依赖、生成 Prisma Client，并补占位文档清单                   |
+| `pnpm dev`               | 启动开发服务器（`predev` 同样补清单）                            |
+| `pnpm build`             | 生产构建，**含站内技术文档**（需要 mdBook，见第 7 节）           |
+| `pnpm build:site`        | 只编译官网，跳过文档构建（用当时磁盘上的清单，**不要用于部署**） |
+| `pnpm docs:build`        | 只生成站内技术文档到 `public/handbook/`                          |
+| `pnpm start`             | 以生产模式启动（需先 build）                                     |
+| `pnpm lint`              | `eslint .` + 主题调色板一致性校验，**必须 0 error**              |
+| `pnpm test`              | 单元与 Contract 测试                                             |
+| `pnpm test:db`           | 真实 GreatSQL 集成测试                                           |
+| `pnpm db:migrate:deploy` | 部署版本化 Migration                                             |
+| `pnpm db:seed`           | 幂等基础角色 Seed                                                |
+| `pnpm db:health`         | GreatSQL 连接与运行参数检查                                      |
+| `pnpm check:palette`     | 只跑调色板校验（官网与文档站两份令牌是否逐值一致）               |
+| `pnpm format`            | Prettier 格式化                                                  |
+| `pnpm format:check`      | 检查格式是否符合规范                                             |
 
 > 不要用 npm / yarn，也不要删除 `pnpm-lock.yaml`。
 
@@ -272,6 +296,7 @@ git switch -c feat/xxx  # 确认不在 main 上直接开发
 
 - 查看当前分支与已有文件，**不要直接删除现有项目内容**。
 - 确认本次任务的范围，只改相关文件。
+- 涉及公共契约时，用 `rg` 搜索所有消费者并列出跨模块影响。
 - 不确定的视觉、文案、业务判断，**先问再做**。
 
 ---
@@ -280,6 +305,7 @@ git switch -c feat/xxx  # 确认不在 main 上直接开发
 
 ```bash
 pnpm lint      # 必须 0 error（除 ESLint 外还会校验主题调色板一致性）
+pnpm test      # 单元与 Contract 测试必须通过
 pnpm build     # 必须成功；已包含站内文档构建，需要 mdBook（见第 7 节）
 pnpm dev       # 手动检查 Desktop / Mobile / Console
 ```
@@ -295,7 +321,10 @@ pnpm dev       # 手动检查 Desktop / Mobile / Console
 自检清单：
 
 - [ ] `pnpm lint` 通过
+- [ ] `pnpm test` 通过；涉及数据库时 `pnpm test:db` 连接真实 GreatSQL 通过
 - [ ] `pnpm build` 通过
+- [ ] Migration 在空库可部署，重复 deploy 无待执行项；已有基线变更提供升级测试
+- [ ] 公共契约的所有受影响模块、调用方、测试和文档已同步贯通
 - [ ] Desktop（≥1100px）与 Mobile（<760px）都正常
 - [ ] 无横向溢出
 - [ ] Console 无报错

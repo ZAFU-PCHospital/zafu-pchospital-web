@@ -7,14 +7,16 @@
 
 ## 1. 技术栈
 
-| 项目     | 选择                                     | 说明                                       |
-| -------- | ---------------------------------------- | ------------------------------------------ |
-| 框架     | **Next.js 15**（App Router）             | 页面路由与构建                             |
-| 语言     | **TypeScript**（strict）                 | 全量类型检查，不允许 `any` 兜底            |
-| 样式     | **Tailwind CSS v4**                      | 工具类 + `globals.css` 中的组件层          |
-| 包管理   | **pnpm**                                 | 锁文件为 `pnpm-lock.yaml`                  |
-| 代码规范 | ESLint（`eslint-config-next`）+ Prettier | `pnpm lint` / `pnpm format`                |
-| 部署形态 | 静态优先                                 | 当前全部页面可静态导出，无服务端运行时依赖 |
+| 项目       | 选择                                 | 说明                                                |
+| ---------- | ------------------------------------ | --------------------------------------------------- |
+| 框架       | **Next.js 15**（App Router）         | 页面、Route Handler 与生产服务端                    |
+| 语言       | **TypeScript**（strict）             | 全量类型检查，不允许 `any` 兜底                     |
+| 样式       | **Tailwind CSS v4**                  | 工具类 + `globals.css` 中的组件层                   |
+| 数据库     | **GreatSQL 8.0.32-27**               | InnoDB、`utf8mb4_unicode_ci`、UTC                   |
+| 数据访问   | **Prisma 7.10.0** + MariaDB adapter  | 版本化 Migration；应用层连接池                      |
+| 包管理     | **pnpm 12.4.1**                      | 锁文件为 `pnpm-lock.yaml`                           |
+| 测试与规范 | Node test runner + ESLint + Prettier | `pnpm test` / `pnpm lint` / `pnpm format`           |
+| 部署形态   | 静态公开页 + Node.js 服务端          | Phase 2 完整形态必须运行 `next build && next start` |
 
 **不允许更换以上任何一项。** 详见 `AGENTS.md`。
 
@@ -32,10 +34,20 @@
 ├── docs/                      # 协作文档
 │   ├── design-system.md       # 视觉唯一来源
 │   ├── architecture.md        # 本文件
+│   ├── database.md            # GreatSQL / Migration / Seed / 运维基线
+│   ├── contracts/             # 数据与 API 公共契约
+│   ├── phase2-development.md  # 模块状态、依赖与协作规则
 │   └── git-workflow.md        # 分支与 PR 流程
+│
+├── prisma/
+│   ├── schema.prisma          # 公共数据库 Schema
+│   ├── migrations/            # 只追加的版本化前向 Migration
+│   └── seed.ts                # 幂等基础角色 Seed
+├── compose.greatsql.yml       # 固定 GreatSQL 版本的本地环境
 │
 ├── src/
 │   ├── app/                   # 路由与页面（Next.js App Router）
+│   │   ├── api/v1/            # 薄 Route Handler：解析、授权、调用 Service、包装响应
 │   │   ├── layout.tsx         # 根布局：Header / Footer / SiteEffects
 │   │   ├── globals.css        # 设计令牌 + 基础层 + 组件层（设计系统的工程落地）
 │   │   ├── page.tsx           # /
@@ -62,10 +74,16 @@
 │   │   └── join.ts            # /join 文案
 │   │
 │   ├── lib/                   # 无 UI 的纯逻辑
-│   │   ├── utils.ts           # cn / revealIndex / pad2
-│   │   ├── theme.ts           # 主题持久化、DOM 应用、订阅、引导脚本
-│   │   ├── docs.ts            # 读取文档清单、目录摊平、外链生成
-│   │   └── member-signup.ts   # 新社员登记：数据规范化 + 后端接入点
+│   │   ├── db/                # Prisma client、事务和隔离级别
+│   │   ├── api/               # 信封、错误、requestId、分页、限流接口
+│   │   ├── auth/              # 权限定义与授权骨架
+│   │   ├── audit/             # 审计写入与脱敏
+│   │   └── security/          # 摘要、规范化、凭据工具
+│   ├── features/              # 按领域组织 Service / Repository
+│   │   ├── recruitment/       # JoinApplication
+│   │   ├── invitations/       # InviteCode 与原子兑换
+│   │   └── accounts/          # AccountProvision
+│   ├── types/                 # 公共 Enum / API / Service Contract 唯一事实来源
 │   │
 │   └── data/
 │       └── doc-manifest.json  # 文档仓库清单（由文档仓库构建脚本生成）
@@ -80,6 +98,7 @@
 │   ├── check-theme-palette.mjs# 校验官网与文档站的调色板没有漂移
 │   ├── inspect.mjs            # 页面诊断与截图（CDP）
 │   └── console-probe.mjs      # 收集 console 报错与运行时异常（CDP）
+├── tests/                     # 单元、Contract 与真实 GreatSQL 集成测试
 │
 ├── .docs-source/              # 【本地产物】文档仓库检出，docs:build 缺省时自动浅克隆，已 gitignore
 └── shots/                     # 视觉验证截图（tools/inspect.mjs 产出，每个视图 normal / dark 各一张）
@@ -91,10 +110,12 @@
 
 ### 3.1 `src/app/` —— 路由与页面
 
-- **只做三件事**：定义路由、导出 `metadata`、把区块组件按顺序拼起来。
+- 页面只做三件事：定义路由、导出 `metadata`、把区块组件按顺序拼起来。
 - 页面文件里**不应该**出现大段 JSX 结构、内联样式或业务文案。
 - 页面文案来自 `src/config/`，视觉来自 `components/`。
 - 全局样式只在 `app/globals.css` 一处，页面不要新建 CSS 文件。
+- `app/api/v1/**/route.ts` 只做 HTTP 解析、requestId、授权、调用 Feature Service 和响应包装；
+  不在 Route Handler 中直接写 Prisma 查询或跨领域事务。
 
 > 判断标准：如果 `page.tsx` 超过约 120 行，说明有区块该抽成组件了。
 
@@ -138,24 +159,43 @@
 - 需要社团确认的内容（值班地点、招新时间等）写成显式字段并在页面上标注「待补充」，不要编造。
 - 新增页面时同步新建对应配置文件。
 
-### 3.6 `src/lib/` —— 纯逻辑
+### 3.6 `src/lib/` —— 跨领域基础设施
 
-无 UI、无副作用的工具与数据读取。
+这里放不依赖 React 的共享能力：`db/` 管理 Prisma client 与事务，`api/` 管理响应信封、
+错误码、requestId、分页和限流接口，`auth/` 管理授权骨架，`audit/` 管理审计与脱敏，
+`security/` 管理摘要、身份规范化和凭据工具。现有 `utils.ts`、`theme.ts`、`docs.ts` 继续保留。
 
-- `utils.ts`：`cn`（类名拼接）、`revealIndex`（进场错位序号）、`pad2`（两位编号）
-- `docs.ts`：文档清单读取与派生（目录摊平、条目计数、外链生成）
-- `member-signup.ts`：新社员登记表的**数据形状与唯一提交入口**。它是前端与后续后端
-  之间唯一的接缝：接入后端前返回本地回执、不发任何请求，接入时只改这一个文件
-  （字段名与《需求分析》第 16 章的数据模型对齐）
+规则：这里不放 React 组件，不放 Feature 专属状态机；敏感值不得写入日志或错误响应。
 
-规则：这里不放 React 组件，不放与具体页面强绑定的逻辑。
+### 3.7 `src/features/` —— 领域能力与事务边界
 
-### 3.7 `src/data/` —— 结构化数据
+- Feature Service 承载业务不变量、权限二次校验、幂等和跨表事务。
+- Repository 封装领域数据访问，默认查询必须处理 `deletedAt: null`。
+- 页面和 Route Handler 不得绕过 Service 直接访问 Prisma。
+- 跨领域事务必须显式设计；邀请码兑换和账号发放的原子性约束见数据契约。
+
+### 3.8 `src/types/` 与 `docs/contracts/` —— 公共契约
+
+`src/types/contracts.ts` 是公共 Enum 与 TypeScript Contract 的代码事实来源；
+`docs/contracts/` 记录给开发者和接口消费者阅读的稳定语义。两者修改必须保持一致。
+
+修改公共契约前先用 `rg` 找出全部消费者。若影响其他模块，必须在同一变更中同步贯通
+Schema、前向 Migration、生成客户端、Service、Route、调用方、测试与文档。
+
+### 3.9 `prisma/` —— 数据库版本
+
+- `schema.prisma`：当前完整数据库形状。
+- `migrations/`：发布历史，只追加；已经提交或执行的 Migration 不得改写。
+- `seed.ts`：幂等基础数据，不写入真实用户或生产凭据。
+
+具体流程见 `docs/database.md`。禁止 `prisma db push` 和绕过 Migration 的手工 DDL。
+
+### 3.10 `src/data/` —— 结构化数据
 
 - `doc-manifest.json`：文档仓库清单，**由文档仓库的构建脚本生成，不要手改**。
 - 更新方式：运行 `pnpm docs:build`，从同一份文档源码生成 mdBook 正文并覆盖清单。
 
-### 3.8 `public/` —— 静态资源
+### 3.11 `public/` —— 静态资源
 
 - `fonts/`：品牌字体
 - `handbook/`：**生成物**，站内技术文档（mdBook 产物），由 `pnpm docs:build` 写入，
@@ -167,7 +207,7 @@
 - 图标优先使用 `components/ui/Icon.tsx` 的内联 SVG（24 格 / stroke 2 / round 端点），不要引入图标库。
 - 不要往 `public/` 放源码里可以 import 的资源。
 
-### 3.9 `tools/` —— 构建工具与本地验证
+### 3.12 `tools/` —— 构建工具与本地验证
 
 放**不参与运行时**的脚本：文档构建、调色板校验、基于 CDP 的本地诊断。
 
@@ -208,17 +248,19 @@ ZAFU-PCHospital-Doc ──► .docs-source/ ──► mdbook build ──► pub
 ## 4. 数据流
 
 ```text
-src/config/*.ts  ──┐
-src/data/*.json ──┤
-                  ├──►  src/app/*/page.tsx  ──►  src/components/**  ──►  HTML
-src/lib/*.ts    ──┘         （拼装）              （渲染）
+Browser
+  ├── public page ──► app/*/page.tsx ──► components/** ──► HTML
+  └── /api/v1 ─────► Route Handler ──► Feature Service ──► Repository ──► Prisma ──► GreatSQL
+                            │                 │
+                            ├── API envelope  ├── authorization / audit
+                            └── requestId     └── transaction / idempotency
 ```
 
 - 配置与数据**只向下流动**：页面读取配置，组件通过 props 接收数据。
 - 组件**不直接 import** `src/config/` 里的页面文案（`DocList` 这类纯展示组件除外）。
-- 当前阶段没有数据请求：所有数据在构建时确定，页面可静态生成。
-- 唯一的例外是 `/join` 的登记表：它在客户端提交，但提交入口
-  （`lib/member-signup.ts`）在后端接入前不发起任何网络请求，因此页面仍然可静态导出。
+- 公开内容页仍优先静态生成；Phase 2 API 和数据库访问只在 Node.js 服务端执行。
+- 浏览器不得持有 `DATABASE_URL`、pepper 或数据库权限，也不得直连 GreatSQL。
+- 招募批次由服务端配置决定；QQ / 手机号只作为身份或联系方式，不作为 User 主键。
 
 ---
 
@@ -229,7 +271,7 @@ src/lib/*.ts    ──┘         （拼装）              （渲染）
 | 段                  | 内容                                          | 谁可以改     |
 | ------------------- | --------------------------------------------- | ------------ |
 | `:root`             | 主题无关令牌 + 默认主题的语义色（无脚本兜底） | 需要设计确认 |
-| 主题层              | `html[data-theme="<id>"]`，一个主题一段        | 需要设计确认 |
+| 主题层              | `html[data-theme="<id>"]`，一个主题一段       | 需要设计确认 |
 | `@theme inline`     | 令牌到 Tailwind 命名空间的映射                | 需要设计确认 |
 | `@layer base`       | 重置与全局元素样式                            | 谨慎         |
 | `@layer components` | 稳定可复用的视觉模式                          | 常规开发     |
@@ -244,14 +286,14 @@ src/lib/*.ts    ──┘         （拼装）              （渲染）
 
 | 关注点         | 位置                                                                  |
 | -------------- | --------------------------------------------------------------------- |
-| Theme Registry | `src/config/theme.ts` → `themeRegistry`（主题身份与元数据）            |
-| Theme Config   | `src/config/theme.ts` → `siteThemeConfig`（模式 → 主题的映射）         |
+| Theme Registry | `src/config/theme.ts` → `themeRegistry`（主题身份与元数据）           |
+| Theme Config   | `src/config/theme.ts` → `siteThemeConfig`（模式 → 主题的映射）        |
 | Theme Resolver | `src/config/theme.ts` → `resolveTheme(mode)`                          |
 | 主题取值       | `src/app/globals.css` 主题层，选择器 `html[data-theme="<id>"]`        |
-| 持久化         | `localStorage`，键 `zafu-pchospital:theme-mode`（`src/lib/theme.ts`）  |
-| 运行时         | `src/lib/theme.ts`：读写 DOM、订阅、生成引导脚本                       |
+| 持久化         | `localStorage`，键 `zafu-pchospital:theme-mode`（`src/lib/theme.ts`） |
+| 运行时         | `src/lib/theme.ts`：读写 DOM、订阅、生成引导脚本                      |
 | 用户入口       | `src/components/layout/ThemeSwitcher.tsx`，挂在 Header 的索引栏与浮层 |
-| HTML 表达      | `<html data-mode="normal\|dark" data-theme="<ThemeId>">`               |
+| HTML 表达      | `<html data-mode="normal\|dark" data-theme="<ThemeId>">`              |
 
 **首次访问的默认值**：本地无保存偏好时跟随系统 `prefers-color-scheme`，
 否则落到 `DEFAULT_THEME_MODE`。一旦用户点过切换，就以本地保存的选择为准。
@@ -273,30 +315,19 @@ src/lib/*.ts    ──┘         （拼装）              （渲染）
 
 ---
 
-## 6. 未来扩展
+## 6. Phase 2 扩展边界
 
-当前阶段**不实现**以下模块，但目录结构已为它们留好位置：
-
-| 未来模块    | 建议路由                          | 建议组件目录             | 配套配置               |
-| ----------- | --------------------------------- | ------------------------ | ---------------------- |
-| 登录        | `/login`                          | `components/auth/`       | `config/auth.ts`       |
-| 活动中心    | `/activities`、`/activities/[id]` | `components/activities/` | `config/activities.ts` |
-| 报修 / 预约 | `/repair`                         | `components/repair/`     | `config/repair.ts`     |
-| 个人中心    | `/profile`                        | `components/profile/`    | —                      |
-| 成员工作台  | `/member`                         | `components/member/`     | —                      |
-| 管理后台    | `/admin`                          | `components/admin/`      | —                      |
+M0 只交付公共基础，不提前实现完整产品页面。M1–M7 的账号权限、维修记录、成员工作台、
+交流通知、统计、管理后台与公开数据接入按 `docs/phase2-development.md` 的依赖顺序推进。
 
 扩展时的约定：
 
-- 新页面 → `app/<route>/page.tsx` + `components/<route>/` + `config/<route>.ts`
-- 新页面必须在 `src/config/navigation.ts` 中登记，导航自动生效。
-- **不要**为了「考虑未来」提前实现不存在的业务。
-- **不要**改动现有页面与公共组件 API 来迁就未来的需求。
-
-> ⚠️ 重要约束：本项目后续会承载报修、备案、志愿时长等业务，
-> 但这些属于**后续阶段**。当前阶段的职责边界是「官网框架 + 设计系统」，
-> 不要在本阶段引入数据库、鉴权或业务状态管理。
-> 业务需求以《电脑医院社团综合服务平台需求分析.md》为准。
+- 页面仍按 `app/<route>/page.tsx` + `components/<route>/` + `config/<route>.ts` 组织。
+- 新领域放 `src/features/<domain>/`，跨领域能力放 `src/lib/`，公共 Type 放 `src/types/`。
+- Route Handler 保持薄层；所有写操作的校验、权限、幂等、事务和审计在 Service 中闭环。
+- 修改 Schema、Migration 或公共 Contract 不强制单独评审，但必须先分析全部消费者；若有
+  跨模块影响，必须在同一变更中同步实现、调用方、Migration、Contract、测试和文档。
+- 不得为未来模块提前添加未经需求确认的字段、状态或页面。
 
 ---
 
@@ -314,9 +345,15 @@ src/lib/*.ts    ──┘         （拼装）              （渲染）
 ## 8. 常用命令
 
 ```bash
-pnpm install     # 安装依赖
-pnpm dev         # 启动开发服务器
-pnpm build       # 生产构建
-pnpm lint        # ESLint 检查
-pnpm format      # Prettier 格式化
+pnpm install             # 安装依赖并生成 Prisma Client
+pnpm dev                 # 启动开发服务器
+pnpm build               # 生产构建（包含 mdBook）
+pnpm lint                # ESLint + 主题调色板检查
+pnpm test                # 单元与 Contract 测试
+pnpm test:db             # 真实 GreatSQL 集成测试
+pnpm db:migrate:deploy   # 部署所有待执行 Migration
+pnpm db:seed             # 幂等基础角色 Seed
+pnpm db:health           # GreatSQL / UTC / 字符集健康检查
 ```
+
+数据库的启动、权限、迁移、备份和故障处理见 `docs/database.md`。
