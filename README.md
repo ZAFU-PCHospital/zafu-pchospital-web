@@ -57,7 +57,6 @@ src/components/        组件（layout 骨架 / ui 原语 / 各页面专属区�
 src/config/            站点配置与页面文案数据 ← 文案写这里，不要硬编码在组件里
 src/lib/               纯逻辑工具
 docs/                  协作文档（设计系统 / 架构 / Git 流程）
-zafu-pchospital-site/  设计基准 Demo【只读，不要改】
 ```
 
 各目录该放什么、不该放什么，见 [`docs/architecture.md`](docs/architecture.md) 第 2 节。

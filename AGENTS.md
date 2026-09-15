@@ -114,12 +114,6 @@
 - ❌ 不要为了「代码更优雅」随意重写团队成员已经完成的内容。
 - ❌ 不要把一个跨页面复用的区块留在页面专属目录里 —— 提升到 `components/ui/`。
 
-**关于设计基准 Demo：**
-
-- `zafu-pchospital-site/` 是团队已确认的**视觉基准**，**只读**。
-- ❌ 不要修改、删除、重构、格式化它。
-- ✅ 需要确认某个视觉细节时，直接读其中的 `assets/css/style.css`。
-
 ---
 
 ## 5. 目录职责速查
@@ -306,7 +300,6 @@ pnpm dev       # 手动检查 Desktop / Mobile / Console
 - [ ] 无横向溢出
 - [ ] Console 无报错
 - [ ] 未偏离 `docs/design-system.md`
-- [ ] 未修改 `zafu-pchospital-site/`
 - [ ] 未修改与任务无关的文件
 - [ ] 文案数据在 `src/config/`，未硬编码
 
