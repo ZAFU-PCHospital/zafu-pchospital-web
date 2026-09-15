@@ -140,14 +140,15 @@ chore(deps): 升级 next 到 15.5
 ```bash
 pnpm install        # 确保依赖最新
 pnpm lint           # 必须 0 error（含主题调色板一致性校验）
-pnpm build          # 必须成功（含站内文档构建，需要 mdBook，见 README）
+pnpm build          # 必须成功（含站内文档构建，需要 mdBook，见 AGENTS.md 第 7 节）
 pnpm dev            # 手动检查以下项目
 ```
 
 > 合并前必须保证的是**完整的**构建产物。`pnpm build` 已经包含 `docs:build`，
 > 不要在 PR 里用 `pnpm build:site` 的结果当作「构建通过」——
 > 它不生成 `/handbook/`，而 `/docs` 页的全部链接都指向那里。
-> 仓库目前**没有 CI**，这项检查只能靠提交者在本地落实并在 PR 描述里写明。
+> 仓库已有 CI（`.github/workflows/ci.yml`，见 `AGENTS.md` 第 11 节）会在 PR 上跑
+> `lint` 与含文档的完整 `build`，但**本地仍要先自检一遍**，不要依赖 CI 兜底。
 
 手动检查清单：
 

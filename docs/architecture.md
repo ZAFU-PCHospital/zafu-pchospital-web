@@ -202,7 +202,7 @@ ZAFU-PCHospital-Doc ──► .docs-source/ ──► mdbook build ──► pub
 
 #### 本地诊断
 
-`inspect.mjs` / `console-probe.mjs` 基于 Chrome DevTools Protocol，用法见 README「本地验证」。
+`inspect.mjs` / `console-probe.mjs` 基于 Chrome DevTools Protocol，用法见 `AGENTS.md` 第 8 节。
 
 ---
 

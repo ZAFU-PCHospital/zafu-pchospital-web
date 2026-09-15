@@ -80,7 +80,7 @@ jobs:
           fetch-depth: 1
 
       # 固定版本、官方 release 二进制：不依赖第三方 action，与本地开发者的做法一致
-      # （README「站内技术文档」也是让开发者下载 release 二进制）。
+      # （AGENTS.md 第 7 节也是让开发者下载 release 二进制）。
       - name: 安装 mdBook（固定版）
         run: |
           set -euo pipefail
