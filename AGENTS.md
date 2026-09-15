@@ -326,12 +326,15 @@ pnpm dev       # 手动检查 Desktop / Mobile / Console
 6. 起生产服务冒烟：`/`、`/about`、`/join`、`/docs`、`/handbook/` 必须全部 200
 7. `main` 上通过后调用部署
 
-**有两件事只能在 GitHub 上操作才生效**（代码里做不到）：
+**仓库侧设置（代码里做不到，只能上 GitHub 改）：**
 
-- **把 `CI / 校验与构建` 设为 `main` 的必需状态检查**（Settings → Branches）。
-  当前 `main` **未启用任何分支保护**；不设置的话 CI 只是「跑给你看」，拦不住合并。
-- **配置部署**：设置仓库变量 `DEPLOY_COMMAND`（部署目标尚未确定，见 workflow 内注释）。
-  未配置时部署步骤只打印 `::warning::`，不会失败。
+- **`main` 的保护已生效**：仓库 ruleset「default」（Settings → Rules → Rulesets）
+  要求所有改动走 PR，并把 `校验与构建` 设为必需状态检查，同时禁止强推与删除。
+  后果：**直接 push `main` 会被拒绝**（ADMIN 也一样），PR 必须等 CI 绿了才能合并；
+  0 个 approving review 即可自合并，允许的合并方式只有 squash / merge。
+  要调整这些约束就改 ruleset，不要在 workflow 里想办法绕过去。
+- **部署尚未配置**：需要在仓库变量里设置 `DEPLOY_COMMAND`（部署目标尚未确定，见
+  workflow 内注释）。未配置时部署步骤只打印 `::warning::`，不会失败。
 
 可选：设置仓库变量 `DOCS_REF` 指定文档仓库的分支（默认 `main`）。
 

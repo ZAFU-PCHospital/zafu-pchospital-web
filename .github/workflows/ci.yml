@@ -10,10 +10,11 @@
 #   - push → main：合并后再验一遍，通过则调用部署
 #   - workflow_dispatch：手动触发，可选文档版本与是否部署
 #
-# 手动要做的两件事（不在代码里）：
-#   1. 把本文件的检查设为 main 的必需状态检查（分支保护）—— 否则它只是"跑给你看"，
-#      不会真的拦住合并。当前 main 未启用任何分支保护。
-#   2. 配置仓库变量 DEPLOY_COMMAND（部署命令）与可选的 DOCS_REF（文档仓库分支）。
+# 仓库侧设置（不在代码里，见 AGENTS.md 第 11 节）：
+#   1. main 的保护已生效：仓库 ruleset「default」要求所有改动走 PR，并把本 workflow 的
+#      「校验与构建」设为必需状态检查（同时禁止强推与删除），所以直接 push main 会被拒绝。
+#   2. 待办：配置仓库变量 DEPLOY_COMMAND（部署命令）与可选的 DOCS_REF（文档仓库分支）。
+#      未配置 DEPLOY_COMMAND 时部署步骤只打印 ::warning::，不会失败。
 name: CI
 
 on:
