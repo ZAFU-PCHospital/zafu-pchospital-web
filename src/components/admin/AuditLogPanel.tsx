@@ -4,16 +4,15 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 
 import { AdminModal } from "@/components/admin/AdminModal";
 import { AdminListToolbar } from "@/components/admin/AdminListToolbar";
+import { AdminTable } from "@/components/admin/AdminTable";
+import { auditTableSpec, type AuditTableContext } from "@/components/admin/audit-table-spec";
 import { AdminListEnd, useAdminList } from "@/components/admin/useAdminList";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { adminCopy, adminShared } from "@/config/admin";
+import { formatAuditDateTime } from "@/config/audit";
 import { adminFetch } from "@/features/admin/admin-client";
-import {
-  AuditResult,
-  type AuditActionOption,
-  type AuditLogEntry,
-} from "@/types/contracts";
+import { AuditResult, type AuditActionOption, type AuditLogEntry } from "@/types/contracts";
 
 const EMPTY_FILTERS = {
   action: "",
@@ -59,6 +58,8 @@ export function AuditLogPanel() {
     ),
   );
   const { items, pagination, state, problem, loadingMore } = list;
+  /** 单元格渲染要用的运行时值（打开变更摘要窗口）。 */
+  const auditContext: AuditTableContext = { onDetail: setDetail };
 
   const load = useCallback(async () => {
     await list.reload();
@@ -227,73 +228,16 @@ export function AuditLogPanel() {
           >
             <span className="admin-status">{copy.readonlyNote}</span>
           </AdminListToolbar>
-          <div className="admin-table-wrap">
-            <table className="admin-table">
-              <caption className="sr-only">{copy.title}</caption>
-              <thead>
-                <tr>
-                  <th scope="col">{copy.table.createdAt}</th>
-                  <th scope="col" className="admin-table__grow">
-                    {copy.table.action}
-                  </th>
-                  <th scope="col">{copy.table.actor}</th>
-                  <th scope="col">{copy.table.target}</th>
-                  <th scope="col">{copy.table.requestId}</th>
-                  <th scope="col">{copy.table.result}</th>
-                  <th scope="col">{copy.table.actions}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.length === 0 ? (
-                  <tr>
-                    <td className="admin-table__empty" colSpan={7}>
-                      {adminShared.empty}
-                    </td>
-                  </tr>
-                ) : (
-                  items.map((item) => (
-                    <tr key={item.id}>
-                      <td data-label={copy.table.createdAt}>{formatDateTime(item.createdAt)}</td>
-                      <td className="admin-table__grow" data-label={copy.table.action}>
-                        <code>{item.action}</code>
-                      </td>
-                      <td data-label={copy.table.actor}>{item.actorName ?? copy.actorSystem}</td>
-                      {/* 目标类型 + 短 ID 排在一行（完整 ID 放 `title`）：
-                          分成两行会让每一行都高 10px，而这个 ID 平时只需要能对上号。 */}
-                      <td data-label={copy.table.target} title={item.targetId}>
-                        <span className="admin-contacts">
-                          <span>{targetLabel(item.targetType)}</span>
-                          <code>{shortId(item.targetId)}</code>
-                        </span>
-                      </td>
-                      <td data-label={copy.table.requestId}>
-                        <code>{item.requestId}</code>
-                      </td>
-                      <td data-label={copy.table.result}>
-                        <span
-                          className={
-                            item.result === "SUCCESS"
-                              ? "repair-tag repair-tag--approved"
-                              : "repair-tag repair-tag--rejected"
-                          }
-                        >
-                          {copy.resultLabels[item.result]}
-                          {item.errorCode ? ` ${item.errorCode}` : ""}
-                        </span>
-                      </td>
-                      <td data-label={copy.table.actions}>
-                        <span className="admin-actions">
-                          <Button variant="ghost" icon="eye" onClick={() => setDetail(item)}>
-                            {copy.action.detail}
-                          </Button>
-                        </span>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+          {/* 表格本体由内核渲染（`AdminTable`）：表头与单元格内容都来自 `auditTableSpec`。
+              审计表**不声明列宽**，因此内核不会输出 `<colgroup>`，列宽仍由浏览器按内容分配
+              —— 与迁移前一致。面板不传 `onSortChange`：后端还没有 `sort` 参数，
+              内核在不传时不渲染任何排序控件。 */}
+          <AdminTable
+            spec={auditTableSpec}
+            items={items}
+            renderContext={auditContext}
+            emptyText={adminShared.empty}
+          />
           <AdminListEnd
             pagination={pagination}
             loaded={items.length}
@@ -307,7 +251,7 @@ export function AuditLogPanel() {
       {detail ? (
         <AdminModal
           title={copy.detail.title}
-          subtitle={`${detail.action} · ${formatDateTime(detail.createdAt)}`}
+          subtitle={`${detail.action} · ${formatAuditDateTime(detail.createdAt)}`}
           onClose={() => setDetail(null)}
         >
           <p className="admin-note">{copy.detail.redactedNote}</p>
@@ -337,31 +281,4 @@ function SummaryBlock({ title, value }: { title: string; value: unknown }) {
       <pre className="admin-json">{value === null ? "—" : JSON.stringify(value, null, 2)}</pre>
     </div>
   );
-}
-
-/** 表格里只显示短 ID（8 位）；完整值在单元格的 `title` 里，需要时也能复制。 */
-function shortId(id: string): string {
-  return id.length > 8 ? `${id.slice(0, 8)}…` : id;
-}
-
-/** 已知目标类型给中文名；未知的一律原样显示，不猜也不隐藏。 */
-function targetLabel(targetType: string): string {
-  const labels: Record<string, string> = adminCopy.audit.targetLabels;
-  return labels[targetType] ?? targetType;
-}
-
-/** 审计时间是排查依据，精确到秒。 */
-function formatDateTime(iso: string): string {
-  return new Intl.DateTimeFormat("zh-CN", {
-    timeZone: "Asia/Shanghai",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  })
-    .format(new Date(iso))
-    .replace(/\//g, "-");
 }

@@ -1,4 +1,8 @@
 import { AppError } from "@/lib/api/errors";
+import { parseFilters } from "@/lib/api/list-filter";
+import { sortRules } from "@/lib/api/list-query";
+import { MEMBER_FILTERABLE } from "@/features/members/member-filter-fields";
+import { MEMBER_SORTABLE } from "@/features/members/member-sort";
 import { MemberStatus, RoleCode } from "@/types/contracts";
 import type { MemberListInput, RoleCode as RoleCodeType } from "@/types/contracts";
 
@@ -8,6 +12,9 @@ import type { MemberListInput, RoleCode as RoleCodeType } from "@/types/contract
  * 与 M4 `community-http.ts`、M5 `analytics-http.ts` 同一原则：URL 参数 → 受控 Enum
  * 的转换集中一处，**只接受白名单取值**，非法输入返回稳定错误码，
  * 绝不把用户字符串透传给查询。
+ *
+ * `sort` 沿用同一原则：格式 `sort=joinedAt:desc,realName:asc`，字段必须落在
+ * `MEMBER_SORTABLE` 内（`sortRules` 负责校验方向、去重与条数上限）。
  */
 export function memberListInput(
   params: URLSearchParams,
@@ -20,6 +27,9 @@ export function memberListInput(
     query: params.get("query")?.trim() || undefined,
     status: oneOf(params.get("status"), MemberStatus, "status"),
     role: oneOf(params.get("role"), RoleCode, "role"),
+    sort: sortRules(params.get("sort"), MEMBER_SORTABLE),
+    // 列级筛选：`filter=<field>:<op>:<value>`，可重复。白名单与运算符在同一模块里校验。
+    filters: parseFilters(params.getAll("filter"), MEMBER_FILTERABLE),
   };
 }
 

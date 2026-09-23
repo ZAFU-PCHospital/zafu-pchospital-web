@@ -31,6 +31,7 @@ import {
   type MemberListResult,
   type MemberMutationResult,
   type MemberServiceContract,
+  type MemberUpdateView,
   type MemberView,
   type RoleCode,
   type SetMemberRolesInput,
@@ -205,7 +206,7 @@ export class MemberService implements MemberServiceContract {
     memberId: string,
     input: UpdateMemberInput,
     actor: AuthorizedActor,
-  ): Promise<MemberView> {
+  ): Promise<MemberUpdateView> {
     requirePermission(actor, "member:manage");
     if (!Number.isInteger(input.version) || input.version < 1)
       throw new AppError("VALIDATION_FAILED", "version 必须是正整数", {
@@ -605,7 +606,7 @@ export class MemberService implements MemberServiceContract {
     return saveMemberSkills({ id: memberId }, input, actor, "MEMBER_SKILLS_UPDATED");
   }
 
-  private async getView(memberId: string): Promise<MemberView> {
+  private async getView(memberId: string): Promise<MemberUpdateView> {
     const profile = await getDb().memberProfile.findUnique({ where: { id: memberId } });
     if (!profile || profile.deletedAt) throw new AppError("RESOURCE_NOT_FOUND", "成员不存在");
     return {
@@ -616,6 +617,8 @@ export class MemberService implements MemberServiceContract {
       studentId: profile.studentId,
       className: profile.className,
       status: profile.status as MemberView["status"],
+      // 带上当前版本号：就地编辑连续改同一行时，下一次提交要用它（乐观锁）。
+      version: profile.version,
     };
   }
 }

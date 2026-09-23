@@ -1,13 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 
+import { AdminTable } from "@/components/admin/AdminTable";
+import { repairTableSpec, type RepairTableContext } from "@/components/admin/repair-table-spec";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { adminCopy, adminShared } from "@/config/admin";
-import { formatDurationMinutes, formatShanghaiDate } from "@/config/member";
 import { repairResultLabels, repairStatusLabels } from "@/config/repairs";
 import { adminFetch, prefetchAdmin } from "@/features/admin/admin-client";
+import { sortParam } from "@/lib/api/list-query";
 import { AdminBatchTools } from "@/components/admin/AdminBatchTools";
 import { AdminListToolbar } from "@/components/admin/AdminListToolbar";
 import { AdminListEnd, useAdminList } from "@/components/admin/useAdminList";
@@ -17,6 +19,7 @@ import { AdminModal } from "@/components/admin/AdminModal";
 import { RepairAdminActions } from "@/components/admin/RepairAdminActions";
 import { RepairStatus, RepairResult } from "@/types/contracts";
 import type { RepairBatchReviewResult, RepairCategoryView, RepairView } from "@/types/contracts";
+import type { SortRule } from "@/types/table";
 
 type Filters = {
   query: string;
@@ -52,6 +55,8 @@ export function RepairAdminPanel() {
   const [applied, setApplied] = useState<Filters>(EMPTY_FILTERS);
   const [selected, setSelected] = useState<string[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
+  /** 表头排序（三态循环由内核算好；空数组 = 服务端默认顺序：维修日期倒序）。 */
+  const [sortRules, setSortRules] = useState<SortRule[]>([]);
   const [rejectNote, setRejectNote] = useState("");
   /** 批量退回的原因填在弹层里（顶栏只放动作按钮）。 */
   const [rejecting, setRejecting] = useState(false);
@@ -65,13 +70,40 @@ export function RepairAdminPanel() {
       (targetPage: number) => {
         const params = new URLSearchParams({ page: String(targetPage), pageSize: "20" });
         for (const [key, value] of Object.entries(applied)) if (value) params.set(key, value);
+        // 排序字段必须在服务端白名单里（`REPAIR_SORTABLE`），否则后端 400 ——
+        // 表头只给白名单内的列渲染控件，两边同一份来源。
+        const sort = sortParam(sortRules);
+        if (sort) params.set("sort", sort);
         return adminFetch<RepairView[]>(`/api/v1/admin/repairs?${params}`);
       },
-      [applied],
+      [applied, sortRules],
     ),
   );
   const { items, pagination, state, problem, loadingMore } = list;
   const shownProblem = actionProblem || problem;
+
+  /**
+   * 排序变化后回到第一页：`useAdminList` 不猜调用方意图，重置一律由页面负责
+   * （与筛选同一条约定）。用「上一次生效的排序」做闸门，挂载时不会多取一次；
+   * 排序不改记录集合，所以**不清空已选**。
+   */
+  const sortSignature = sortParam(sortRules) ?? "";
+  const appliedSort = useRef(sortSignature);
+  useEffect(() => {
+    if (appliedSort.current === sortSignature) return;
+    appliedSort.current = sortSignature;
+    void list.reload();
+  }, [sortSignature, list]);
+
+  /** 单元格渲染要用的运行时值：勾选状态、勾选回调、打开详情。 */
+  const repairContext: RepairTableContext = {
+    selected,
+    onToggleSelected: (recordId, checked) =>
+      setSelected((current) =>
+        checked ? [...current, recordId] : current.filter((id) => id !== recordId),
+      ),
+    onDetail: setActiveId,
+  };
 
   const load = useCallback(async () => {
     // 换筛选后清空选择，避免「已选 N 条」与当前列表无关。
@@ -296,94 +328,21 @@ export function RepairAdminPanel() {
               }
             />
           </AdminListToolbar>
-          <div className="admin-table-wrap">
-            <table className="admin-table">
-              <caption className="sr-only">{copy.title}</caption>
-              <thead>
-                <tr>
-                  <th scope="col" />
-                  <th scope="col">{copy.table.repairDate}</th>
-                  <th scope="col" className="admin-table__grow">
-                    {copy.table.member}
-                  </th>
-                  <th scope="col">{copy.table.category}</th>
-                  <th scope="col">{copy.table.result}</th>
-                  <th scope="col">{copy.table.duration}</th>
-                  <th scope="col">{copy.table.status}</th>
-                  <th scope="col">{copy.table.actions}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.length === 0 ? (
-                  <tr>
-                    <td className="admin-table__empty" colSpan={8}>
-                      {adminShared.empty}
-                    </td>
-                  </tr>
-                ) : (
-                  items.map((item) => (
-                    <tr
-                      key={item.id}
-                      // 悬停即预取记录详情（窗口里的照片与评论都要靠它）。
-                      onMouseEnter={() => prefetchAdmin(`/api/v1/repairs/${item.id}`)}
-                    >
-                      <td data-label="">
-                        <input
-                          className="admin-check"
-                          type="checkbox"
-                          aria-label={copy.table.selectOne}
-                          checked={selected.includes(item.id)}
-                          onChange={(event) => {
-                            // `event.currentTarget` 只在事件派发期间有效：把它读进
-                            // state updater 里会在 updater 真正执行时变成 null 并抛
-                            // `Cannot read properties of null (reading 'checked')`
-                            // （浏览器实测踩到）。先取值再交给 updater。
-                            const checked = event.currentTarget.checked;
-                            setSelected((current) =>
-                              checked
-                                ? [...current, item.id]
-                                : current.filter((id) => id !== item.id),
-                            );
-                          }}
-                        />
-                      </td>
-                      <td data-label={copy.table.repairDate}>
-                        {formatShanghaiDate(item.repairDate)}
-                      </td>
-                      <td className="admin-table__grow" data-label={copy.table.member}>
-                        {item.member.name}
-                      </td>
-                      <td data-label={copy.table.category}>{item.category?.name ?? "未分类"}</td>
-                      <td data-label={copy.table.result}>
-                        {item.result ? repairResultLabels[item.result] : "—"}
-                      </td>
-                      <td data-label={copy.table.duration}>
-                        {item.durationMinutes === null
-                          ? "—"
-                          : formatDurationMinutes(item.durationMinutes)}
-                      </td>
-                      <td data-label={copy.table.status}>
-                        <span className={`repair-tag repair-tag--${item.status.toLowerCase()}`}>
-                          {repairStatusLabels[item.status]}
-                        </span>
-                        {item.isDifficult ? <span className="admin-tag">疑难</span> : null}
-                        {item.isTypical ? (
-                          <span className="admin-tag admin-tag--accent">典型</span>
-                        ) : null}
-                      </td>
-                      <td data-label={copy.table.actions}>
-                        <span className="admin-actions">
-                          <Button variant="ghost" onClick={() => setActiveId(item.id)}>
-                            {copy.action.detail}
-                          </Button>
-                        </span>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+          {/* 表格本体由内核渲染（`AdminTable`）：表头与单元格内容都来自 `repairTableSpec`。
+              这张表**不声明列宽**，所以内核不输出 `<colgroup>`，列宽仍由浏览器按内容分配。
+              排序：`sortKey` 与后端 `REPAIR_SORTABLE` 一一对应（成员 / 分类按**名字**排）。 */}
+          <AdminTable
+            spec={repairTableSpec}
+            items={items}
+            renderContext={repairContext}
+            sort={sortRules}
+            onSortChange={setSortRules}
+            emptyText={adminShared.empty}
+            rowProps={(record) => ({
+              // 悬停即预取记录详情（窗口里的照片与评论都要靠它）。
+              onMouseEnter: () => prefetchAdmin(`/api/v1/repairs/${record.id}`),
+            })}
+          />
           <AdminListEnd
             pagination={pagination}
             loaded={items.length}

@@ -2,12 +2,14 @@
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 
+import { AdminTable } from "@/components/admin/AdminTable";
 import { AdminToast } from "@/components/admin/AdminToast";
 import type { AdminToastMessage } from "@/components/admin/AdminToast";
+import { categoryTableSpec } from "@/components/admin/category-table-spec";
+import type { CategoryTableContext } from "@/components/admin/category-table-spec";
 import { useRowDragSort } from "@/components/admin/useRowDragSort";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { Icon } from "@/components/ui/Icon";
 import { adminCopy, adminShared } from "@/config/admin";
 import { adminFetch } from "@/features/admin/admin-client";
 import { applyOrder, movedManyIds } from "@/lib/list-order";
@@ -114,6 +116,21 @@ export function CategoryAdminPanel() {
     items.map((item) => item.id),
     (id, beforeId) => void move(id, beforeId),
   );
+
+  /**
+   * 单元格渲染要用的运行时值（`<AdminTable renderContext>` 传入）。
+   *
+   * 行序、按钮禁用状态、拖动控制器都不进 spec：spec 是模块级常量，会变的值每次渲染从这里进
+   * （否则 spec 的引用一变，以列为依赖的列宽对齐就会重跑）。
+   */
+  const categoryContext: CategoryTableContext = {
+    busy,
+    total: items.length,
+    drag,
+    onReorder: (categoryId, direction) => void reorder(categoryId, direction),
+    onToggle: (category) => void toggle(category),
+    onEdit: setEditingId,
+  };
 
   async function create(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -225,159 +242,84 @@ export function CategoryAdminPanel() {
           <p className="admin-note">
             {copy.usageNote} {copy.orderNote}
           </p>
-          <div className="admin-table-wrap">
-            <table className="admin-table">
-              <caption className="sr-only">{copy.title}</caption>
-              <thead>
-                <tr>
-                  <th scope="col" className="admin-table__grip">
-                    <span className="sr-only">{copy.action.drag}</span>
-                  </th>
-                  <th scope="col" className="admin-table__grow">
-                    {copy.table.name}
-                  </th>
-                  <th scope="col">{copy.table.description}</th>
-                  <th scope="col">{copy.table.usage}</th>
-                  <th scope="col">{copy.table.state}</th>
-                  <th scope="col">{copy.table.actions}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.length === 0 ? (
-                  <tr>
-                    <td className="admin-table__empty" colSpan={6}>
-                      {adminShared.empty}
-                    </td>
-                  </tr>
-                ) : (
-                  items.map((item, index) =>
-                    editingId === item.id ? (
-                      <tr key={item.id}>
-                        <td className="admin-table__grip">{adminShared.none}</td>
-                        <td className="admin-table__grow" data-label={copy.table.name}>
-                          {item.name}
-                        </td>
-                        <td colSpan={2}>
-                          <form
-                            className="admin-form"
-                            method="post"
-                            onSubmit={(event) => void saveEdit(event, item.id)}
-                            aria-label={`${copy.action.edit} ${item.name}`}
-                          >
-                            <div className="admin-form__grid">
-                              <label className="field">
-                                <span className="field__label">{copy.table.name}</span>
-                                <input
-                                  className="field__input"
-                                  name="name"
-                                  required
-                                  maxLength={80}
-                                  defaultValue={item.name}
-                                />
-                              </label>
-                              <label className="field">
-                                <span className="field__label">{copy.table.description}</span>
-                                <input
-                                  className="field__input"
-                                  name="description"
-                                  maxLength={500}
-                                  defaultValue={item.description ?? ""}
-                                />
-                              </label>
-                            </div>
-                            <div className="signup__actions">
-                              <Button type="submit" disabled={busy}>
-                                {copy.action.save}
-                              </Button>
-                              <Button variant="ghost" onClick={() => setEditingId(null)}>
-                                {copy.action.cancel}
-                              </Button>
-                            </div>
-                          </form>
-                        </td>
-                        <td data-label={copy.table.state}>
-                          {item.isActive ? copy.state.active : copy.state.inactive}
-                        </td>
-                        <td data-label={copy.table.actions}>—</td>
-                      </tr>
-                    ) : (
-                      <tr
-                        key={item.id}
-                        className={drag.rowClass(item.id)}
-                        {...drag.rowProps(item.id)}
-                      >
-                        <td className="admin-table__grip">
-                          {/* 手柄是整表唯一 draggable 的元素，理由见 `SkillAdminPanel`。 */}
-                          <span
-                            className="admin-drag"
-                            aria-hidden="true"
-                            title={copy.action.drag}
-                            {...drag.handleProps(item.id)}
-                          >
-                            <Icon name="grip" />
-                          </span>
-                        </td>
-                        <td className="admin-table__grow" data-label={copy.table.name}>
-                          {item.name}
-                        </td>
-                        <td data-label={copy.table.description}>
-                          {item.description || adminShared.none}
-                        </td>
-                        <td data-label={copy.table.usage}>{item.usedByRepairCount}</td>
-                        <td data-label={copy.table.state}>
-                          <span
-                            className={
-                              item.isActive
-                                ? "repair-tag repair-tag--approved"
-                                : "admin-tag admin-tag--muted"
-                            }
-                          >
-                            {item.isActive ? copy.state.active : copy.state.inactive}
-                          </span>
-                        </td>
-                        <td data-label={copy.table.actions}>
-                          <span className="admin-actions">
-                            <span className="admin-actions__group">
-                              <Button
-                                variant="ghost"
-                                disabled={busy || index === 0}
-                                aria-label={copy.action.moveUp}
-                                onClick={() => void reorder(item.id, "UP")}
-                              >
-                                <span aria-hidden="true">↑</span>
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                disabled={busy || index === items.length - 1}
-                                aria-label={copy.action.moveDown}
-                                onClick={() => void reorder(item.id, "DOWN")}
-                              >
-                                <span aria-hidden="true">↓</span>
-                              </Button>
-                            </span>
-                            <Button
-                              variant="ghost"
-                              icon="edit"
-                              onClick={() => setEditingId(item.id)}
-                            >
-                              {copy.action.edit}
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              disabled={busy}
-                              onClick={() => void toggle(item)}
-                            >
-                              {item.isActive ? copy.action.deactivate : copy.action.activate}
-                            </Button>
-                          </span>
-                        </td>
-                      </tr>
-                    ),
-                  )
-                )}
-              </tbody>
-            </table>
-          </div>
+          {/* 表格本体由内核渲染（`AdminTable`）：表头、`data-label`、空态、单元格内容
+              全部来自 `categoryTableSpec` 这一份定义（迁移前这三份是分开写的）。
+
+              「编辑」那一行在**行内**把说明与引用记录两列合成一个表单（`colSpan={2}`），
+              逐列渲染表达不了，因此走 `renderRow` **整行接管**（与技能标签表、邀请码表的
+              「调整策略」同一处理）—— `<tr>`、列宽与 `data-label` 规则仍由内核负责，
+              接管的只是「这一行里有哪些格子」。
+
+              也不传 `onSortChange`：列表顺序就是拖动排序维护的那一份，后端没有 `sort`
+              参数；开了表头排序就会出现「拖了但顺序不变」的假入口
+              （`docs/admin-table-kernel.md` §5.1）。 */}
+          <AdminTable
+            spec={categoryTableSpec}
+            items={items}
+            renderContext={categoryContext}
+            emptyText={adminShared.empty}
+            // 拖动排序挂在 `<tr>` 上（手柄本身在 spec 里）。编辑中的那一行是表单：
+            // 既没有拖动语义，也不该被标成落点行，所以接管这一行时不给任何行属性。
+            rowProps={(category) =>
+              editingId === category.id
+                ? {}
+                : { className: drag.rowClass(category.id), ...drag.rowProps(category.id) }
+            }
+            renderRow={(category) =>
+              editingId === category.id ? (
+                <>
+                  {/* 这一段是迁移前那一行的标记，逐字搬过来：跨列的表单表达不了，
+                      所以整行由面板渲染，而不是在 spec 里塞一堆条件分支。 */}
+                  <td className="admin-table__grip">{adminShared.none}</td>
+                  <td className="admin-table__grow" data-label={copy.table.name}>
+                    {category.name}
+                  </td>
+                  <td colSpan={2}>
+                    <form
+                      className="admin-form"
+                      method="post"
+                      onSubmit={(event) => void saveEdit(event, category.id)}
+                      aria-label={`${copy.action.edit} ${category.name}`}
+                    >
+                      <div className="admin-form__grid">
+                        <label className="field">
+                          <span className="field__label">{copy.table.name}</span>
+                          <input
+                            className="field__input"
+                            name="name"
+                            required
+                            maxLength={80}
+                            defaultValue={category.name}
+                          />
+                        </label>
+                        <label className="field">
+                          <span className="field__label">{copy.table.description}</span>
+                          <input
+                            className="field__input"
+                            name="description"
+                            maxLength={500}
+                            defaultValue={category.description ?? ""}
+                          />
+                        </label>
+                      </div>
+                      <div className="signup__actions">
+                        <Button type="submit" disabled={busy}>
+                          {copy.action.save}
+                        </Button>
+                        <Button variant="ghost" onClick={() => setEditingId(null)}>
+                          {copy.action.cancel}
+                        </Button>
+                      </div>
+                    </form>
+                  </td>
+                  <td data-label={copy.table.state}>
+                    {category.isActive ? copy.state.active : copy.state.inactive}
+                  </td>
+                  <td data-label={copy.table.actions}>{adminShared.none}</td>
+                </>
+              ) : null
+            }
+          />
         </>
       ) : null}
     </div>

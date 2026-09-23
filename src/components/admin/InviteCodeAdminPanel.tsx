@@ -5,11 +5,18 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { AdminListToolbar } from "@/components/admin/AdminListToolbar";
 import { AdminToast } from "@/components/admin/AdminToast";
 import type { AdminToastMessage } from "@/components/admin/AdminToast";
+import { AdminTable } from "@/components/admin/AdminTable";
+import {
+  formatDateTime,
+  inviteCodeEmptyText,
+  inviteCodeTableSpec,
+} from "@/components/admin/invite-code-table-spec";
 import { AdminListEnd, useAdminList } from "@/components/admin/useAdminList";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { adminCopy, adminShared, inviteCodeStatusLabels } from "@/config/admin";
 import { adminFetch } from "@/features/admin/admin-client";
+import { listQueryParams } from "@/lib/api/list-query";
 import {
   InviteCodeEffectiveStatus,
   type CreateInviteCodeResult,
@@ -45,10 +52,13 @@ export function InviteCodeAdminPanel() {
   const list = useAdminList<InviteCodeAdminView>(
     useCallback(
       (targetPage: number) => {
-        const params = new URLSearchParams({ page: String(targetPage), pageSize: "20" });
-        if (applied.query) params.set("query", applied.query);
-        if (applied.status) params.set("status", applied.status);
-        return adminFetch<InviteCodeAdminView[]>(`/api/v1/admin/invite-codes?${params.toString()}`);
+        // 查询串统一由内核拼装（`listQueryParams`）：空值不写、关键字去空白，
+        // 六个面板不必各写一份 `new URLSearchParams`。
+        const params = listQueryParams(
+          { page: targetPage, pageSize: 20, query: applied.query, sort: [] },
+          { fixed: { status: applied.status } },
+        );
+        return adminFetch<InviteCodeAdminView[]>(`/api/v1/admin/invite-codes?${params}`);
       },
       [applied],
     ),
@@ -289,140 +299,81 @@ export function InviteCodeAdminPanel() {
           >
             <span className="admin-status">{copy.toolbar.status}</span>
           </AdminListToolbar>
-          <div className="admin-table-wrap">
-            <table className="admin-table">
-              <caption className="sr-only">{copy.title}</caption>
-              <thead>
-                <tr>
-                  <th scope="col">{copy.table.prefix}</th>
-                  <th scope="col">{copy.table.status}</th>
-                  <th scope="col" className="admin-table__grow">
-                    {copy.table.window}
-                  </th>
-                  <th scope="col">{copy.table.usage}</th>
-                  <th scope="col">{copy.table.binding}</th>
-                  <th scope="col">{copy.table.createdAt}</th>
-                  <th scope="col">{copy.table.actions}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.length === 0 ? (
-                  <tr>
-                    <td className="admin-table__empty" colSpan={7}>
-                      {adminShared.empty}
-                    </td>
-                  </tr>
-                ) : (
-                  items.map((item) =>
-                    editingId === item.id ? (
-                      <tr key={item.id}>
-                        <td data-label={copy.table.prefix}>
-                          <code>{item.displayPrefix}</code>
-                        </td>
-                        <td colSpan={4}>
-                          <form
-                            className="admin-form"
-                            method="post"
-                            onSubmit={(event) => void savePolicy(event, item.id)}
-                            aria-label={`${copy.action.policy} ${item.displayPrefix}`}
-                          >
-                            <div className="admin-form__grid">
-                              <label className="field">
-                                <span className="field__label">{copy.create.maxUses}</span>
-                                <input
-                                  className="field__input"
-                                  type="number"
-                                  name="maxUses"
-                                  min={Math.max(1, item.usedCount)}
-                                  max={1000000}
-                                  defaultValue={item.maxUses}
-                                />
-                              </label>
-                              <label className="field">
-                                <span className="field__label">{copy.create.activeFrom}</span>
-                                <input
-                                  className="field__input"
-                                  type="datetime-local"
-                                  name="activeFrom"
-                                  defaultValue={toLocalInput(item.activeFrom)}
-                                />
-                              </label>
-                              <label className="field">
-                                <span className="field__label">{copy.create.expiresAt}</span>
-                                <input
-                                  className="field__input"
-                                  type="datetime-local"
-                                  name="expiresAt"
-                                  defaultValue={toLocalInput(item.expiresAt)}
-                                />
-                              </label>
-                            </div>
-                            <div className="signup__actions">
-                              <Button type="submit" disabled={busy}>
-                                {copy.action.save}
-                              </Button>
-                              <Button variant="ghost" onClick={() => setEditingId(null)}>
-                                {copy.action.cancel}
-                              </Button>
-                            </div>
-                          </form>
-                        </td>
-                        <td data-label={copy.table.createdAt}>{formatDateTime(item.createdAt)}</td>
-                        <td data-label={copy.table.actions}>{adminShared.none}</td>
-                      </tr>
-                    ) : (
-                      <tr key={item.id}>
-                        <td data-label={copy.table.prefix}>
-                          <code>{item.displayPrefix}</code>
-                        </td>
-                        <td data-label={copy.table.status}>
-                          <span
-                            className={
-                              item.status === "ACTIVE"
-                                ? "repair-tag repair-tag--approved"
-                                : "repair-tag repair-tag--pending"
-                            }
-                          >
-                            {inviteCodeStatusLabels[item.status]}
-                          </span>
-                        </td>
-                        <td data-label={copy.table.window} className="admin-table__grow">
-                          {windowText(item)}
-                        </td>
-                        <td data-label={copy.table.usage}>
-                          {copy.usage
-                            .replace("{used}", String(item.usedCount))
-                            .replace("{max}", String(item.maxUses))}
-                        </td>
-                        <td data-label={copy.table.binding}>
-                          {bindingText(item) || adminShared.none}
-                        </td>
-                        <td data-label={copy.table.createdAt}>{formatDateTime(item.createdAt)}</td>
-                        <td data-label={copy.table.actions}>
-                          <span className="admin-actions">
-                            <Button
-                              variant="ghost"
-                              icon="edit"
-                              onClick={() => setEditingId(item.id)}
-                            >
-                              {copy.action.policy}
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              disabled={busy || item.status === "REVOKED"}
-                              onClick={() => void revoke(item)}
-                            >
-                              {copy.action.revoke}
-                            </Button>
-                          </span>
-                        </td>
-                      </tr>
-                    ),
-                  )
-                )}
-              </tbody>
-            </table>
-          </div>
+          {/* 表格本体由内核渲染（`AdminTable`）：列宽、表头、单元格内容全部来自
+              `inviteCodeTableSpec` 这一份定义。
+
+              「调整策略」那一行把中间四列合成一个表单（`colSpan`），逐列渲染表达不了，
+              因此走 `renderRow` **整行接管** —— `<tr>` 与列宽仍由内核负责，
+              接管的只是「这一行里有哪些格子」。 */}
+          <AdminTable
+            spec={inviteCodeTableSpec}
+            items={items}
+            emptyText={inviteCodeEmptyText}
+            renderContext={{
+              busy,
+              onEditPolicy: setEditingId,
+              onRevoke: (item) => void revoke(item),
+            }}
+            renderRow={(item) =>
+              editingId === item.id ? (
+                <>
+                  <td data-label={copy.table.prefix}>
+                    <code>{item.displayPrefix}</code>
+                  </td>
+                  <td colSpan={4}>
+                    <form
+                      className="admin-form"
+                      method="post"
+                      onSubmit={(event) => void savePolicy(event, item.id)}
+                      aria-label={`${copy.action.policy} ${item.displayPrefix}`}
+                    >
+                      <div className="admin-form__grid">
+                        <label className="field">
+                          <span className="field__label">{copy.create.maxUses}</span>
+                          <input
+                            className="field__input"
+                            type="number"
+                            name="maxUses"
+                            min={Math.max(1, item.usedCount)}
+                            max={1000000}
+                            defaultValue={item.maxUses}
+                          />
+                        </label>
+                        <label className="field">
+                          <span className="field__label">{copy.create.activeFrom}</span>
+                          <input
+                            className="field__input"
+                            type="datetime-local"
+                            name="activeFrom"
+                            defaultValue={toLocalInput(item.activeFrom)}
+                          />
+                        </label>
+                        <label className="field">
+                          <span className="field__label">{copy.create.expiresAt}</span>
+                          <input
+                            className="field__input"
+                            type="datetime-local"
+                            name="expiresAt"
+                            defaultValue={toLocalInput(item.expiresAt)}
+                          />
+                        </label>
+                      </div>
+                      <div className="signup__actions">
+                        <Button type="submit" disabled={busy}>
+                          {copy.action.save}
+                        </Button>
+                        <Button variant="ghost" onClick={() => setEditingId(null)}>
+                          {copy.action.cancel}
+                        </Button>
+                      </div>
+                    </form>
+                  </td>
+                  <td data-label={copy.table.createdAt}>{formatDateTime(item.createdAt)}</td>
+                  <td data-label={copy.table.actions}>{adminShared.none}</td>
+                </>
+              ) : null
+            }
+          />
           <AdminListEnd
             pagination={pagination}
             loaded={items.length}
@@ -434,35 +385,6 @@ export function InviteCodeAdminPanel() {
       ) : null}
     </div>
   );
-}
-
-function windowText(item: InviteCodeAdminView): string {
-  const copy = adminCopy.inviteCodes;
-  if (!item.activeFrom && !item.expiresAt) return copy.window.forever;
-  const parts: string[] = [];
-  if (item.activeFrom)
-    parts.push(copy.window.from.replace("{from}", formatDateTime(item.activeFrom)));
-  if (item.expiresAt) parts.push(copy.window.until.replace("{to}", formatDateTime(item.expiresAt)));
-  return parts.join(" · ");
-}
-
-function bindingText(item: InviteCodeAdminView): string {
-  const parts: string[] = [];
-  if (item.boundQqMasked) parts.push(`QQ ${item.boundQqMasked}`);
-  if (item.boundPhoneMasked) parts.push(item.boundPhoneMasked);
-  return parts.join(" · ");
-}
-
-/** 列表里的时间：`Asia/Shanghai` 的 `MM-DD HH:mm`。表格列窄，不重复显示年份。 */
-function formatDateTime(iso: string): string {
-  return new Intl.DateTimeFormat("zh-CN", {
-    timeZone: "Asia/Shanghai",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).format(new Date(iso));
 }
 
 /** ISO 时刻 → `datetime-local` 需要的本地值（浏览器按用户本地时区解释）。 */

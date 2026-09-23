@@ -1,16 +1,22 @@
 "use client";
 
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 
 import { AdminBatchTools } from "@/components/admin/AdminBatchTools";
 import { AdminListEnd, useAdminList } from "@/components/admin/useAdminList";
+import { AdminFilterDialog, AdminFilterTrigger } from "@/components/admin/AdminFilterDialog";
 import { AdminListToolbar } from "@/components/admin/AdminListToolbar";
 import { AdminModal } from "@/components/admin/AdminModal";
+import { AdminTable } from "@/components/admin/AdminTable";
+import {
+  memberTableSpec,
+  type MemberEditableFields,
+  type MemberTableContext,
+} from "@/components/admin/member-table-spec";
 import { useColumnResize, type ColumnSpec } from "@/components/admin/useColumnResize";
 import { useRowDragSort } from "@/components/admin/useRowDragSort";
 import { useRowSelect } from "@/components/admin/useRowSelect";
 import { movingRowIds } from "@/lib/list-order";
-import { Icon } from "@/components/ui/Icon";
 import { AdminToast } from "@/components/admin/AdminToast";
 import type { AdminToastMessage } from "@/components/admin/AdminToast";
 import { MemberCreateForm } from "@/components/admin/MemberCreateForm";
@@ -18,15 +24,15 @@ import { MemberDetailPanel } from "@/components/admin/MemberDetailPanel";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { adminCopy, adminShared, memberRoleLabels, memberStatusLabels } from "@/config/admin";
-import { formatDurationMinutes, formatShanghaiDate } from "@/config/member";
 import { adminFetch, prefetchAdmin } from "@/features/admin/admin-client";
+import { filterSignature, type FilterRule } from "@/lib/api/list-filter";
+import { listQueryParams, sortParam } from "@/lib/api/list-query";
+import { filterFieldsOf } from "@/lib/table/field-spec";
 import { MemberStatus, RoleCode } from "@/types/contracts";
-import type { MemberBatchToggleResult, MemberListEntry } from "@/types/contracts";
+import type { MemberBatchToggleResult, MemberListEntry, MemberUpdateView } from "@/types/contracts";
+import type { SortRule } from "@/types/table";
 
 type Filters = { query: string; status: string; role: string };
-
-/** 成员表「技能标签」列最多显示几枚（多出来的收成 `+N`，完整列表在 `title` 上）。 */
-const SKILL_TAGS_SHOWN = 2;
 
 /**
  * 列宽（px）。**顺序必须与表头 `<th>` 一致**（`<colgroup>` 是按顺序对列的）。
@@ -39,17 +45,13 @@ const SKILL_TAGS_SHOWN = 2;
  *
  * 总和 = 1079px，正好是 1440px 窗口下表格内容区的宽度；窗口更宽时差额由最后一列吸收。
  */
-const COLUMNS: ColumnSpec[] = [
-  { id: "member", width: 221, label: "成员" },
-  { id: "skills", width: 124, label: "技能标签" },
-  { id: "studentId", width: 92, label: "学号" },
-  { id: "className", width: 96, label: "班级" },
-  { id: "roles", width: 96, label: "角色" },
-  { id: "status", width: 72, label: "状态" },
-  { id: "joinedAt", width: 96, label: "加入时间" },
-  { id: "repairs", width: 132, label: "维修记录" },
-  { id: "contacts", width: 150, label: "联系方式" },
-];
+const COLUMNS: ColumnSpec[] = memberTableSpec.fields.map((field) => ({
+  id: field.key,
+  // 成员表每一列都在 spec 里声明了默认宽度；`?? 0` 只是把类型收窄 ——
+  // 真出现缺省会被 `tests/unit/admin-table-render.test.ts` 的列宽断言拦下（它会先红）。
+  width: field.width ?? 0,
+  label: field.label,
+}));
 
 /**
  * 列宽偏好的存储键（与主题偏好同一个前缀）。
@@ -59,6 +61,15 @@ const COLUMNS: ColumnSpec[] = [
 const COLUMN_STORAGE_KEY = "zafu-pchospital:admin-columns:members:v2";
 
 const EMPTY_FILTERS: Filters = { query: "", status: "", role: "" };
+
+/**
+ * 可加条件的列（来自 spec 的 `filter` 声明，模块级常量：弹层的选项不随渲染变化）。
+ *
+ * 与后端 `MEMBER_FILTERABLE` 是同一份口径 —— 界面上能选的列与运算符，
+ * 后端一定收；反过来后端有的，界面按需要开放（`nickname` 就没有单独一列，
+ * 它跟着姓名一起显示，用关键字搜索更快）。
+ */
+const FILTER_FIELDS = filterFieldsOf(memberTableSpec);
 
 /**
  * 成员管理（M6 §63）。
@@ -81,22 +92,51 @@ export function MemberAdminPanel() {
   const [detailId, setDetailId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [busy, setBusy] = useState(false);
+  /** 表头排序（三态循环由内核的 `cycleSortRule` 算好；空数组 = 按拖动顺序）。 */
+  const [sortRules, setSortRules] = useState<SortRule[]>([]);
+  /** 列级筛选的生效条件（弹层里改的是草稿，只有「应用」才落到这里）。 */
+  const [filterRules, setFilterRules] = useState<FilterRule[]>([]);
+  const [filtering, setFiltering] = useState(false);
 
   // 取数状态收在 `useAdminList` 里：往下滚动自动接下一页（邮箱式的连续列表，
   // 不再有「上一页 / 下一页」）。筛选变化时由下面的 effect 重置回第一页。
   const list = useAdminList<MemberListEntry>(
     useCallback(
       (targetPage: number) => {
-        const params = new URLSearchParams({ page: String(targetPage), pageSize: "20" });
-        if (applied.query) params.set("query", applied.query);
-        if (applied.status) params.set("status", applied.status);
-        if (applied.role) params.set("role", applied.role);
+        // 查询串由内核统一拼装：排序字段、固定筛选与列级条件各归各位，
+        // 六个面板不必各写一份 `new URLSearchParams`。排序字段必须在服务端白名单里
+        // （`MEMBER_SORTABLE`），否则后端 400 —— 表头只给白名单内的列渲染控件。
+        const params = listQueryParams(
+          { page: targetPage, pageSize: 20, query: applied.query, sort: sortRules },
+          {
+            // 快捷筛选条上的两个参数：各表自己的，不属于通用契约。
+            fixed: { status: applied.status, role: applied.role },
+            // 列级条件：**一条条件一个 `filter` 参数**（`filter=studentId:contains:2023`）。
+            // 不用逗号挤成一个参数：值是用户输入，可能自带逗号或冒号，
+            // 重复参数由 `URLSearchParams` 负责编码，不必自己发明转义规则。
+            filters: filterRules,
+          },
+        );
         return adminFetch<MemberListEntry[]>(`/api/v1/admin/members?${params}`);
       },
-      [applied],
+      [applied, sortRules, filterRules],
     ),
   );
   const { items, pagination, state, problem, loadingMore } = list;
+  /**
+   * 排序变化后回到第一页。`useAdminList` 不猜调用方意图，重置一律由页面负责
+   * （与筛选同一条约定）。用「上一次生效的排序」做闸门，因此挂载时不会多取一次。
+   *
+   * 与 `load()` 的差别：排序**不改成员集合**，所以这里不清空已选 ——
+   * 与拖动排序同一个判断（「换序不该顺手清掉已选」）。
+   */
+  const sortSignature = sortParam(sortRules) ?? "";
+  const appliedSort = useRef(sortSignature);
+  useEffect(() => {
+    if (appliedSort.current === sortSignature) return;
+    appliedSort.current = sortSignature;
+    void list.reload();
+  }, [sortSignature, list]);
   /** 行号从 1 开始，无限下翻时接着往下编（不是「第几页的第几行」）。 */
   const firstRowNumber = 1;
   // 列宽可拖拽（Excel 式全局竖线）：宽度是使用者才清楚的事，写死永远照顾不到所有人。
@@ -116,6 +156,19 @@ export function MemberAdminPanel() {
     selected,
   );
   /**
+   * 单元格渲染要用的运行时值。**每次渲染新建**，所以走 `renderContext` 而不是把 spec
+   * 做成工厂函数：spec 一旦随选中状态变化，以它派生的列清单为依赖的 `useColumnResize`
+   * 就会跟着重跑列宽对齐 —— 拖动列宽时尤其危险（见 `FieldSpec.render` 的注释）。
+   */
+  const renderContext: MemberTableContext = {
+    rows,
+    sort,
+    firstRowNumber,
+    onView: setDetailId,
+    sortingActive: sortRules.length > 0,
+    updateMember,
+  };
+  /**
    * 页面自己的错误（批量逐条失败的明细、重置密码这类动作的失败）。
    * 与 `list.problem`（取数失败）分开：取数失败要整体换成「重新加载」，动作失败只提示一次。
    */
@@ -134,6 +187,20 @@ export function MemberAdminPanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [applied]);
 
+  /**
+   * 列级条件变化后回第一页并**清空已选**（走 `load()`，与上面排序的门控不同）：
+   * 条件换掉的是「列表里有哪些成员」，已勾选的那几个可能已经不在结果里，
+   * 留着它们做批量操作就是误伤。用「上一次生效的条件」做闸门，因此挂载时不会多取一次；
+   * 点开弹层又原样应用（条件没变）也不会白取一次。
+   */
+  const filterNow = filterSignature(filterRules);
+  const appliedFilterSignature = useRef(filterNow);
+  useEffect(() => {
+    if (appliedFilterSignature.current === filterNow) return;
+    appliedFilterSignature.current = filterNow;
+    void load();
+  }, [filterNow, load]);
+
   function submitFilters(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const data = Object.fromEntries(new FormData(event.currentTarget)) as Record<string, string>;
@@ -142,6 +209,34 @@ export function MemberAdminPanel() {
       status: data.status ?? "",
       role: data.role ?? "",
     });
+  }
+
+  /**
+   * 就地编辑的提交（学号 / 班级）。三件事都在这里做完：
+   *
+   * 1. 乐观锁用**列表里这一行的当前版本号**；冲突时服务端 409，文案由 `adminFetch` 统一成
+   *    可读提示；
+   * 2. 失败**抛回内核**（内核据此退出编辑态），同时用浮层提示一次 —— 浮层不参与布局，
+   *    不会把表格顶下去；
+   * 3. 成功把服务端返回的权威值**就地**合并进这一行（含新的 `version`）。
+   *    **不整表重取**：那会把下翻出来的几页缩回第一页（与拖动排序同一个判断）。
+   *
+   * 成功不弹提示：单元格当场换成新值，那本身就是反馈（新内容优先原地替换）。
+   */
+  async function updateMember(memberId: string, fields: MemberEditableFields) {
+    const current = items.find((item) => item.id === memberId);
+    // 找不到说明列表刚被换过（筛选 / 重取）：不猜版本号，让用户重来。
+    if (!current) throw new Error("这条成员不在当前列表里，请刷新后重试");
+    const result = await adminFetch<MemberUpdateView>(`/api/v1/admin/members/${memberId}`, {
+      method: "PATCH",
+      body: { ...fields, version: current.version },
+    });
+    if (!result.ok) {
+      setToast({ text: result.message, tone: "neutral" });
+      throw new Error(result.message);
+    }
+    const { realName, nickname, studentId, className, version } = result.data;
+    list.patch(memberId, { realName, nickname, studentId, className, version });
   }
 
   /**
@@ -332,226 +427,56 @@ export function MemberAdminPanel() {
               }
             />
             <span className="admin-toolbar__sep" aria-hidden="true" />
+            {/* 列级筛选常驻在工具栏里（与批量动作同一排）：它不因「有没有条件」出现或消失，
+                计数槽位宽度固定，因此数字变化时右边的按钮不会横移。 */}
+            <AdminFilterTrigger
+              fields={FILTER_FIELDS}
+              count={filterRules.length}
+              onClick={() => setFiltering(true)}
+            />
             <Button variant="solid" icon="plus" onClick={() => setCreating(true)}>
               {copy.create.title}
             </Button>
           </AdminListToolbar>
-          <div className="admin-table-wrap admin-table-wrap--resizable">
-            {/* `table-layout: fixed` + `<colgroup>`：列宽由用户拖拽决定，
-                没有列组的话 fixed 布局会把宽度均分，拖拽就没有意义。
-                列宽总和由 `useColumnResize` 保证等于容器宽，因此不需要「吸附列」。 */}
-            <table className="admin-table admin-table--resizable" ref={resize.tableRef}>
-              <caption className="sr-only">{copy.title}</caption>
-              <colgroup>
-                {/* 宽度由 React 渲染（首屏、键盘调整、容器变化都靠它），
-                    拖动过程中由 `useColumnResize` 直接改这两个属性绕开重渲染。 */}
-                {COLUMNS.map((column, index) => (
-                  <col
-                    key={column.id}
-                    ref={resize.colRefs[index]}
-                    style={{ width: `${resize.widths[index]}px` }}
+          {/* 表格本体由内核渲染（`AdminTable`）：列宽、表头、单元格内容全部来自
+              `memberTableSpec` 这一份定义，不再分别写在 `COLUMNS` / `<th>` / `<td>` 三处。
+
+              Excel 式全局竖线是**覆盖层**，走 `overlay` 渲染在表格外面 —— 只有这样才能
+              贯穿表头与所有行，拖动时不必再去表头找那个小柄；位置由 `useColumnResize`
+              量出来，表宽 / 列宽变化时重算。 */}
+          <AdminTable
+            spec={memberTableSpec}
+            items={items}
+            renderContext={renderContext}
+            sort={sortRules}
+            onSortChange={setSortRules}
+            emptyText={adminShared.empty}
+            widths={resize.widths}
+            colRefs={resize.colRefs}
+            tableRef={resize.tableRef}
+            wrapClassName="admin-table-wrap admin-table-wrap--resizable"
+            className="admin-table admin-table--resizable"
+            rowProps={(member) => ({
+              "data-row-id": member.id,
+              // 正在拖的行半透明、落点行画一条指示线（`useRowDragSort`）。
+              className: sort.rowClass(member.id),
+              ...sort.rowProps(member.id),
+              // 悬停整行即预取该成员的详情与统计：详情窗口要发 3 个 GET，
+              // 提前取回来点「详情」就能直接出内容，不必先看骨架。
+              onMouseEnter: () => prefetchMemberDetail(member.id),
+            })}
+            overlay={
+              <div className="admin-colgrid">
+                {resize.boundaries.map((boundary) => (
+                  <span
+                    key={boundary.id}
+                    style={{ insetInlineStart: `${boundary.x}px` }}
+                    {...resize.lineProps(boundary.id, boundary.label)}
                   />
                 ))}
-              </colgroup>
-              <thead>
-                <tr>
-                  <th scope="col">{copy.table.realName}</th>
-                  <th scope="col">{copy.table.skills}</th>
-                  <th scope="col">{copy.table.studentId}</th>
-                  <th scope="col">{copy.table.className}</th>
-                  <th scope="col">{copy.table.roles}</th>
-                  <th scope="col">{copy.table.status}</th>
-                  <th scope="col">{copy.table.joinedAt}</th>
-                  <th scope="col">{copy.table.repairs}</th>
-                  <th scope="col">{copy.table.contacts}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.length === 0 ? (
-                  <tr>
-                    <td className="admin-table__empty" colSpan={COLUMNS.length}>
-                      {adminShared.empty}
-                    </td>
-                  </tr>
-                ) : (
-                  items.map((item, index) => (
-                    <tr
-                      key={item.id}
-                      data-row-id={item.id}
-                      // 正在拖的行半透明、落点行画一条指示线（`useRowDragSort`）。
-                      className={sort.rowClass(item.id)}
-                      {...sort.rowProps(item.id)}
-                      // 悬停整行即预取该成员的详情与统计：详情窗口要发 3 个 GET，
-                      // 提前取回来点「详情」就能直接出内容，不必先看骨架。
-                      onMouseEnter={() => prefetchMemberDetail(item.id)}
-                    >
-                      {/* 首列 = 行首控件 + 姓名 + 昵称 + 「查看」，全都在这一个单元格里。
-                          行首不再单独占一列（第九轮验收）：复选框右边缘到姓名之间只剩一个
-                          固定间距，不再横着一段空白。
-                          六点手柄拖动 = 调整这一行的位置（`useRowDragSort`）。 */}
-                      <td className="admin-table__member" data-label={copy.table.realName}>
-                        <span className="admin-membercell">
-                          <span className="admin-rowhead">
-                            {/* 手柄是整行唯一 `draggable` 的元素（整行可拖会让表格里的文字选不中），
-                                拖动即调整这一行的位置。HTML5 拖放在触屏上不触发，键盘也拖不动，
-                                所以这里同时给它 `role` / `tabIndex` 与 ↑ ↓ 方向键支持。 */}
-                            <span
-                              className="admin-rowgrip"
-                              title={copy.table.dragRow}
-                              aria-label={`${copy.table.dragRow}：${item.realName}`}
-                              {...sort.handleProps(item.id)}
-                              {...sort.keyboardProps(item.id)}
-                            >
-                              <Icon name="grip" />
-                            </span>
-                            <span className="admin-rownum">
-                              <span className="admin-rownum__n" aria-hidden="true">
-                                {firstRowNumber + index}
-                              </span>
-                              <input
-                                aria-label={`${copy.table.selectOne}${item.realName}`}
-                                {...rows.checkboxProps(item.id)}
-                              />
-                            </span>
-                          </span>
-                          {/* 昵称跟在姓名后面**同一行**：单元格里出现第二行会让行高不一致，
-                              整张表看起来参差不齐，也让「每个单元格就是一个字段值」这件事失真
-                              （第八轮验收）。用 `（昵称）` 而不是标签样式：标签的描边与内边距
-                              在这么窄的一列里太抢眼。 */}
-                          <span className="admin-cell__main" title={item.realName}>
-                            {item.realName}
-                          </span>
-                          {item.nickname ? (
-                            <span className="admin-cell__aside" title={item.nickname}>
-                              （{item.nickname}）
-                            </span>
-                          ) : null}
-                          {/* 详情入口留在首列右端：悬浮整行才出现的小框。
-                              用 `opacity` 而不是 `display`：它始终在布局里、始终可聚焦，
-                              键盘 Tab 到它时靠 `:focus-visible` 显示 —— 没有出现/消失，就没有位移。 */}
-                          <button
-                            type="button"
-                            className="admin-peek"
-                            // 视觉上只有两个字，无障碍名称补上是谁 —— 读屏用户听到的是
-                            // 「查看 张三」，而不是十个一模一样的「查看」。
-                            aria-label={`${copy.table.view} ${item.realName}`}
-                            onClick={() => setDetailId(item.id)}
-                          >
-                            {copy.table.view}
-                          </button>
-                        </span>
-                      </td>
-                      {/* 技能标签紧挨着姓名：这两个字段合起来回答「这是谁、会什么」，
-                          原先它们与学号之间隔着一大片空白。 */}
-                      <td data-label={copy.table.skills}>
-                        {item.skills.length === 0 ? (
-                          // 空值统一用 `—`（`adminShared.none`），不要写「未登记」：
-                          // 一列四十行都写着「未登记」是噪音，而 `—` 与其余空单元格一致。
-                          <span className="admin-cell__muted">{adminShared.none}</span>
-                        ) : (
-                          <span
-                            className="admin-tags"
-                            title={item.skills.map((skill) => skill.name).join("、")}
-                          >
-                            {item.skills.slice(0, SKILL_TAGS_SHOWN).map((skill) => (
-                              <span
-                                key={skill.id}
-                                className={
-                                  skill.isActive ? "admin-tag" : "admin-tag admin-tag--muted"
-                                }
-                              >
-                                {skill.name}
-                              </span>
-                            ))}
-                            {item.skills.length > SKILL_TAGS_SHOWN ? (
-                              <span className="admin-cell__muted">
-                                {copy.table.skillsMore.replace(
-                                  "{count}",
-                                  String(item.skills.length - SKILL_TAGS_SHOWN),
-                                )}
-                              </span>
-                            ) : null}
-                          </span>
-                        )}
-                      </td>
-                      <td data-label={copy.table.studentId}>
-                        {item.studentId || adminShared.none}
-                      </td>
-                      {/* 班级名最长 80 字符，不截断会一直挤占姓名列的空间；
-                          完整值挂在 `title` 上，鼠标停一下就能看全。 */}
-                      <td data-label={copy.table.className} title={item.className ?? undefined}>
-                        <span className="admin-cell--ellipsis">
-                          {item.className || adminShared.none}
-                        </span>
-                      </td>
-                      <td data-label={copy.table.roles}>
-                        <span className="admin-tags">
-                          {item.roles.map((role) => (
-                            <span
-                              className={
-                                role === "ADMIN" ? "admin-tag admin-tag--accent" : "admin-tag"
-                              }
-                              key={role}
-                            >
-                              {memberRoleLabels[role]}
-                              {/* 「账号已停用但管理员角色还在」是角色列的事，不是状态列的事：
-                                  放在这里既在同一行说完，也不用把状态列撑宽。 */}
-                              {role === "ADMIN" && item.status === "REVOKED" ? (
-                                <span className="admin-tag__note">{copy.table.roleStale}</span>
-                              ) : null}
-                            </span>
-                          ))}
-                        </span>
-                      </td>
-                      <td data-label={copy.table.status}>{memberStatusLabels[item.status]}</td>
-                      <td data-label={copy.table.joinedAt}>{formatShanghaiDate(item.joinedAt)}</td>
-                      {/* 维修次数与总时长合成一格：同一个统计口径（已通过且未删除），
-                          分成两列反而要读者自己把两个数字对起来。 */}
-                      <td data-label={copy.table.repairs}>
-                        <span
-                          className={
-                            item.approvedRepairCount === 0
-                              ? "admin-cell__muted"
-                              : "admin-cell__main"
-                          }
-                        >
-                          {copy.table.repairsCount.replace(
-                            "{count}",
-                            String(item.approvedRepairCount),
-                          )}
-                        </span>
-                        {item.approvedRepairMinutes > 0 ? (
-                          <span className="admin-cell__aside">
-                            {" · "}
-                            {formatDurationMinutes(item.approvedRepairMinutes)}
-                          </span>
-                        ) : null}
-                      </td>
-                      <td data-label={copy.table.contacts}>
-                        {/* 宽屏并排、窄屏（表格降级成卡片）自动换行，少占一行高度。 */}
-                        <span className="admin-contacts">
-                          <span>{item.qqMasked ?? adminShared.none}</span>
-                          <span>{item.phoneMasked ?? adminShared.none}</span>
-                        </span>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-            {/* Excel 式全局竖线：**放在表格外面**（覆盖层），因此可以贯穿表头与所有行，
-                拖动时不必再去表头找那个小柄。位置由 `useColumnResize` 量出来，
-                表宽 / 列宽变化时重算。 */}
-            <div className="admin-colgrid">
-              {resize.boundaries.map((boundary) => (
-                <span
-                  key={boundary.id}
-                  style={{ insetInlineStart: `${boundary.x}px` }}
-                  {...resize.lineProps(boundary.id, boundary.label)}
-                />
-              ))}
-            </div>
-          </div>
+              </div>
+            }
+          />
           <AdminListEnd
             pagination={pagination}
             loaded={items.length}
@@ -577,6 +502,16 @@ export function MemberAdminPanel() {
         <AdminModal title={copy.create.title} onClose={() => setCreating(false)}>
           <MemberCreateForm onCreated={() => void load()} onClose={() => setCreating(false)} />
         </AdminModal>
+      ) : null}
+
+      {/* 列筛选弹层：草稿在弹层里，只有「应用」才落到 `filterRules`（进而重新取数）。 */}
+      {filtering ? (
+        <AdminFilterDialog
+          fields={FILTER_FIELDS}
+          rules={filterRules}
+          onApply={setFilterRules}
+          onClose={() => setFiltering(false)}
+        />
       ) : null}
     </div>
   );

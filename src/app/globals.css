@@ -2551,6 +2551,36 @@ html[data-theme="black-yellow"] {
     text-align: center;
     color: var(--ink-3);
   }
+  /* 表头排序（内核 `AdminTable`）：可排序列的列名是一个按钮（`.admin-th__sort`），
+     右侧**常驻一个箭头槽**。槽位常驻而不是「排序了才出现」，是为了点表头时
+     列名不左右移动 —— 撞「操作前后其它像素不该移动」这条硬规则。
+     箭头用两块透明边框拼的三角形（不新增图标），颜色只取语义令牌：
+     未排序悬停用 `--line-strong`（3:1 的交互边界色），已排序用 `--accent-deep`。
+     `aria-sort` 由内核写在 `<th>` 上，所以状态与读屏口径同源。
+     ≤1099px 的卡片式降级里 `<thead>` 整体 `display: none`，用不到这套。 */
+  .admin-th__sort::after {
+    content: "";
+    display: inline-block;
+    margin-inline-start: 0.3rem;
+    inline-size: 0;
+    block-size: 0;
+    border-inline: 0.25rem solid transparent;
+    border-block-end: 0.3rem solid var(--line-strong);
+    visibility: hidden;
+    vertical-align: 0.05em;
+  }
+  .admin-th__sort:hover::after,
+  .admin-th__sort:focus-visible::after {
+    visibility: visible;
+  }
+  .admin-table th[aria-sort="ascending"] .admin-th__sort::after,
+  .admin-table th[aria-sort="descending"] .admin-th__sort::after {
+    visibility: visible;
+    border-block-end-color: var(--accent-deep);
+  }
+  .admin-table th[aria-sort="descending"] .admin-th__sort::after {
+    transform: rotate(180deg);
+  }
 
   .repair-tag {
     display: inline-flex;
@@ -4354,6 +4384,56 @@ html[data-theme="black-yellow"] {
     align-self: end;
   }
 
+  /* ------------------------------------------------ 列级筛选（内核弹层） */
+  /* 入口按钮**常驻**工具栏：不因「有没有条件」出现或消失。
+     计数槽位宽度固定（条件上限 5 条 = 一位数），因此数字从空变成 3 时按钮宽度不变，
+     同排右边的按钮不会横移。 */
+  .admin-filterbtn__count {
+    display: inline-block;
+    min-inline-size: 1ch;
+    padding-inline-start: 0.35em;
+    font-variant-numeric: tabular-nums;
+    text-align: start;
+  }
+  /* 有条件在生效：**描边**换成信号色，不做填充 —— 填充留给同一排的「新增成员」，
+     一个次要入口不该比主行动点更响。 */
+  .admin-filterbtn.is-active {
+    border-color: var(--accent);
+  }
+
+  /* 条件编辑区：一条条件一行，窄屏堆成四层。 */
+  .admin-conditions {
+    display: grid;
+    gap: var(--s-3);
+  }
+  .admin-conditions__row {
+    display: grid;
+    gap: var(--s-2);
+  }
+  .admin-conditions__row > .btn {
+    justify-self: start;
+  }
+  .admin-conditions__empty {
+    margin: 0;
+    color: var(--ink-3);
+    font-size: var(--t-sm);
+  }
+  .admin-conditions__tools {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--s-2);
+  }
+  .admin-conditions__hint {
+    margin: 0;
+    color: var(--ink-3);
+    font-size: var(--t-xs);
+  }
+  /* 底部动作行与条件区之间留一档间距：弹层里这是两块内容，不是三块。 */
+  .admin-conditions__actions {
+    margin-block-start: var(--s-4);
+  }
+
   .admin-actions {
     display: flex;
     flex-wrap: wrap;
@@ -5076,6 +5156,12 @@ html[data-theme="black-yellow"] {
     .admin-filters__row > .btn {
       justify-self: start;
     }
+    /* 列筛选的一条条件：列 / 运算符 / 值三格 + 删除按钮，一行放完。
+       三格宽度不同是照内容给的 —— 值最长（班级名、日期），运算符最短（两个字）。 */
+    .admin-conditions__row {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 0.9fr) minmax(0, 1.3fr) auto;
+      align-items: end;
+    }
     .admin-form__grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
@@ -5237,6 +5323,18 @@ html[data-theme="black-yellow"] {
     inline-size: 0.85rem;
     block-size: 0.85rem;
   }
+  /* 排序激活时手柄作废（`.is-inert`）：行顺序由排序决定，拖动改不了它 ——
+     手柄若照常悬停显形，就是一个「看着能拖、拖了没反应」的假入口。
+     只让它不再显形，**槽位仍然占着**，所以行号与复选框不会横向移动。
+     这条覆盖上面的行悬停 / 焦点规则，因此要把那两条写成同等具体度。 */
+  .admin-rowgrip.is-inert,
+  .admin-table tbody tr:hover .admin-rowgrip.is-inert,
+  .admin-table tbody tr:has(:focus-visible) .admin-rowgrip.is-inert,
+  .admin-table tbody tr.is-dragging .admin-rowgrip.is-inert {
+    opacity: 0;
+    cursor: default;
+    pointer-events: none;
+  }
   .admin-rownum {
     position: relative;
     display: inline-flex;
@@ -5295,6 +5393,36 @@ html[data-theme="black-yellow"] {
     text-overflow: ellipsis;
     white-space: nowrap;
     vertical-align: bottom;
+  }
+
+  /* 就地编辑（内核 `AdminTable`）：可编辑单元格是一个按钮，编辑态是一个输入框。
+     两条硬要求：
+     1. **零位移** —— 按钮用 `p-0 text-start`（Tailwind）抵掉 UA 的内边距与居中，
+        输入框把尺寸相关的一切清零或继承（字体、行高、内边距、边框），
+        因此进入 / 退出编辑既不改行高也不改列宽；
+     2. 焦点提示只用 `outline`（不参与布局），不用 `border` / `box-shadow`。
+     `cursor: text` 是可编辑的唯一提示：加底色或描边会在整列上形成噪声。 */
+  .admin-celledit {
+    display: block;
+    inline-size: 100%;
+    cursor: text;
+  }
+  .admin-celledit__input {
+    inline-size: 100%;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    font: inherit;
+    line-height: inherit;
+    color: var(--ink);
+  }
+  .admin-celledit__input:focus-visible {
+    outline: 1px solid var(--accent-line);
+    outline-offset: 2px;
+  }
+  /* 提交期间（等接口）：把值调暗表示「正在保存」，不额外加骨架或转圈。 */
+  .admin-celledit__input:disabled {
+    color: var(--ink-3);
   }
 
   /* 列宽策略：**只有内容列吸收富余宽度**，其余列按内容收窄。

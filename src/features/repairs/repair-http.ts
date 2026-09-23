@@ -1,4 +1,6 @@
+import { REPAIR_SORTABLE } from "@/features/repairs/repair-sort";
 import { AppError } from "@/lib/api/errors";
+import { sortRules } from "@/lib/api/list-query";
 import type { RepairListInput, RepairResult, RepairStatus } from "@/types/contracts";
 
 export function repairListInput(
@@ -23,6 +25,9 @@ export function repairListInput(
     isDifficult: bool(value(params, "isDifficult"), "isDifficult"),
     isTypical: bool(value(params, "isTypical"), "isTypical"),
     query: value(params, "query"),
+    // 与成员表同一形状：白名单 + 方向 + 去重 + 条数上限都在 `sortRules` 里，
+    // 非法值一律 `VALIDATION_FAILED`，字段名不透传成列名。
+    sort: sortRules(params.get("sort"), REPAIR_SORTABLE),
   };
 }
 export function draftInput(body: Record<string, unknown>) {

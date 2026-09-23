@@ -11,6 +11,44 @@
 
 分页默认 `page=1&pageSize=20`，`pageSize` 范围为 1–100。
 
+## 通用列表查询参数
+
+所有管理端列表都接受同一套查询参数（各端点再叠加自己的筛选字段）：
+
+| 参数                | 说明                                                                                                                         |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `page` / `pageSize` | 分页，默认 `1` / `20`，`pageSize` 范围 1–100。非法值 → `VALIDATION_FAILED`                                                   |
+| `query`             | 关键字模糊匹配。**匹配范围由各端点自己定义**（例如成员列表匹配姓名 / 昵称 / 学号 / 班级 / 脱敏联系方式），不是「全字段搜索」 |
+| `sort`              | 排序，格式 `sort=<field>:<asc\|desc>[,<field>:<asc\|desc>]`                                                                  |
+| `filter`            | **列级筛选**，格式 `filter=<field>:<op>:<value>`，可重复出现（最多 5 条）                                                    |     |
+
+`sort` 的约定：
+
+- **方向可省略**，省略按 `asc`（`sort=joinedAt` 等价于 `sort=joinedAt:asc`）；
+- **每个端点有独立白名单**，不在白名单里的字段 → `VALIDATION_FAILED`，
+  字段名绝不透传成列名。各端点白名单见该端点的说明（成员列表见下方 M6 一节）；
+- **最多 3 个字段**，超出 → `VALIDATION_FAILED`（拒绝而不是静默截断）；
+- 同一字段重复出现只保留第一条；
+- **服务端始终给排序补一个稳定的 tiebreaker（`id`）**：主排序键可以重复（同名成员、
+  同一秒创建的两条记录），名次不确定时 `skip` / `take` 分页会重复或漏行，
+  而列表是「往下滚动接下一页」的连续流，重复行会直接被用户看见；
+- **不带 `sort` 时按服务端默认顺序**（不是「不排序」）。默认顺序属于服务端：
+  客户端不要把它拼进 URL，否则第一次 GET 与后续 GET 的口径可能不一致。
+
+`filter` 的约定：
+
+- 运算符只有五种：`eq` / `neq`（离散值）、`contains`（文本）、`gte` / `lte`（日期与数字区间）。
+  **不做**正则、跨列模糊与跨表条件 —— 它们会把一次误输入变成全表扫描，或让语义取决于关联图；
+- 值与排序一样走**每端点独立白名单**（`src/features/*/*-filter.ts`）：字段或运算符不在白名单
+  → `VALIDATION_FAILED`；值不许为空；完全相同的条件去重；超过 5 条**拒绝而不是截断**；
+- 值的类型解释在该端点的映射层：枚举校验取值，日期按 `Asia/Shanghai` 自然日解释，
+  **结束日包含全天**（`lte` 表达为「次日 00:00 排他上界」，见 `lib/api/date-filter.ts`）；
+- **列级筛选与 `query` 是两件事**：`query` 是跨列关键字搜索，`filter` 是逐列条件，可同时用。
+  关联字段（如成员的角色）不是列，不进列级白名单，仍走固定筛选参数。
+
+排序字段与「表头可点的列」共用同一份白名单定义（`src/features/*/*-sort.ts`），
+因此不会出现「界面能点、后端 400」。
+
 ## 已接线端点
 
 ### `GET /api/v1/health`
@@ -204,22 +242,23 @@ DELETE /api/v1/member/notifications/:id
 
 新增（全部要求 `ADMIN` 角色对应的权限码，未登录 401、普通成员 403）：
 
-| 端点                                                | 权限                      | 说明                                                                                                                                                                                                                                            |
-| --------------------------------------------------- | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET /api/v1/admin/members`                         | `member:manage`           | 成员列表：`page`/`pageSize`/`query`/`status`/`role`；QQ 与手机号**只返回脱敏值**；含 `skills`（技能标签，非敏感）、`joinedAt` 与 `approvedRepairMinutes`（同口径维修总时长）                                                                    |
-| `GET /api/v1/admin/members/:id`                     | `member:manage`           | 成员详情：唯一返回 QQ / 手机号明文的端点，**每次读取写审计** `member.detail.viewed`                                                                                                                                                             |
-| `PATCH /api/v1/admin/members/:id`                   | `member:manage`           | 编辑实名 / 学号 / 班级 / 昵称；乐观锁 `version`，冲突 409 `MEMBER_PROFILE_VERSION_CONFLICT`                                                                                                                                                     |
-| `PUT /api/v1/admin/members/:id/roles`               | `member:manage`           | 角色**全量集合** `{roles:[...]}`；撤销最后一个在册管理员 409 `MEMBER_LAST_ADMIN`                                                                                                                                                                |
-| `PUT /api/v1/admin/members/:id/skills`              | `member:manage`           | `{skillIds, profileVersion}`，与成员自助同一实现（上限 12）                                                                                                                                                                                     |
-| `POST /api/v1/admin/members/batch`                  | `member:manage`           | `{memberIds, enabled}`，单次上限 50；**允许部分成功**，`failed` 带稳定错误码                                                                                                                                                                    |
-| `POST /api/v1/admin/members/move`                   | `member:manage`           | `{memberIds: string[], beforeId: string \| null}`：把这几行（1–50，保持内部先后）整体拖到 `beforeId` 之前（`null` = 末尾）；整份重排写成稠密 `sortOrder`，落点没变则幂等（`moved: false`）且不写审计；任一位成员不存在 404 `RESOURCE_NOT_FOUND` |
-| `GET /api/v1/admin/members/:id/stats`               | `analytics:read_internal` | M5 个人统计口径的管理端入口；**已禁用成员的历史统计也可查**                                                                                                                                                                                     |
-| `PATCH /api/v1/admin/repairs/:id`                   | `repair:review`           | 修改异常数据：草稿字段 + `version` + **必填 `reason`**；**不改审核状态**                                                                                                                                                                        |
-| `DELETE /api/v1/admin/repairs/:id`                  | `repair:delete`           | 软删除违规记录：`{reason}` 必填，复用 M2 `repairService.softDelete`                                                                                                                                                                             |
-| `POST /api/v1/admin/repairs/batch-reviews`          | `repair:review`           | `{recordIds, decision, note?, idempotencyKey}`，单次上限 50；逐条复用单条审核，允许部分成功                                                                                                                                                     |
-| `GET /api/v1/admin/repair-categories`               | `repair:category:manage`  | 管理端分类列表：**含已停用**，并带 `usedByRepairCount` 引用计数                                                                                                                                                                                 |
-| `POST /api/v1/admin/repair-categories/:id/activate` | `repair:category:manage`  | 重新启用被误停用的分类                                                                                                                                                                                                                          |
-| `GET /api/v1/admin/repairs/export`                  | `data:export`             | 导出：`format=csv\|xlsx` + 与列表完全相同的筛选参数；返回附件流                                                                                                                                                                                 |
+| 端点                                                | 权限                      | 说明                                                                                                                                                                                                                                                                                                                                                                                                             |
+| --------------------------------------------------- | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/v1/admin/members`                         | `member:manage`           | 成员列表：`page`/`pageSize`/`query`/`status`/`role`/`sort`；QQ 与手机号**只返回脱敏值**；含 `skills`（技能标签，非敏感）、`joinedAt` 与 `approvedRepairMinutes`（同口径维修总时长）；`sort` 白名单：`realName`/`nickname`/`studentId`/`className`/`status`/`joinedAt` —— 聚合列与关联列不可排序；`filter` 白名单：`status`(eq/neq)、`realName`/`nickname`/`studentId`/`className`(contains)、`joinedAt`(gte/lte) |
+| `GET /api/v1/admin/members/:id`                     | `member:manage`           | 成员详情：唯一返回 QQ / 手机号明文的端点，**每次读取写审计** `member.detail.viewed`                                                                                                                                                                                                                                                                                                                              |
+| `PATCH /api/v1/admin/members/:id`                   | `member:manage`           | 编辑实名 / 学号 / 班级 / 昵称；乐观锁 `version`，冲突 409 `MEMBER_PROFILE_VERSION_CONFLICT`；**响应带新的 `version`**（就地编辑要能连续提交同一行）                                                                                                                                                                                                                                                              |
+| `PUT /api/v1/admin/members/:id/roles`               | `member:manage`           | 角色**全量集合** `{roles:[...]}`；撤销最后一个在册管理员 409 `MEMBER_LAST_ADMIN`                                                                                                                                                                                                                                                                                                                                 |
+| `PUT /api/v1/admin/members/:id/skills`              | `member:manage`           | `{skillIds, profileVersion}`，与成员自助同一实现（上限 12）                                                                                                                                                                                                                                                                                                                                                      |
+| `POST /api/v1/admin/members/batch`                  | `member:manage`           | `{memberIds, enabled}`，单次上限 50；**允许部分成功**，`failed` 带稳定错误码                                                                                                                                                                                                                                                                                                                                     |
+| `POST /api/v1/admin/members/move`                   | `member:manage`           | `{memberIds: string[], beforeId: string \| null}`：把这几行（1–50，保持内部先后）整体拖到 `beforeId` 之前（`null` = 末尾）；整份重排写成稠密 `sortOrder`，落点没变则幂等（`moved: false`）且不写审计；任一位成员不存在 404 `RESOURCE_NOT_FOUND`                                                                                                                                                                  |
+| `GET /api/v1/admin/members/:id/stats`               | `analytics:read_internal` | M5 个人统计口径的管理端入口；**已禁用成员的历史统计也可查**                                                                                                                                                                                                                                                                                                                                                      |
+| `GET /api/v1/admin/repairs`                         | `repair:read`             | 管理端维修列表：`page`/`pageSize`/`query`/`memberId`/`categoryId`/`status`/`result`/`repairDateFrom`/`repairDateTo`/`isDifficult`/`isTypical`/`sort`；`sort` 白名单：`repairDate`/`durationMinutes`/`status`/`result`/`memberName`/`categoryName`/`createdAt` —— 关联列按**名字**排（按 UUID 排没有意义）；导出**不读** `sort`，顺序固定                                                                         |
+| `PATCH /api/v1/admin/repairs/:id`                   | `repair:review`           | 修改异常数据：草稿字段 + `version` + **必填 `reason`**；**不改审核状态**                                                                                                                                                                                                                                                                                                                                         |
+| `DELETE /api/v1/admin/repairs/:id`                  | `repair:delete`           | 软删除违规记录：`{reason}` 必填，复用 M2 `repairService.softDelete`                                                                                                                                                                                                                                                                                                                                              |
+| `POST /api/v1/admin/repairs/batch-reviews`          | `repair:review`           | `{recordIds, decision, note?, idempotencyKey}`，单次上限 50；逐条复用单条审核，允许部分成功                                                                                                                                                                                                                                                                                                                      |
+| `GET /api/v1/admin/repair-categories`               | `repair:category:manage`  | 管理端分类列表：**含已停用**，并带 `usedByRepairCount` 引用计数                                                                                                                                                                                                                                                                                                                                                  |
+| `POST /api/v1/admin/repair-categories/:id/activate` | `repair:category:manage`  | 重新启用被误停用的分类                                                                                                                                                                                                                                                                                                                                                                                           |
+| `GET /api/v1/admin/repairs/export`                  | `data:export`             | 导出：`format=csv\|xlsx` + 与列表完全相同的筛选参数；返回附件流                                                                                                                                                                                                                                                                                                                                                  |
 
 导出与批量操作的约定：
 

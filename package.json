@@ -32,6 +32,7 @@
   "dependencies": {
     "@prisma/adapter-mariadb": "7.10.0",
     "@prisma/client": "7.10.0",
+    "@tanstack/react-table": "8.21.3",
     "exceljs": "^4.4.0",
     "mariadb": "3.4.5",
     "next": "^15.5.4",

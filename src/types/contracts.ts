@@ -1,3 +1,6 @@
+import type { FilterRule } from "@/lib/api/list-filter";
+import type { SortRule } from "@/types/table";
+
 /** Phase 2 public contract constants. Database values and API inputs must use these constants. */
 export const UserStatus = ["ACTIVE", "DISABLED"] as const;
 export const RoleCode = ["MEMBER", "ADMIN"] as const;
@@ -359,6 +362,17 @@ export type MemberView = {
 };
 export type MemberMutationResult = { member: MemberView; initializationSecret?: string };
 
+/**
+ * 管理端编辑成员后的返回值：{@link MemberView} 之上带**新的 `version`**。
+ *
+ * 为什么必须带：编辑走乐观锁（`version` 每次成功自增）。就地编辑要能**连续改同一行**，
+ * 界面就必须在每次成功后拿到新的版本号 —— 否则第二次提交用的还是旧版本，必然 409。
+ *
+ * 另一条路是「编辑成功后整表重取」，但那会把无限下翻出来的几页缩回第一页
+ * （与拖动排序同一个坑，见 `useAdminList.reorder` 的注释），所以不选它。
+ */
+export type MemberUpdateView = MemberView & { version: number };
+
 /* --------------------------------------------------- M6 成员管理（管理端） */
 
 /**
@@ -370,6 +384,22 @@ export type MemberListInput = PaginationInput & {
   query?: string;
   status?: MemberStatus;
   role?: RoleCode;
+  /**
+   * 排序规则。字段必须落在 `MEMBER_SORTABLE` 白名单内 ——
+   * 解析在 `member-http.ts`（`sortRules`，非法值 → `VALIDATION_FAILED`），
+   * 映射到列在 `member-sort.ts`（`memberOrderBy`）。
+   *
+   * 省略或空数组时按服务端默认顺序（新成员在前），**不是**「不排序」：
+   * 顺序不确定时，无限下翻的分页会重复或漏行。
+   */
+  sort?: SortRule[];
+  /**
+   * 列级筛选条件（`filter=<field>:<op>:<value>`，可重复）。
+   * 字段与运算符白名单见 `MEMBER_FILTERABLE`，映射见 `member-filter.ts`。
+   *
+   * 与 `query` 的区别：`query` 是跨列关键字搜索，这里是**逐列的精确条件**，两者可同时用。
+   */
+  filters?: FilterRule[];
 };
 
 /** 列表条目。QQ 与手机号一律脱敏（`maskQq` / `maskPhone`）。 */
@@ -564,6 +594,14 @@ export type RepairListInput = PaginationInput & {
   isDifficult?: boolean;
   isTypical?: boolean;
   query?: string;
+  /**
+   * 排序规则。字段必须落在 `REPAIR_SORTABLE` 白名单内 ——
+   * 解析在 `repair-http.ts`（`sortRules`），映射到列在 `repair-sort.ts`（`repairOrderBy`）。
+   *
+   * 注意：`RepairExportInput` 继承了这个类型（只去掉分页），但**导出不读这个字段** ——
+   * 导出的顺序固定按维修日期倒序，不该由界面上的临时排序决定。
+   */
+  sort?: SortRule[];
 };
 export type RepairListResult = { items: RepairView[]; pagination: PaginationMeta };
 /**
@@ -1195,7 +1233,11 @@ export interface MemberServiceContract {
   create(input: CreateMemberInput, actor: AuthorizedActor): Promise<MemberMutationResult>;
   list(input: MemberListInput, actor: AuthorizedActor): Promise<MemberListResult>;
   getDetail(memberId: string, actor: AuthorizedActor): Promise<MemberDetail>;
-  update(memberId: string, input: UpdateMemberInput, actor: AuthorizedActor): Promise<MemberView>;
+  update(
+    memberId: string,
+    input: UpdateMemberInput,
+    actor: AuthorizedActor,
+  ): Promise<MemberUpdateView>;
   setEnabled(memberId: string, enabled: boolean, actor: AuthorizedActor): Promise<MemberView>;
   batchSetEnabled(
     input: MemberBatchToggleInput,

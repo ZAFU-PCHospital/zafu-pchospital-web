@@ -1,4 +1,6 @@
 import type { Prisma } from "@/generated/prisma/client";
+import { memberFilterWhere } from "@/features/members/member-filter";
+import { memberOrderBy } from "@/features/members/member-sort";
 import { AppError } from "@/lib/api/errors";
 import { getDb } from "@/lib/db/client";
 import { maskPhone, maskQq } from "@/lib/audit/redaction";
@@ -77,6 +79,11 @@ export const memberRepository = {
         deletedAt: null,
         roles: input.role ? { some: { revokedAt: null, role: { code: input.role } } } : undefined,
       },
+      // 列级筛选各自是一条 AND 条件（同一字段的 `gte` + `lte` 因此天然是区间，
+      // 不会被 OR 拆开）。映射与取值校验见 `member-filter.ts`。
+      ...(input.filters && input.filters.length > 0
+        ? { AND: memberFilterWhere(input.filters) }
+        : {}),
       // 关键字命中的四个「资料字段」与两个「身份字段」必须是**同一个 OR**。
       // 曾经把身份匹配写在 `user.identities.some` 里与姓名 OR 并列，结果是两者被 AND：
       // 按姓名搜索永远不命中（因为 QQ/手机号里不含姓名），只有搜数字才有效。
@@ -104,11 +111,10 @@ export const memberRepository = {
       getDb().memberProfile.findMany({
         where,
         select: adminProfileSelect,
-        /* 顺序 = 管理员拖出来的 `sortOrder`（第九轮验收）。
-           新建成员默认 `sortOrder = 0`，与当前位置为 0 的那位并列，靠 `createdAt desc`
-           兜底排在最前 —— 也就是「新成员出现在最前面」这条老行为没有丢。
-           `id` 再兜一层，保证同秒创建的记录分页稳定（少一层就可能同一行出现两次）。 */
-        orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }, { id: "desc" }],
+        // 用户点过表头就按用户的选择排（白名单与映射见 `member-sort.ts`）；
+        // 没点过则是管理员拖出来的 `sortOrder` 顺序。两条路径都由 `memberOrderBy`
+        // 补 tiebreaker —— 主排序键重复时名次不确定，`skip` / `take` 的分页会重复或漏行。
+        orderBy: memberOrderBy(input.sort),
         skip: (input.page - 1) * input.pageSize,
         take: input.pageSize,
       }),

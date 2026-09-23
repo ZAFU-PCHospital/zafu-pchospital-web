@@ -41,6 +41,14 @@ export type AdminListController<T> = {
   reorder: (movingIds: string[], beforeId: string | null) => string[];
   /** 把顺序恢复成给定的 id 顺序（乐观更新失败时回滚；缺的 id 排在末尾）。 */
   setOrder: (ids: string[]) => void;
+  /**
+   * **就地改一行**：把服务端确认过的字段合并进列表里的那一条。
+   *
+   * 为什么不改完就 `reload()`：重取会把无限下翻出来的几页缩回第一页（与 `reorder`
+   * 同一个判断）。调用方必须传**服务端返回值**（含新的 `version`），本地不自己推算
+   * 版本号 —— 版本号只有一个来源，界面猜一定会漂。
+   */
+  patch: (id: string, fields: Partial<T>) => void;
 };
 
 export function useAdminList<T extends { id: string }>(
@@ -90,6 +98,10 @@ export function useAdminList<T extends { id: string }>(
     setItems((current) => applyOrder(current, ids));
   }, []);
 
+  const patch = useCallback((id: string, fields: Partial<T>) => {
+    setItems((current) => current.map((item) => (item.id === id ? { ...item, ...fields } : item)));
+  }, []);
+
   const reorder = useCallback((movingIds: string[], beforeId: string | null) => {
     const previous = itemsRef.current.map((item) => item.id);
     const { order } = movedManyIds(previous, movingIds, beforeId);
@@ -134,6 +146,7 @@ export function useAdminList<T extends { id: string }>(
     loadMore,
     reorder,
     setOrder,
+    patch,
   };
 }
 

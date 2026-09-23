@@ -5,6 +5,7 @@ import { requirePermission } from "@/lib/auth/permissions";
 import { getDb } from "@/lib/db/client";
 import { assertCanReadRepair } from "./repair-policy";
 import { repairDetailInclude, repairRepository } from "./repair-repository";
+import { repairOrderBy } from "./repair-sort";
 import { toRepairDetail, toRepairView } from "./repair-view";
 import { isFavorited } from "@/features/community/favorite-service";
 import type {
@@ -33,7 +34,10 @@ export const repairQueryService: RepairQueryServiceContract = {
       getDb().repairRecord.findMany({
         where,
         include: repairDetailInclude,
-        orderBy: [{ repairDate: "desc" }, { createdAt: "desc" }, { id: "desc" }],
+        // 用户点过表头就按用户的选择排（白名单与映射见 `repair-sort.ts`），否则按
+        // 维修日期倒序；两条路径都由 `repairOrderBy` 补 `id` 兜底 ——
+        // 主排序键重复时没有确定名次，`skip` / `take` 的分页就会重复或漏行。
+        orderBy: repairOrderBy(input.sort),
         skip: (input.page - 1) * input.pageSize,
         take: input.pageSize,
       }),

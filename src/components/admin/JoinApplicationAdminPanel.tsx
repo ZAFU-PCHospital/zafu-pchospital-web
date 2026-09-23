@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 
 import { AdminListToolbar } from "@/components/admin/AdminListToolbar";
 import { AdminModal } from "@/components/admin/AdminModal";
+import { AdminTable } from "@/components/admin/AdminTable";
 import { AdminToast } from "@/components/admin/AdminToast";
 import type { AdminToastMessage } from "@/components/admin/AdminToast";
 import { AdminListEnd, useAdminList } from "@/components/admin/useAdminList";
@@ -15,7 +16,13 @@ import {
   joinApplicationStatusLabels,
   provisionStatusLabels,
 } from "@/config/admin";
+import {
+  formatDateTime,
+  joinApplicationEmptyText,
+  joinApplicationTableSpec,
+} from "@/components/admin/join-application-table-spec";
 import { adminFetch } from "@/features/admin/admin-client";
+import { listQueryParams } from "@/lib/api/list-query";
 import {
   InterviewResult,
   JoinApplicationStatus,
@@ -266,66 +273,14 @@ export function JoinApplicationAdminPanel() {
               </Button>
             </span>
           </AdminListToolbar>
-          <div className="admin-table-wrap">
-            <table className="admin-table">
-              <caption className="sr-only">{copy.title}</caption>
-              <thead>
-                <tr>
-                  <th scope="col" className="admin-table__grow">
-                    {copy.table.ticketNo}
-                  </th>
-                  <th scope="col">{copy.table.realName}</th>
-                  <th scope="col">{copy.table.cycle}</th>
-                  <th scope="col">{copy.table.contacts}</th>
-                  <th scope="col">{copy.table.status}</th>
-                  <th scope="col">{copy.table.provision}</th>
-                  <th scope="col">{copy.table.submittedAt}</th>
-                  <th scope="col">{copy.table.actions}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.length === 0 ? (
-                  <tr>
-                    <td className="admin-table__empty" colSpan={8}>
-                      {adminShared.empty}
-                    </td>
-                  </tr>
-                ) : (
-                  items.map((item) => (
-                    <tr key={item.id}>
-                      <td data-label={copy.table.ticketNo} className="admin-table__grow">
-                        <code>{item.ticketNo}</code>
-                      </td>
-                      <td data-label={copy.table.realName}>{item.realName}</td>
-                      <td data-label={copy.table.cycle}>{item.recruitmentCycle}</td>
-                      <td data-label={copy.table.contacts}>
-                        {item.qqMasked}
-                        <span className="repair-table__flags">{item.phoneMasked}</span>
-                      </td>
-                      <td data-label={copy.table.status}>
-                        <span className={statusClass(item.status)}>
-                          {joinApplicationStatusLabels[item.status]}
-                        </span>
-                      </td>
-                      <td data-label={copy.table.provision}>
-                        {provisionStatusLabels[item.provisionStatus]}
-                      </td>
-                      <td data-label={copy.table.submittedAt}>
-                        {formatDateTime(item.submittedAt)}
-                      </td>
-                      <td data-label={copy.table.actions}>
-                        <span className="admin-actions">
-                          <Button variant="ghost" onClick={() => setDetailId(item.id)}>
-                            {copy.action.detail}
-                          </Button>
-                        </span>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+          {/* 表格本体由内核渲染（`AdminTable`）：列宽、表头、单元格内容全部来自
+              `joinApplicationTableSpec` 这一份定义。 */}
+          <AdminTable
+            spec={joinApplicationTableSpec}
+            items={items}
+            emptyText={joinApplicationEmptyText}
+            renderContext={{ onDetail: setDetailId }}
+          />
           <AdminListEnd
             pagination={pagination}
             loaded={items.length}
@@ -618,22 +573,25 @@ function provisionHint(status: ProvisionStatus | string): string {
   return copy.succeeded;
 }
 
-function statusClass(status: string): string {
-  if (status === "INTERVIEW_PASSED") return "repair-tag repair-tag--approved";
-  if (status === "INTERVIEW_REJECTED" || status === "WITHDRAWN") {
-    return "admin-tag admin-tag--muted";
-  }
-  return "repair-tag repair-tag--pending";
-}
-
+/**
+ * 列表与导出**共用**的固定筛选参数。
+ *
+ * 导出的查询串必须与列表逐字一致（否则「导出的是另一批数据」），因此这两个入口共用
+ * 这一个函数。拼装本身交给内核的 `listQueryParams`：空值不写、关键字去空白，
+ * 参数顺序与迁移前一致。
+ */
 function filterParams(filters: typeof EMPTY_FILTERS, page: number): URLSearchParams {
-  const params = new URLSearchParams({ page: String(page), pageSize: "20" });
-  if (filters.query) params.set("query", filters.query);
-  if (filters.status) params.set("status", filters.status);
-  if (filters.provisionStatus) params.set("provisionStatus", filters.provisionStatus);
-  if (filters.submittedFrom) params.set("submittedFrom", filters.submittedFrom);
-  if (filters.submittedTo) params.set("submittedTo", filters.submittedTo);
-  return params;
+  return listQueryParams(
+    { page, pageSize: 20, query: filters.query, sort: [] },
+    {
+      fixed: {
+        status: filters.status,
+        provisionStatus: filters.provisionStatus,
+        submittedFrom: filters.submittedFrom,
+        submittedTo: filters.submittedTo,
+      },
+    },
+  );
 }
 
 function fileNameOf(response: Response): string | null {
@@ -652,20 +610,6 @@ async function errorMessage(response: Response): Promise<string> {
 }
 
 /** 列表里的时间：`Asia/Shanghai` 的 `YYYY-MM-DD HH:mm`。报名资料需要完整日期。 */
-function formatDateTime(iso: string): string {
-  return new Intl.DateTimeFormat("zh-CN", {
-    timeZone: "Asia/Shanghai",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  })
-    .format(new Date(iso))
-    .replace(/\//g, "-");
-}
-
 function toLocalInput(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "";

@@ -4,14 +4,15 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 
 import { AdminListToolbar } from "@/components/admin/AdminListToolbar";
 import { AdminModal } from "@/components/admin/AdminModal";
+import { AdminTable } from "@/components/admin/AdminTable";
 import { AdminToast } from "@/components/admin/AdminToast";
 import type { AdminToastMessage } from "@/components/admin/AdminToast";
+import { commentTableSpec, type CommentTableContext } from "@/components/admin/comment-table-spec";
 import { AdminListEnd, useAdminList } from "@/components/admin/useAdminList";
 import { RepairAdminActions } from "@/components/admin/RepairAdminActions";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { adminCopy, adminShared, commentDeletedLabels } from "@/config/admin";
-import { repairStatusLabels } from "@/config/repairs";
 import { adminFetch } from "@/features/admin/admin-client";
 import {
   CommentModerationFilter,
@@ -72,6 +73,12 @@ export function CommentAdminPanel() {
   );
   const { items, pagination, state, problem, loadingMore } = list;
   const shownProblem = actionProblem || problem;
+  /** 单元格渲染要用的运行时值：删除按钮的禁用态、打开所属记录、弹出删除确认框。 */
+  const commentContext: CommentTableContext = {
+    busy,
+    onOpenRecord: (recordId) => void openRecord(recordId),
+    onRemove: setRemoving,
+  };
 
   const load = useCallback(async () => {
     await list.reload();
@@ -228,78 +235,16 @@ export function CommentAdminPanel() {
                 .replace("{state}", commentDeletedLabels[applied.deleted])}
             </span>
           </AdminListToolbar>
-          <div className="admin-table-wrap">
-            <table className="admin-table">
-              <caption className="sr-only">{copy.title}</caption>
-              <thead>
-                <tr>
-                  <th scope="col" className="admin-table__grow">
-                    {copy.table.body}
-                  </th>
-                  <th scope="col">{copy.table.author}</th>
-                  <th scope="col">{copy.table.record}</th>
-                  <th scope="col">{copy.table.meta}</th>
-                  <th scope="col">{copy.table.createdAt}</th>
-                  <th scope="col">{copy.table.state}</th>
-                  <th scope="col">{copy.table.actions}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.length === 0 ? (
-                  <tr>
-                    <td className="admin-table__empty" colSpan={7}>
-                      {adminShared.empty}
-                    </td>
-                  </tr>
-                ) : (
-                  items.map((item) => (
-                    <tr key={item.id}>
-                      <td data-label={copy.table.body} className="admin-table__grow">
-                        <span className="admin-comment__body">{item.body}</span>
-                      </td>
-                      <td data-label={copy.table.author}>{item.author.name}</td>
-                      <td data-label={copy.table.record}>
-                        {item.record.memberName}
-                        <span className="repair-table__flags">
-                          {item.record.repairDate ?? adminShared.none} ·{" "}
-                          {repairStatusLabels[item.record.status]}
-                        </span>
-                      </td>
-                      <td data-label={copy.table.meta}>
-                        {copy.meta.replies.replace("{count}", String(item.replyCount))} ·{" "}
-                        {copy.meta.mentions.replace("{count}", String(item.mentionCount))}
-                      </td>
-                      <td data-label={copy.table.createdAt}>{formatDateTime(item.createdAt)}</td>
-                      <td data-label={copy.table.state}>
-                        {item.deletedAt ? (
-                          <span className="admin-tag admin-tag--muted">{copy.deletedTag}</span>
-                        ) : (
-                          <span className="repair-tag repair-tag--result">{copy.activeTag}</span>
-                        )}
-                      </td>
-                      <td data-label={copy.table.actions}>
-                        <span className="admin-actions">
-                          <Button variant="ghost" onClick={() => void openRecord(item.record.id)}>
-                            {copy.action.record}
-                          </Button>
-                          {/* 删除只留图标：原先「图标 + 删除」两个字之间被按钮的 `gap` 拉开，
-                              在一列窄操作区里显得很散。文字改成不可见标签，无障碍名称仍然完整。 */}
-                          <Button
-                            variant="ghost"
-                            icon="trash"
-                            disabled={busy || item.deletedAt !== null}
-                            onClick={() => setRemoving(item)}
-                          >
-                            <span className="sr-only">{copy.action.remove}</span>
-                          </Button>
-                        </span>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+          {/* 表格本体由内核渲染（`AdminTable`）：表头与单元格内容都来自 `commentTableSpec`。
+              评论表**不声明列宽**，因此内核不会输出 `<colgroup>`，列宽仍由浏览器按内容分配
+              —— 与迁移前一致。面板不传 `onSortChange`：评论接口还没有 `sort` 参数，
+              内核在不传时不渲染任何排序控件。 */}
+          <AdminTable
+            spec={commentTableSpec}
+            items={items}
+            renderContext={commentContext}
+            emptyText={adminShared.empty}
+          />
           <AdminListEnd
             pagination={pagination}
             loaded={items.length}
@@ -335,16 +280,4 @@ export function CommentAdminPanel() {
       ) : null}
     </div>
   );
-}
-
-/** 列表里的时间：`Asia/Shanghai` 的 `MM-DD HH:mm`，表格列窄，不重复显示年份。 */
-function formatDateTime(iso: string): string {
-  return new Intl.DateTimeFormat("zh-CN", {
-    timeZone: "Asia/Shanghai",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).format(new Date(iso));
 }

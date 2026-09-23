@@ -29,7 +29,14 @@ export type IconName =
   | "trash"
   | "download"
   | "check"
-  | "grip";
+  | "grip"
+  /**
+   * 列级筛选（M6 批 2 的表格内核）。
+   *
+   * 图标集里原本没有「筛选」，而筛选入口不给图标就说不出它是干什么的 ——
+   * 一排纯文字按钮里，「列筛选」看起来和旁边的动作按钮没有区别。
+   */
+  | "filter";
 
 const shapes: Record<IconName, ReactNode> = {
   menu: (
@@ -160,6 +167,8 @@ const shapes: Record<IconName, ReactNode> = {
       <circle cx="15" cy="18" r="1.4" />
     </g>
   ),
+  /** 漏斗：口宽、颈窄、下口收成一条斜切 —— 与图标集其余形状同样 24 格、stroke 2、圆端点。 */
+  filter: <path d="M4 5h16l-6 7.5V19l-4-2.5v-4z" />,
 };
 
 export type IconProps = { name: IconName } & SVGProps<SVGSVGElement>;
