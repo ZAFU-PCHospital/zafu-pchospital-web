@@ -27,6 +27,43 @@
   font-display: swap;
 }
 
+/* 与 Archivo **度量对齐**的回退字体：字体替换时不再让文字重排。
+ *
+ * 为什么需要它：Archivo 是 87 KB 的可变字体（`wdth` + `wght` 两个轴，展示级标题靠
+ * `font-stretch: 118%` 这类取值），冷启动 + 慢网络下要一秒多才到位，而 `font-display: swap`
+ * 会先用回退字体画一遍、到了再换 —— 两套字体的**上沿高度**不同（实测 100px 下
+ * Archivo 是 88、Arial 是 91），行盒高度跟着变，于是整段文字上下跳。
+ * 实测：首页 CLS 0.173，**全部**来自这一次替换（hero 的 "PC HOSPITAL"、导航的 "ZAFU"）。
+ *
+ * 下面这些数字是量出来的，不是猜的。用 CDP 在 100px 下量同一段样本文字（"PC HOSPITAL"）：
+ *
+ * | 字体    | 行盒高 | 宽度    | 说明                          |
+ * | ------- | ------ | ------- | ----------------------------- |
+ * | Archivo | 109px  | 646.78  | 1.09em = 上沿 0.88 + 下沿 0.21 |
+ * | Arial   | 115px  | 653.86  | 上沿 0.91 + 下沿 0.21 + 行距   |
+ *
+ * **override 的百分比是相对 em 的绝对取值**，不是相对回退字体自身度量的比例 ——
+ * 这一点试错踩过：先按「比例」写（`ascent-override: 96.72%`）量出来行盒 197px，
+ * 比 Archivo 高 88px，字体替换时反而跳得更狠（CLS 0.173 → 0.284）。
+ * 而且 `size-adjust` 会**一起缩放**这两个 override：填 88% / 21% 量出来是 108px，
+ * 因此按 1 / 0.9892 补回去，取 88.96% / 21.23% —— 实测行盒 109px、宽度 646.7px，
+ * 与 Archivo 逐像素一致（宽度差 1.1% 也由 `size-adjust: 98.92%` 抹平，断行位置因此相同）。
+ *
+ * `local()` 取的是**本机**的 Arial（Linux 上 fontconfig 映射到度量兼容的 Liberation Sans，
+ * 实测数值一致）；三条 `local()` 都取不到就继续往后走字体栈，退化成今天的行为，不会更差。
+ *
+ * 它必须排在 Archivo **紧后面**、其它回退字体之前：中日韩字形它没有，浏览器遇到中文会
+ * 自动继续往下找 PingFang / 微软雅黑，所以中文渲染一点没变。
+ */
+@font-face {
+  font-family: "Archivo Fallback";
+  src: local("Arial"), local("Liberation Sans"), local("Helvetica Neue");
+  size-adjust: 98.92%;
+  ascent-override: 88.96%;
+  descent-override: 21.23%;
+  line-gap-override: 0%;
+}
+
 /* ======================================================= 可插值的主题令牌 */
 /* 为什么需要这一段（改动前务必读完）：
 
@@ -222,11 +259,14 @@
 
   color-scheme: light;
 
-  /* 字体栈：--font-sans / --font-latin 同时是 Tailwind 的 font-* 令牌 */
-  --font-latin: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  /* 字体栈：--font-sans / --font-latin 同时是 Tailwind 的 font-* 令牌。
+     "Archivo Fallback" 紧跟在 Archivo 后面（度量对齐，见文件顶部的 @font-face）：
+     它在 Archivo 到位之前顶上拉丁字形，替换时行盒高度不变 —— 这是首页 CLS 归零的关键。
+     中文它没有字形，浏览器会自动继续往下找系统中文黑体，所以中文渲染不受影响。 */
+  --font-latin: "Archivo", "Archivo Fallback", "Helvetica Neue", Arial, sans-serif;
   --font-sans:
-    "Archivo", "PingFang SC", "HarmonyOS Sans SC", "MiSans", "Microsoft YaHei", "Hiragino Sans GB",
-    "Noto Sans SC", system-ui, sans-serif;
+    "Archivo", "Archivo Fallback", "PingFang SC", "HarmonyOS Sans SC", "MiSans",
+    "Microsoft YaHei", "Hiragino Sans GB", "Noto Sans SC", system-ui, sans-serif;
 
   /* 字号：1.333 完美四度音阶；正文固定 rem，展示级用 clamp 流体 */
   --t-micro: 0.6875rem;
@@ -1481,6 +1521,12 @@ html[data-theme="black-yellow"] {
     object-fit: cover;
     /* 图片加载失败时不塌陷：底图先给一层面板色 */
     background: var(--surface-2);
+  }
+  /* `<picture>` 只负责挑源，不参与布局。
+     不加这条它会多出一层 inline 盒子：`.gallery__img` 的百分比高度与基线间距都会跟着变，
+     实测图集区会整体位移。`display: contents` 让它从布局树里消失，img 仍是 stage 的直接子盒。 */
+  .gallery__slide picture {
+    display: contents;
   }
   .gallery__cap {
     position: absolute;

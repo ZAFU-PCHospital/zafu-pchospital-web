@@ -41,6 +41,20 @@ export default function RootLayout({
   return (
     <html lang="zh-Hans-CN" suppressHydrationWarning>
       <body id="top">
+        {/* 字体预加载：Archivo 是首屏 hero 与导航用的拉丁展示字体，87 KB 的可变字体。
+            不 preload 的话，浏览器要等 CSS 解析、布局完成、发现真的用到了才去取 ——
+            实测 Slow 4G 下 +663ms 才发起、+1538ms 才到，首屏文字先拿回退字体画了一遍
+            （那一次替换就是首页 CLS 的来源，见 globals.css 顶部 `Archivo Fallback` 的说明）。
+            预加载让它与 CSS 同时出发。
+            `crossOrigin` 不能省：字体请求本身走 CORS 模式，少这个属性会变成**两次**下载。 */}
+        <link
+          rel="preload"
+          href="/fonts/archivo-latin-wdth.woff2"
+          as="font"
+          type="font/woff2"
+          crossOrigin="anonymous"
+        />
+
         {/* 主题引导脚本：必须在任何内容绘制之前同步执行，把 data-mode / data-theme
             写到 <html> 上（本地保存的偏好 → 否则跟随系统 → 否则默认模式）。
             这样刷新时不会先出现正常模式再跳成深色；属性在 hydration 之前就已存在，

@@ -117,6 +117,25 @@
 > 大写标签通常用 `font-stretch: 116%–125%` + `letter-spacing: 0.14em–0.3em`。
 > 不要用其他字体替代，也不要用 `transform: scaleX()` 模拟字宽。
 
+**加载顺序与回退（2026-09 加载优化）**：
+
+1. `layout.tsx` 里 `<link rel="preload" as="font" type="font/woff2" crossorigin>`：不预加载的话，
+   浏览器要等 CSS 解析、布局完成、发现真的用到了才去取（实测 Slow 4G 下 +663ms 才发起、
+   +1538ms 才到）。`crossorigin` 不能省，否则会变成两次下载；
+2. 字体栈里紧跟 `Archivo` 的是一个**度量对齐**的回退面 `Archivo Fallback`
+   （`src: local("Arial")` + `size-adjust` / `ascent-override` / `descent-override`）：
+   它的行盒与宽度和 Archivo 逐像素一致（实测 100px 下都是 109px 行盒、646.7px 宽），
+   因此字体替换时**不会重排**。数字是量出来的，改字体或改字号层级时要重新量
+   （方法写在 `globals.css` 的注释里）；
+3. `/fonts/*` 由 `next.config.ts` 发 `immutable`：字体不带内容哈希，
+   **换字体文件必须换文件名**，否则老用户不会再来取。
+
+> 仍未消除的一处：Archivo 的 `wdth` 轴是静态回退字体模仿不了的（Arial 没有宽度轴，
+> 而 `size-adjust` 是等比缩放，放大宽度会连字高一起放大）。因此 `font-stretch` 的
+> 展示级文字在字体到位的一瞬间仍会有宽度差 —— 首页 CLS 从 0.173 降到 0.162 就卡在这里。
+> 要么接受，要么把它改成 `font-display: block`（没有替换就没有位移，代价是慢网络下
+> 首屏拉丁文字晚 0.4s 出现）。这是设计取舍，改动前先确认。
+
 ### 2.1 字号层级
 
 音阶为 **1.333 完美四度**。正文固定 `rem`，展示级使用 `clamp()` 流体。

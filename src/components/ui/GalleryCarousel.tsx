@@ -137,8 +137,30 @@ export function GalleryCarousel({
             // 非当前帧不参与 tab 与朗读顺序
             inert={i !== index}
           >
-            {/* eslint-disable-next-line @next/next/no-img-element -- 纯静态资源，无需 next/image 的运行时开销 */}
-            <img className="gallery__img" src={slide.src} alt={slide.alt} loading={i === 0 ? "eager" : "lazy"} decoding="async" />
+            {/* 优先 WebP、回退原 JPEG：WebP 在同样尺寸下比 JPEG 小约三分之一
+                （实测五张合计 851 KB → 545 KB，720px 档合计只要 228 KB），
+                而 `tools/` 里的 `compress-gallery.mjs` 已经把 JPEG 压到 q74，
+                再压 JPEG 就只能掉画质了。
+                不用 `next/image`：它会引入 sharp 这个运行时依赖，而这批图是
+                构建前就定稿的静态资源（同下面那条 eslint 注释的判断）。
+                `sizes` 按 `.gallery__stage` 的实际宽度给：宽屏下是内容列宽度，
+                窄屏整幅铺满 —— 让 720px 档在手机上生效，省下大半流量。 */}
+            <picture>
+              <source
+                type="image/webp"
+                srcSet={`${webpOf(slide.src, 720)} 720w, ${webpOf(slide.src, 1440)} 1440w`}
+                sizes="(min-width: 1200px) 1160px, 100vw"
+              />
+              {/* `next/no-img-element` 不报这条：有 `<picture>` + WebP 源的 img 属于
+                  「已经有更优格式」的情形，规则自己认。 */}
+              <img
+                className="gallery__img"
+                src={slide.src}
+                alt={slide.alt}
+                loading={i === 0 ? "eager" : "lazy"}
+                decoding="async"
+              />
+            </picture>
             {/* panel 变体的图注压在照片下缘；editorial 变体改用下方独立信息栏 */}
             {!editorial && (
               <figcaption className="gallery__cap">
@@ -215,4 +237,16 @@ export function GalleryCarousel({
       )}
     </div>
   );
+}
+
+/**
+ * 原图路径 → 同目录的 WebP 变体路径（`04-repair-session.jpg` → `04-repair-session-1440.webp`）。
+ *
+ * 变体是**一次性生成后入库的静态资源**（生成方式与 `tools/compress-gallery.mjs` 同一条路子：
+ * 用 pnpm store 里的 sharp 按时长边缩放再编码），带宽度后缀是因为同一张图有两档尺寸
+ * 给 `srcset` 挑。找不到变体时 `<picture>` 会自动回退到 `<img>` 的原 JPEG ——
+ * 这正是用 `<picture>` 而不是把 `src` 直接换成 WebP 的原因：老浏览器还有退路。
+ */
+function webpOf(src: string, width: number): string {
+  return src.replace(/\.jpe?g$/i, `-${width}.webp`);
 }
