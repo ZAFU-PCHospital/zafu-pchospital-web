@@ -2,6 +2,12 @@ services:
   greatsql:
     image: greatsql/greatsql:8.0.32-27
     restart: unless-stopped
+    # WSL2 的 sysfs 没有 /sys/devices/system/node/，mysqld 的 NUMA 初始化会退回
+    # 用 get_mempolicy/set_mempolicy 系统调用；这两个调用需要 CAP_SYS_NICE，
+    # 缺了它会数出 0 个 NUMA 节点并因除零而 SIGFPE 崩溃（mysqld got signal 8）。
+    # Docker Desktop 的 VM 掩盖了这个问题，原生 WSL2 下必须显式加上。
+    cap_add:
+      - SYS_NICE
     environment:
       TZ: UTC
       MYSQL_ROOT_PASSWORD: local-root-change-me
