@@ -18,8 +18,11 @@ import { permissionsForRoles } from "../../src/lib/auth/permissions";
 import { digestSessionToken } from "../../src/lib/security/secrets";
 import { disconnectDb, getDb } from "../../src/lib/db/client";
 import type { AuthorizedActor } from "../../src/types/contracts";
+import { integrationTestsEnabled } from "./db-guard";
 
-const enabled = process.env.RUN_DB_TESTS === "1" || process.env.npm_lifecycle_event === "test:db";
+/* 集成测试的统一闸门：指向非测试库时**在加载阶段就抛错**（`db-guard.ts` 里写了两次
+   实际事故）。未开启时返回 false，各文件照常走 test.skip。 */
+const enabled = integrationTestsEnabled();
 const dbTest = enabled ? test : test.skip;
 
 /**
@@ -63,7 +66,9 @@ async function prepareFixtures(): Promise<void> {
   await db.repairPhoto.deleteMany({
     where: { record: { memberProfile: { realName: { startsWith: "M4 " } } } },
   });
-  await db.repairRecord.deleteMany({ where: { memberProfile: { realName: { startsWith: "M4 " } } } });
+  await db.repairRecord.deleteMany({
+    where: { memberProfile: { realName: { startsWith: "M4 " } } },
+  });
   await db.userSkill.deleteMany({ where: { memberProfile: { realName: { startsWith: "M4 " } } } });
   await db.auditLog.deleteMany({
     where: { action: { startsWith: "repair.comment." } },
@@ -175,7 +180,11 @@ async function createApprovedRepair(
     owner,
   );
   const png = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
-  await repairPhotoService.upload(draft.id, [new File([png], "m4-case.png", { type: "image/png" })], owner);
+  await repairPhotoService.upload(
+    draft.id,
+    [new File([png], "m4-case.png", { type: "image/png" })],
+    owner,
+  );
   const submitted = await repairService.submit(
     draft.id,
     { version: updated.version, idempotencyKey: randomUUID() },
@@ -239,7 +248,9 @@ async function callRoute<Params extends Record<string, string> = Record<string, 
     },
     body: init.body === undefined ? undefined : JSON.stringify(init.body),
   });
-  const response = await handler(request, { params: Promise.resolve(init.params ?? ({} as Params)) });
+  const response = await handler(request, {
+    params: Promise.resolve(init.params ?? ({} as Params)),
+  });
   const json = (await response.json()) as Record<string, unknown>;
   return { status: response.status, json, cacheControl: response.headers.get("cache-control") };
 }
@@ -253,7 +264,11 @@ dbTest("M4 回复超过两层时拍平到根评论", async () => {
   const actor = memberActor(owner.member.userId, "req_m4_flatten");
   const record = await createApprovedRepair(actor);
 
-  const root = await repairCommentService.create(record.id, { body: "这是根评论内容足够长" }, actor);
+  const root = await repairCommentService.create(
+    record.id,
+    { body: "这是根评论内容足够长" },
+    actor,
+  );
   const reply = await repairCommentService.create(
     record.id,
     { body: "这是直接回复内容足够长", parentCommentId: root.id },
@@ -288,7 +303,11 @@ dbTest("M4 评论按根评论分页，且每页只带本页根评论的回复", 
   // 3 条根评论，每条挂 1 条回复
   const roots: string[] = [];
   for (let index = 0; index < 3; index += 1) {
-    const root = await repairCommentService.create(record.id, { body: `第 ${index} 条根评论内容足够长` }, actor);
+    const root = await repairCommentService.create(
+      record.id,
+      { body: `第 ${index} 条根评论内容足够长` },
+      actor,
+    );
     await repairCommentService.create(
       record.id,
       { body: `第 ${index} 条回复内容足够长`, parentCommentId: root.id },
@@ -351,7 +370,9 @@ dbTest("M4 @成员与显式 ID 并集会通知，提及优先于记录评论通�
     true,
   );
   assert.equal(
-    ownerInbox.items.some((item) => item.type === "REPAIR_COMMENTED" && item.commentId === comment.id),
+    ownerInbox.items.some(
+      (item) => item.type === "REPAIR_COMMENTED" && item.commentId === comment.id,
+    ),
     true,
   );
   assert.equal(
@@ -426,13 +447,19 @@ dbTest("M4 通知已读幂等、全部已读与软删除不改状态", async () 
 
   const all = await notificationService.markAllRead(actor);
   assert.equal(all.updatedCount, 1);
-  const emptyUnread = await notificationService.list({ page: 1, pageSize: 20, status: "UNREAD" }, actor);
+  const emptyUnread = await notificationService.list(
+    { page: 1, pageSize: 20, status: "UNREAD" },
+    actor,
+  );
   assert.equal(emptyUnread.unreadCount, 0);
   assert.equal(emptyUnread.items.length, 0);
 
   await notificationService.softDelete(first.id, actor);
   const remaining = await notificationService.list({ page: 1, pageSize: 20 }, actor);
-  assert.equal(remaining.items.some((item) => item.id === first.id), false);
+  assert.equal(
+    remaining.items.some((item) => item.id === first.id),
+    false,
+  );
   const stored = await getDb().notification.findUniqueOrThrow({ where: { id: first.id } });
   assert.notEqual(stored.deletedAt, null);
   assert.equal(stored.status, "READ");
@@ -474,7 +501,11 @@ dbTest("M4 作者可删自己的评论，其他成员越权被拒，管理员可
   const other = memberActor(otherCreated.member.userId, "req_m4_other");
   const record = await createApprovedRepair(author);
 
-  const comment = await repairCommentService.create(record.id, { body: "这条评论随后会被删除" }, author);
+  const comment = await repairCommentService.create(
+    record.id,
+    { body: "这条评论随后会被删除" },
+    author,
+  );
   await assert.rejects(
     () => repairCommentService.softDelete(record.id, comment.id, other),
     (error) => hasCode(error, "FORBIDDEN"),
@@ -483,7 +514,11 @@ dbTest("M4 作者可删自己的评论，其他成员越权被拒，管理员可
   const afterSelf = await repairCommentService.list(record.id, { page: 1, pageSize: 20 }, author);
   assert.equal(afterSelf.items.length, 0);
 
-  const second = await repairCommentService.create(record.id, { body: "管理员将删除这条评论" }, author);
+  const second = await repairCommentService.create(
+    record.id,
+    { body: "管理员将删除这条评论" },
+    author,
+  );
   await repairCommentService.softDelete(record.id, second.id, adminActor);
   const afterAdmin = await repairCommentService.list(record.id, { page: 1, pageSize: 20 }, author);
   assert.equal(afterAdmin.items.length, 0);
@@ -535,32 +570,44 @@ dbTest("M4 HTTP 评论/通知/收藏信封固定且写接口校验同源", async
   const record = await createApprovedRepair(actor);
   const cookie = { cookie: `pc_hospital_session=${token}` };
 
-  const { GET: listComments, POST: createComment } = await import(
-    "../../src/app/api/v1/repairs/[id]/comments/route"
+  const { GET: listComments, POST: createComment } =
+    await import("../../src/app/api/v1/repairs/[id]/comments/route");
+  const createdComment = await callRoute(
+    createComment,
+    `http://localhost/api/v1/repairs/${record.id}/comments`,
+    {
+      method: "POST",
+      headers: cookie,
+      body: { body: "通过 HTTP 发表的内部评论内容" },
+      params: { id: record.id },
+    },
   );
-  const createdComment = await callRoute(createComment, `http://localhost/api/v1/repairs/${record.id}/comments`, {
-    method: "POST",
-    headers: cookie,
-    body: { body: "通过 HTTP 发表的内部评论内容" },
-    params: { id: record.id },
-  });
   assert.equal(createdComment.status, 201, JSON.stringify(createdComment.json));
   assert.equal(createdComment.cacheControl, "private, no-store");
   const commentData = createdComment.json.data as { id: string; body: string };
   assert.equal(commentData.body, "通过 HTTP 发表的内部评论内容");
 
-  const listed = await callRoute(listComments, `http://localhost/api/v1/repairs/${record.id}/comments`, {
-    headers: cookie,
-    params: { id: record.id },
-  });
+  const listed = await callRoute(
+    listComments,
+    `http://localhost/api/v1/repairs/${record.id}/comments`,
+    {
+      headers: cookie,
+      params: { id: record.id },
+    },
+  );
   assert.equal(listed.status, 200);
   assert.equal(listed.cacheControl, "private, no-store");
   assert.equal(Array.isArray(listed.json.data), true);
 
-  const { GET: listNotifications } = await import("../../src/app/api/v1/member/notifications/route");
-  const notices = await callRoute(listNotifications, "http://localhost/api/v1/member/notifications", {
-    headers: cookie,
-  });
+  const { GET: listNotifications } =
+    await import("../../src/app/api/v1/member/notifications/route");
+  const notices = await callRoute(
+    listNotifications,
+    "http://localhost/api/v1/member/notifications",
+    {
+      headers: cookie,
+    },
+  );
   assert.equal(notices.status, 200);
   const noticeData = notices.json.data as { items: unknown[]; unreadCount: number };
   assert.equal(Array.isArray(noticeData.items), true);

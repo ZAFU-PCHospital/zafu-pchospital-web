@@ -10,6 +10,7 @@ import { disconnectDb, getDb } from "../../src/lib/db/client";
 import type { AuthorizedActor, MemberListEntry } from "../../src/types/contracts";
 
 import { callRoute, sessionCookie } from "./http-harness";
+import { integrationTestsEnabled } from "./db-guard";
 
 /**
  * 列级筛选的**闭环**集成测试：构造数据 → 真实 HTTP 路由 → 真实数据库。
@@ -36,7 +37,9 @@ import { callRoute, sessionCookie } from "./http-harness";
  * 班级里那个**冒号是故意的**：`filter` 的值允许带冒号（只切前两个），
  * 这是「不自己发明转义规则」那条设计的实测点。
  */
-const enabled = process.env.RUN_DB_TESTS === "1" || process.env.npm_lifecycle_event === "test:db";
+/* 集成测试的统一闸门：指向非测试库时**在加载阶段就抛错**（`db-guard.ts` 里写了两次
+   实际事故）。未开启时返回 false，各文件照常走 test.skip。 */
+const enabled = integrationTestsEnabled();
 const dbTest = enabled ? test : test.skip;
 
 const ACTOR_USER_ID = "eb000000-0000-4000-8000-000000000001";

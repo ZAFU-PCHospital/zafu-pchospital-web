@@ -22,8 +22,11 @@ import { authService } from "../../src/features/auth/auth-service";
 import { permissionsForRoles } from "../../src/lib/auth/permissions";
 import { disconnectDb, getDb } from "../../src/lib/db/client";
 import type { AuthorizedActor } from "../../src/types/contracts";
+import { integrationTestsEnabled } from "./db-guard";
 
-const enabled = process.env.RUN_DB_TESTS === "1" || process.env.npm_lifecycle_event === "test:db";
+/* 集成测试的统一闸门：指向非测试库时**在加载阶段就抛错**（`db-guard.ts` 里写了两次
+   实际事故）。未开启时返回 false，各文件照常走 test.skip。 */
+const enabled = integrationTestsEnabled();
 const dbTest = enabled ? test : test.skip;
 
 /**

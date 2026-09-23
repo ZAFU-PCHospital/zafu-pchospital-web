@@ -16,8 +16,11 @@ import { permissionsForRoles } from "../../src/lib/auth/permissions";
 import { digestSessionToken } from "../../src/lib/security/secrets";
 import type { AuthorizedActor, AnalyticsScope, RankingMetric } from "../../src/types/contracts";
 import { ANALYTICS_TREND_MONTHS } from "../../src/types/contracts";
+import { integrationTestsEnabled } from "./db-guard";
 
-const enabled = process.env.RUN_DB_TESTS === "1" || process.env.npm_lifecycle_event === "test:db";
+/* 集成测试的统一闸门：指向非测试库时**在加载阶段就抛错**（`db-guard.ts` 里写了两次
+   实际事故）。未开启时返回 false，各文件照常走 test.skip。 */
+const enabled = integrationTestsEnabled();
 const dbTest = enabled ? test : test.skip;
 
 /**
@@ -53,7 +56,13 @@ async function createMember(
   const realName = `${PREFIX}${label}${tag}`;
 
   await db.user.create({
-    data: { id: userId, status: "ACTIVE", displayName: `${label}${tag}`, createdAt: now, updatedAt: now },
+    data: {
+      id: userId,
+      status: "ACTIVE",
+      displayName: `${label}${tag}`,
+      createdAt: now,
+      updatedAt: now,
+    },
   });
   await db.userIdentity.create({
     data: {
@@ -297,8 +306,9 @@ dbTest("M5 上海自然月边界准确：上月最后一天不计入本月，本
   await seedRepair(a.memberProfileId, { date: lastOfPrevious });
   await seedRepair(a.memberProfileId, { date: `${current}-01` });
   const lastDay = new Date(
-    new Date(`${current}-01T00:00:00.000Z`).setUTCMonth(new Date(`${current}-01T00:00:00.000Z`).getUTCMonth() + 1) -
-      86_400_000,
+    new Date(`${current}-01T00:00:00.000Z`).setUTCMonth(
+      new Date(`${current}-01T00:00:00.000Z`).getUTCMonth() + 1,
+    ) - 86_400_000,
   )
     .toISOString()
     .slice(0, 10);
@@ -342,7 +352,10 @@ dbTest("M5 学期未配置返回 UNCONFIGURED，配置后按学期区间统计",
     );
     assert.equal(term.status, "AVAILABLE");
     // 学期未配置时要返回 UNCONFIGURED 空结果，而不是空榜
-    assert.equal(term.items.some((i) => i.memberProfileId === a.memberProfileId), true);
+    assert.equal(
+      term.items.some((i) => i.memberProfileId === a.memberProfileId),
+      true,
+    );
   } finally {
     delete process.env.ACADEMIC_TERM_START;
     delete process.env.ACADEMIC_TERM_END;
@@ -363,7 +376,11 @@ dbTest("M5 学期未配置时榜单为 UNCONFIGURED 且不伪造空榜", async (
   assert.deepEqual(term.items, []);
   assert.equal(term.currentMember, null);
   assert.equal(term.pagination.total, 0);
-  assert.deepEqual(term.range, { startInclusive: null, endExclusive: null, timezone: "Asia/Shanghai" });
+  assert.deepEqual(term.range, {
+    startInclusive: null,
+    endExclusive: null,
+    timezone: "Asia/Shanghai",
+  });
 });
 
 // ------------------------------------------------------------ 排序与并列
@@ -375,8 +392,10 @@ dbTest("M5 数量榜并列名次：3/3/1 → 1/1/3，且次序稳定", async () 
   const c = await createMember("并列丙");
   const d = CONTROLLED_DAY;
 
-  for (let i = 0; i < 3; i += 1) await seedRepair(a.memberProfileId, { date: d, durationMinutes: 10 });
-  for (let i = 0; i < 3; i += 1) await seedRepair(b.memberProfileId, { date: d, durationMinutes: 60 });
+  for (let i = 0; i < 3; i += 1)
+    await seedRepair(a.memberProfileId, { date: d, durationMinutes: 10 });
+  for (let i = 0; i < 3; i += 1)
+    await seedRepair(b.memberProfileId, { date: d, durationMinutes: 60 });
   await seedRepair(c.memberProfileId, { date: d, durationMinutes: 5 });
 
   const result = await rankingService.getRankings(
@@ -505,7 +524,10 @@ dbTest("M5 零记录成员不进榜，我的排名为 null", async () => {
     a.actor,
   );
   assert.equal(result.currentMember, null);
-  assert.equal(result.items.some((i) => i.memberProfileId === a.memberProfileId), false);
+  assert.equal(
+    result.items.some((i) => i.memberProfileId === a.memberProfileId),
+    false,
+  );
   assert.equal(result.pagination.total, 1);
 });
 
@@ -548,7 +570,11 @@ dbTest("M5 分类分布与摘要口径一致，无分类归入「未分类」", 
     durationMinutes: 30,
     categoryId: category.id,
   });
-  await seedRepair(a.memberProfileId, { date: `${current}-12`, durationMinutes: 20, categoryId: null });
+  await seedRepair(a.memberProfileId, {
+    date: `${current}-12`,
+    durationMinutes: 20,
+    categoryId: null,
+  });
 
   const analytics = await analyticsService.getMemberAnalytics(a.actor);
   const countSum = analytics.categoryDistribution.reduce((s, i) => s + i.approvedCount, 0);
@@ -643,7 +669,11 @@ dbTest("M5 无 analytics 权限的请求被拒绝为 403", async () => {
   const a = await createMember("无权限");
   const actor: Actor = { ...a.actor, permissions: permissionsForRoles([]) };
   await assert.rejects(
-    () => rankingService.getRankings({ scope: "MONTH", metric: "REPAIR_COUNT", page: 1, pageSize: 20 }, actor),
+    () =>
+      rankingService.getRankings(
+        { scope: "MONTH", metric: "REPAIR_COUNT", page: 1, pageSize: 20 },
+        actor,
+      ),
     (error: { code?: string }) => error.code === "FORBIDDEN",
   );
   await assert.rejects(
@@ -672,8 +702,14 @@ dbTest("M5 个人主页与内部主页的摘要来源统一为 M5_ANALYTICS", as
 
   // 三个入口必须给出同一份数字（同一口径）
   const dashboard = await memberDashboardService.getDashboard(self.actor);
-  assert.equal(own.repairSummary.totalApprovedCount.value, dashboard.repairSummary.totalApprovedCount.value);
-  assert.equal(internal.repairSummary.totalApprovedCount.value, dashboard.repairSummary.totalApprovedCount.value);
+  assert.equal(
+    own.repairSummary.totalApprovedCount.value,
+    dashboard.repairSummary.totalApprovedCount.value,
+  );
+  assert.equal(
+    internal.repairSummary.totalApprovedCount.value,
+    dashboard.repairSummary.totalApprovedCount.value,
+  );
   assert.equal(own.repairSummary.source, dashboard.repairSummary.source);
 });
 
@@ -699,7 +735,10 @@ dbTest("M5 排行响应可通过统一信封返回，且不含任何身份字段
   assert.equal(typeof payload.meta.requestId, "string");
 
   const serialized = JSON.stringify(payload);
-  assert.doesNotMatch(serialized, /"qq"|studentId|className|"userId"|phoneNormalized|identifierNormalized/);
+  assert.doesNotMatch(
+    serialized,
+    /"qq"|studentId|className|"userId"|phoneNormalized|identifierNormalized/,
+  );
   // BigInt 若泄漏会直接让 JSON.stringify 抛错，能走到这里即说明已全部转成 number
   assert.match(serialized, /"approvedCount"/);
 });
@@ -724,7 +763,9 @@ dbTest("M5 非法 scope / metric / 分页参数返回稳定 400", async () => {
   }
   // 非法取值不得泄漏 SQL / 表名 / 堆栈
   const bad = await GET(
-    new Request("http://localhost/api/v1/member/rankings?scope=YEAR", { headers: { cookie: a.cookie } }),
+    new Request("http://localhost/api/v1/member/rankings?scope=YEAR", {
+      headers: { cookie: a.cookie },
+    }),
   );
   const text = JSON.stringify(await bad.json());
   assert.doesNotMatch(text, /SELECT|FROM repair_records|at Object\.|stack/i);
@@ -738,7 +779,10 @@ dbTest("M5 非当前页成员的 currentMember 与榜单一致（跨范围与指
     const m = await createMember(`跨页${i}`);
     members.push(m);
     for (let n = 0; n < 4 - i; n += 1) {
-      await seedRepair(m.memberProfileId, { date: `${CONTROLLED_MONTH}-1${n}`, durationMinutes: 15 });
+      await seedRepair(m.memberProfileId, {
+        date: `${CONTROLLED_MONTH}-1${n}`,
+        durationMinutes: 15,
+      });
     }
   }
   const scopes: AnalyticsScope[] = ["TERM", "ALL_TIME"];
@@ -746,7 +790,10 @@ dbTest("M5 非当前页成员的 currentMember 与榜单一致（跨范围与指
   for (const scope of scopes) {
     for (const metric of metrics) {
       const last = members[3]!;
-      const result = await rankingService.getRankings({ scope, metric, page: 1, pageSize: 1 }, last.actor);
+      const result = await rankingService.getRankings(
+        { scope, metric, page: 1, pageSize: 1 },
+        last.actor,
+      );
       assert.equal(result.items.length, 1);
       assert.equal(result.items[0]!.rank, 1);
       assert.equal(result.currentMember?.memberProfileId, last.memberProfileId);

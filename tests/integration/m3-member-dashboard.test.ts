@@ -20,8 +20,11 @@ import { disconnectDb, getDb } from "../../src/lib/db/client";
 import { resetAcademicTermConfigForTests } from "../../src/lib/academic-term";
 import type { AuthorizedActor } from "../../src/types/contracts";
 import { MEMBER_SKILL_LIMIT } from "../../src/types/contracts";
+import { integrationTestsEnabled } from "./db-guard";
 
-const enabled = process.env.RUN_DB_TESTS === "1" || process.env.npm_lifecycle_event === "test:db";
+/* 集成测试的统一闸门：指向非测试库时**在加载阶段就抛错**（`db-guard.ts` 里写了两次
+   实际事故）。未开启时返回 false，各文件照常走 test.skip。 */
+const enabled = integrationTestsEnabled();
 const dbTest = enabled ? test : test.skip;
 /**
  * 本文件使用**独立的** admin UUID，不复用 M2 测试的 `10000000-…-0001`。
@@ -79,7 +82,9 @@ async function prepareFixtures(): Promise<void> {
   await db.repairPhoto.deleteMany({
     where: { record: { memberProfile: { realName: { startsWith: "M3 " } } } },
   });
-  await db.repairRecord.deleteMany({ where: { memberProfile: { realName: { startsWith: "M3 " } } } });
+  await db.repairRecord.deleteMany({
+    where: { memberProfile: { realName: { startsWith: "M3 " } } },
+  });
   await db.userSkill.deleteMany({ where: { memberProfile: { realName: { startsWith: "M3 " } } } });
   await db.auditLog.deleteMany({ where: { targetType: "MemberProfile" } });
 
@@ -195,7 +200,11 @@ async function createApprovedRepair(
   );
   // 提交校验要求 photoCount ≥ 1：必须先上传至少一张照片。
   const png = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
-  await repairPhotoService.upload(draft.id, [new File([png], "m3-case.png", { type: "image/png" })], owner);
+  await repairPhotoService.upload(
+    draft.id,
+    [new File([png], "m3-case.png", { type: "image/png" })],
+    owner,
+  );
   const submitted = await repairService.submit(
     draft.id,
     { version: updated.version, idempotencyKey: randomUUID() },
@@ -253,12 +262,19 @@ dbTest("M3 昵称更新遵循乐观锁且审计落库", async () => {
 
   // 旧版本再次提交 → 409
   await assert.rejects(
-    () => memberProfileService.updateProfile({ nickname: "过期", version: before.profile.version }, actor),
+    () =>
+      memberProfileService.updateProfile(
+        { nickname: "过期", version: before.profile.version },
+        actor,
+      ),
     (error) => error instanceof AppError && error.code === "MEMBER_PROFILE_VERSION_CONFLICT",
   );
 
   // 显式 null 清空
-  const cleared = await memberProfileService.updateProfile({ nickname: null, version: updated.version }, actor);
+  const cleared = await memberProfileService.updateProfile(
+    { nickname: null, version: updated.version },
+    actor,
+  );
   assert.equal(cleared.profile.nickname, null);
 
   const audits = await getDb().auditLog.findMany({
@@ -273,7 +289,11 @@ dbTest("M3 昵称非法输入被拒绝且不落库", async () => {
   const current = await memberProfileService.getSelf(actor);
   for (const bad of ["x".repeat(65), "包含\u0000控制字符"]) {
     await assert.rejects(
-      () => memberProfileService.updateProfile({ nickname: bad, version: current.profile.version }, actor),
+      () =>
+        memberProfileService.updateProfile(
+          { nickname: bad, version: current.profile.version },
+          actor,
+        ),
       (error) => error instanceof AppError && error.code === "MEMBER_PROFILE_INVALID_NICKNAME",
     );
   }
@@ -350,7 +370,11 @@ dbTest("M3 技能数量上限与未知技能被拒绝", async () => {
 
   const tooMany = Array.from({ length: MEMBER_SKILL_LIMIT + 1 }, (_, index) => `skill-${index}`);
   await assert.rejects(
-    () => memberProfileService.updateSkills({ skillIds: tooMany, profileVersion: current.profile.version }, actor),
+    () =>
+      memberProfileService.updateSkills(
+        { skillIds: tooMany, profileVersion: current.profile.version },
+        actor,
+      ),
     (error) => error instanceof AppError && error.code === "SKILL_LIMIT_EXCEEDED",
   );
 
@@ -633,14 +657,20 @@ dbTest("M3 技能仓库默认排除软删除技能", async () => {
   const skills = await skillService.listActive();
   const target = skills[0]!;
   const current = await memberProfileService.getSelf(actor);
-  await memberProfileService.updateSkills({ skillIds: [target.id], profileVersion: current.profile.version }, actor);
+  await memberProfileService.updateSkills(
+    { skillIds: [target.id], profileVersion: current.profile.version },
+    actor,
+  );
 
   await db.skill.update({ where: { id: target.id }, data: { deletedAt: new Date() } });
   try {
     const memberSkills = await skillRepository.listMemberSkills(created.member.id);
     assert.equal(memberSkills.length, 0, "软删除技能不得出现在成员技能列表");
     const active = await skillService.listActive();
-    assert.equal(active.some((skill) => skill.id === target.id), false);
+    assert.equal(
+      active.some((skill) => skill.id === target.id),
+      false,
+    );
   } finally {
     await db.skill.update({ where: { id: target.id }, data: { deletedAt: null } });
   }
@@ -752,7 +782,11 @@ dbTest("M3 成员接口响应信封固定为 success/data/meta 且带私有缓�
   assert.deepEqual(data.degraded, []);
   // 摘要视图不得出现 QQ / userId。
   assert.doesNotMatch(JSON.stringify(data), /"qq"|"userId"|"studentId"|"className"/);
-  const notifications = data.notifications as { available: boolean; unreadCount: number; latest: unknown[] };
+  const notifications = data.notifications as {
+    available: boolean;
+    unreadCount: number;
+    latest: unknown[];
+  };
   const favorites = data.favorites as { available: boolean; count: number; latest: unknown[] };
   assert.equal(notifications.available, true);
   assert.equal(typeof notifications.unreadCount, "number");
@@ -834,8 +868,14 @@ dbTest("回归：个人主页摘要与工作台使用同一日期口径（本月
     assert.equal(self.repairSummary.termApprovedCount.value, 1, "个人主页学期计数必须真实");
 
     // 两个入口的日期口径必须完全一致（同一次调用窗口内）。
-    assert.deepEqual(self.repairSummary.monthApprovedCount, dashboard.repairSummary.monthApprovedCount);
-    assert.deepEqual(self.repairSummary.termApprovedCount, dashboard.repairSummary.termApprovedCount);
+    assert.deepEqual(
+      self.repairSummary.monthApprovedCount,
+      dashboard.repairSummary.monthApprovedCount,
+    );
+    assert.deepEqual(
+      self.repairSummary.termApprovedCount,
+      dashboard.repairSummary.termApprovedCount,
+    );
 
     // 他人内部主页走同一条修复路径，同样不得退回 0 / UNCONFIGURED。
     const viewer = await createMember("主页口径查看者");
@@ -913,9 +953,8 @@ dbTest("回归：单路查询失败只降级该区块，其余区块照常返回
   // `collectSections` 是 provider 收敛 `allSettled` 结果的纯函数出口，
   // 直接喂入「一路 rejected、三路 fulfilled」即可验证降级语义，
   // 不需要 monkey-patch ESM 模块（那在 ESM 下不可行）。
-  const { collectSections, resolveMemberRanges } = await import(
-    "../../src/features/member-dashboard/member-overview-provider"
-  );
+  const { collectSections, resolveMemberRanges } =
+    await import("../../src/features/member-dashboard/member-overview-provider");
 
   const summary = {
     totalApprovedCount: { value: 1, status: "AVAILABLE" as const },
@@ -959,9 +998,8 @@ dbTest("回归：单路查询失败只降级该区块，其余区块照常返回
   assert.deepEqual(allBad.repairSummary, { status: "failed", code: "OVERVIEW_SECTION_FAILED" });
 
   // 真实调用路径：全部成功时 degraded 为空。
-  const { loadMemberOverview } = await import(
-    "../../src/features/member-dashboard/member-overview-provider"
-  );
+  const { loadMemberOverview } =
+    await import("../../src/features/member-dashboard/member-overview-provider");
   const overview = await loadMemberOverview({
     memberProfileId: created.member.id,
     now: new Date(),

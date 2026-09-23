@@ -7,6 +7,7 @@ import { permissionsForRoles } from "../../src/lib/auth/permissions";
 import { disconnectDb } from "../../src/lib/db/client";
 import type { AuthorizedActor } from "../../src/types/contracts";
 import type { SortRule } from "../../src/types/table";
+import { integrationTestsEnabled } from "./db-guard";
 
 /**
  * 维修记录排序的集成测试（真实 GreatSQL）。
@@ -22,7 +23,9 @@ import type { SortRule } from "../../src/types/table";
  * 记录时是宽松的护栏，真正把「白名单 → 映射 → orderBy」钉死的是
  * `tests/unit/repair-sort.test.ts`。等这个库有了成规模的维修记录，这里的断言会自然变严。
  */
-const enabled = process.env.RUN_DB_TESTS === "1" || process.env.npm_lifecycle_event === "test:db";
+/* 集成测试的统一闸门：指向非测试库时**在加载阶段就抛错**（`db-guard.ts` 里写了两次
+   实际事故）。未开启时返回 false，各文件照常走 test.skip。 */
+const enabled = integrationTestsEnabled();
 const dbTest = enabled ? test : test.skip;
 
 const ADMIN_ACTOR: AuthorizedActor = {

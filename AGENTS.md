@@ -235,22 +235,38 @@ corepack enable   # 之后 pnpm 会自动使用 packageManager 里固定的版�
 
 ### 6.1 `pnpm test:db` 必须指向独立测试库（已加闸门）
 
-`pnpm test:db` 跑的是 `tests/integration/**`，其中 `m0-database.test.ts` 会**整表清空**
-`user_identities` / `password_credentials` / `member_profiles` / `audit_logs` 等表，
-而它用的是 `.env` 里的 `DATABASE_URL` —— 本地 `.env` 指的是**开发库**。
-两者一凑就是：跑一遍测试 → 开发库所有账号同时失去登录身份（登录报「QQ 号或密码错误」，
-因为查不到那条 QQ 身份），而 `users` 会被
-`public_content_settings.updated_by_user_id` 的 RESTRICT 外键挡住、留下一堆「有用户没身份」的孤儿。
-**2026-09-23 实际发生过一次**（验收账号 `123456` 就是这样失效的）。
+`pnpm test:db` 跑的是 `tests/integration/**`，它们用的都是 `.env` 里的 `DATABASE_URL`，
+而本地 `.env` 指的是**开发库**。这些用例不是只读的：按前缀建夹具也按前缀删夹具，
+其中 `m0-database.test.ts` 还会**整表清空** `user_identities` / `password_credentials` /
+`member_profiles` / `audit_logs` 等表。**2026-09-23 实际发生过两次**：
 
-所以破坏性用例现在过了闸门（`tests/integration/db-guard.ts`）：库名不以 `_test` 结尾就
-直接拒绝执行，并在报错里给出正确命令。正确用法：
+1. 跑了一次 `pnpm test:db` → 开发库**所有账号一起失去登录身份**（登录报「QQ 号或密码错误」，
+   因为查不到那条 QQ 身份），而 `users` 被
+   `public_content_settings.updated_by_user_id` 的 RESTRICT 外键挡住，留下 254 个
+   「有用户、没身份」的孤儿（验收账号 `123456` 就是这样失效的）；
+2. 推导测试库 URL 的 `sed` 在 `.env` 多了 `?allowPublicKeyRetrieval=true` 之后**悄悄**
+   匹配不上 → 40 秒里往开发库写进 49 个夹具档案与 2 条维修记录（那次靠下面的第二道闸门
+   挡住了清库，没有重演第一次）。
+
+所以现在有两道闸门（`tests/integration/db-guard.ts`），判据都是**库名以 `_test` 结尾**，
+而不是「命令里有没有写 test:db」——真正决定数据落到哪里的是 `DATABASE_URL`：
+
+| 闸门                           | 管什么                                   | 放行开关                       |
+| ------------------------------ | ---------------------------------------- | ------------------------------ |
+| `integrationTestsEnabled()`    | **全部**集成测试（每个文件加载时就检查） | `ALLOW_NON_TEST_DB=1`          |
+| `assertDestructiveDbAllowed()` | 只有整表清空的那几个用例                 | `ALLOW_DESTRUCTIVE_DB_TESTS=1` |
+
+两个开关刻意分开：为了对着 staging 库跑而设了前者，清库那一步仍然会停下来。
+`pnpm test`（只跑单元与契约）不开集成测试，闸门保持安静、不抛错。
+
+正确用法：
 
 ```bash
 DATABASE_URL="mysql://app_user:change-me@127.0.0.1:3307/zafu_pchospital_test" pnpm test:db
 ```
 
-确实要对着某个库清空时，显式设置 `ALLOW_DESTRUCTIVE_DB_TESTS=1` 放行。
+> 另外：测试库是**共享**的，两套集成测试**不能并发**跑 —— 各自的 `prepareFixtures`
+> 会按前缀删掉对方的夹具（实测出现过一条「默认顺序」用例偶发失败，单独重跑就过）。
 
 ---
 

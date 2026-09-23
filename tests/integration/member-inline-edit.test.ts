@@ -7,6 +7,7 @@ import { AppError } from "../../src/lib/api/errors";
 import { permissionsForRoles } from "../../src/lib/auth/permissions";
 import { disconnectDb, getDb } from "../../src/lib/db/client";
 import type { AuthorizedActor } from "../../src/types/contracts";
+import { integrationTestsEnabled } from "./db-guard";
 
 /**
  * 就地编辑的乐观锁集成测试（真实 GreatSQL）。
@@ -18,7 +19,9 @@ import type { AuthorizedActor } from "../../src/types/contracts";
  *
  * 隔离方式沿用 M6 约定：独立 UUID 段 `e8000000-…` + realName 前缀 "M8 "。
  */
-const enabled = process.env.RUN_DB_TESTS === "1" || process.env.npm_lifecycle_event === "test:db";
+/* 集成测试的统一闸门：指向非测试库时**在加载阶段就抛错**（`db-guard.ts` 里写了两次
+   实际事故）。未开启时返回 false，各文件照常走 test.skip。 */
+const enabled = integrationTestsEnabled();
 const dbTest = enabled ? test : test.skip;
 
 const ACTOR_USER_ID = "e8000000-0000-4000-8000-000000000001";
@@ -140,7 +143,8 @@ dbTest("旧版本号再提交必须冲突（乐观锁没有被返回值绕过）
         { className: "M8 抢写", version: created.version },
         ADMIN_ACTOR,
       ),
-    (error: unknown) => error instanceof AppError && error.code === "MEMBER_PROFILE_VERSION_CONFLICT",
+    (error: unknown) =>
+      error instanceof AppError && error.code === "MEMBER_PROFILE_VERSION_CONFLICT",
   );
   // 冲突之后用最新版本仍可继续编辑（界面拿到 409 后应重新取一次这一行）。
   const retried = await memberService.update(

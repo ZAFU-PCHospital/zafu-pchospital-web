@@ -23,17 +23,19 @@ import {
   listApprovedRepairsForAnalytics,
 } from "../../src/features/repairs/repair-query-service";
 import { repairReviewService } from "../../src/features/repairs/repair-review-service";
-import { assertDestructiveDbAllowed } from "./db-guard";
+import { assertDestructiveDbAllowed, integrationTestsEnabled } from "./db-guard";
 
-const enabled = process.env.RUN_DB_TESTS === "1" || process.env.npm_lifecycle_event === "test:db";
+/* 集成测试的统一闸门：指向非测试库时**在加载阶段就抛错**（`db-guard.ts` 里写了两次
+   实际事故）。未开启时返回 false，各文件照常走 test.skip。 */
+const enabled = integrationTestsEnabled();
 const dbTest = enabled ? test : test.skip;
 const adminId = "10000000-0000-4000-8000-000000000001";
 let uploadTestRoot = "";
 
 before(async () => {
   if (!enabled) return;
-  // 这个文件的第一件事是**整表清空**（身份、口令、档案、审计……），所以先过闸门：
-  // 本地 .env 的 DATABASE_URL 指向开发库，直接跑会把开发库的所有账号打成「有用户没身份」。
+  // 这个文件的第一件事是**整表清空**（身份、口令、档案、审计……），所以除了文件加载时的
+  // 通用闸门，这里再过一道更严的：`ALLOW_NON_TEST_DB=1` 放行不了它。
   assertDestructiveDbAllowed();
   uploadTestRoot = await mkdtemp(join(tmpdir(), "pc-hospital-m2-"));
   process.env.UPLOAD_PATH = uploadTestRoot;
