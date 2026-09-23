@@ -31,11 +31,24 @@ export const memberCopy = {
     internalOnly: "内部可见",
   },
 
+  /**
+   * 「已登录但没有有效成员档案」的空态（`/member`）。
+   *
+   * 这类账号是合法存在的：M1 的账号发放与 M6 的「新增成员」都会产生
+   * 「有 ADMIN 角色、没有成员档案」的纯管理员。空态必须给出**下一步能去哪**，
+   * 否则误入 `/member` 的管理员会看到一句「尚未开通成员身份」而无路可走。
+   */
+  noProfile: {
+    title: "当前账号尚未开通成员身份，暂时无法使用成员工作台。",
+    note: "如果你的入团申请已通过审核，请联系管理员确认账号状态。",
+    adminNote:
+      "这个账号是管理员账号，没有成员档案；成员工作台需要成员身份才能使用。管理操作请到管理后台。",
+  },
+
   dashboard: {
     title: "成员工作台",
     label: "Member Workspace",
-    lead: "查看个人维修概览、处理待办，并进入维修记录与个人主页。",
-    welcome: "欢迎回来",
+    lead: "查看个人维修概览、处理待办，并进入维修记录与个人主页。",    welcome: "欢迎回来",
     joinedAtLabel: "加入时间",
     skillsLabel: "技能标签",
     noSkills: "尚未选择技能标签",
@@ -103,7 +116,10 @@ export const memberCopy = {
     skillsEmpty: "尚未选择任何技能标签。",
     skillsUnavailable: "技能列表加载失败。",
     skillsLimitReached: "最多只能选择 {limit} 项技能。",
-    skillInactiveSelected: "已停用，可取消",
+    skillInactiveSelected: "已停用",
+    /** 标签选择器的剩余额度与单标签移除按钮文案（空态复用上面的 `skillsEmpty`）。 */
+    skillsRemaining: "还可以添加 {count} 个",
+    skillsRemove: "移除标签 {name}",
     metricsTitle: "维修概览",
     metricsTag: "Repair Metrics",
     recentTitle: "最近已通过维修",
@@ -184,7 +200,13 @@ export function formatDurationMinutes(minutes: number): string {
   return `${hours} 小时 ${rest} 分钟`;
 }
 
-/** 把「次」类指标格式化为带单位的字符串；`null` 显示为传入的占位文案。 */
+/**
+ * 把「次」类指标格式化为带单位的字符串；`null` 显示为传入的占位文案。
+ *
+ * 注意：返回的字符串**已经带「次」**，只能用在纯文本位置（表格单元格、列表）。
+ * 指标卡（`MemberMetrics`）要的是「大号数字 + 小号单位 span」，用它会变成「1 次次」——
+ * 那正是 M3 起界面上一直显示重复单位的根因，别在这里加单位再叠一个 span。
+ */
 export function formatCount(value: number | null, unconfiguredLabel: string): string {
   if (value === null) return unconfiguredLabel;
   return `${value} 次`;

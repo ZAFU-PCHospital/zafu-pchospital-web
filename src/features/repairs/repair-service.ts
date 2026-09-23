@@ -155,7 +155,8 @@ export const repairService: RepairServiceContract = {
   },
 };
 
-function dataFields(input: RepairDraftFields) {
+/** 草稿字段 → 数据库列。管理端编辑（`repair-admin-service`）复用同一映射与 diff 计算。 */
+export function dataFields(input: RepairDraftFields) {
   return {
     repairDate: parseRepairDate(input.repairDate),
     durationMinutes: input.durationMinutes,
@@ -165,7 +166,10 @@ function dataFields(input: RepairDraftFields) {
     remark: input.remark,
   };
 }
-function changedFields(record: Record<string, unknown>, input: Record<string, unknown>): string[] {
+export function changedFields(
+  record: Record<string, unknown>,
+  input: Record<string, unknown>,
+): string[] {
   return Object.keys(input).filter(
     (key) => input[key] !== undefined && String(record[key] ?? "") !== String(input[key] ?? ""),
   );

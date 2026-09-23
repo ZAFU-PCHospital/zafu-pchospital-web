@@ -32,6 +32,7 @@ model User {
   repairTimeline     RepairTimelineEvent[]
   repairCategories   RepairCategory[]        @relation("RepairCategoryCreator")
   skillsCreated      Skill[]                 @relation("SkillCreator")
+  publicSettings     PublicContentSetting[]  @relation("PublicContentSettingUpdater")
 
   @@index([status, deletedAt], map: "users_status_deleted_idx")
   @@map("users")
@@ -132,6 +133,7 @@ model MemberProfile {
   avatarUrl     String?                @map("avatar_url") @db.VarChar(500)
   status        String                 @db.VarChar(32)
   version       Int                    @default(1) @db.Int
+  sortOrder     Int                    @default(0) @map("sort_order") @db.Int
   joinedAt      DateTime               @map("joined_at") @db.DateTime(3)
   createdAt     DateTime               @map("created_at") @db.DateTime(3)
   updatedAt     DateTime               @updatedAt @map("updated_at") @db.DateTime(3)
@@ -148,6 +150,7 @@ model MemberProfile {
   notificationsOut  Notification[]   @relation("NotificationActor")
 
   @@index([status, deletedAt], map: "member_profiles_status_deleted_idx")
+  @@index([deletedAt, sortOrder, createdAt], map: "member_profiles_order_idx")
   @@map("member_profiles")
 }
 
@@ -494,4 +497,25 @@ model Notification {
   @@index([repairRecordId], map: "notifications_record_idx")
   @@index([commentId], map: "notifications_comment_idx")
   @@map("notifications")
+}
+
+/// M6 批次 2：公开内容与展示策略（需求 §31 / §32 / §74）。
+///
+/// **单行配置表**。`id` 固定为常量 `PUBLIC_CONTENT_SETTINGS_ID`，主键本身即单行约束，
+/// 不需要额外唯一键；读取时缺行即按契约默认值处理，写入走 upsert。
+///
+/// 三个开关默认 `false`、展示名默认 `NICKNAME`：在管理员明确打开之前，
+/// 官网不展示任何真实统计，也不会因为 M7 尚未接入而意外暴露内部数据。
+model PublicContentSetting {
+  id                             String   @id @db.VarChar(32)
+  publicRepairStatsEnabled       Boolean  @default(false) @map("public_repair_stats_enabled")
+  publicRepairStatsDetailEnabled Boolean  @default(false) @map("public_repair_stats_detail_enabled")
+  publicRankingsEnabled          Boolean  @default(false) @map("public_rankings_enabled")
+  rankingDisplayName             String   @default("NICKNAME") @map("ranking_display_name") @db.VarChar(16)
+  updatedByUserId                String?  @map("updated_by_user_id") @db.Char(36)
+  createdAt                      DateTime @map("created_at") @db.DateTime(3)
+  updatedAt                      DateTime @updatedAt @map("updated_at") @db.DateTime(3)
+  updatedBy                      User?    @relation("PublicContentSettingUpdater", fields: [updatedByUserId], references: [id], onDelete: Restrict)
+
+  @@map("public_content_settings")
 }

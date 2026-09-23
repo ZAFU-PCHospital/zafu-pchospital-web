@@ -1,13 +1,32 @@
 import { appendAuditLog } from "@/lib/audit/audit-service";
+import { AppError } from "@/lib/api/errors";
 import { requirePermission } from "@/lib/auth/permissions";
+import { getDb } from "@/lib/db/client";
 import { inSerializableTransaction } from "@/lib/db/transaction";
 import { repairDetailInclude, repairRepository } from "./repair-repository";
-import { timeline } from "./repair-service";
+import { changedFields, dataFields, timeline } from "./repair-service";
+import { repairReviewService } from "./repair-review-service";
+import { normalizeDraftFields, validateDraftFields } from "./repair-validation";
 import { toRepairView } from "./repair-view";
-import type { AuthorizedActor, RepairFlagsInput } from "@/types/contracts";
+import {
+  ADMIN_BATCH_LIMIT,
+  type AuthorizedActor,
+  type RepairAdminServiceContract,
+  type RepairBatchReviewInput,
+  type RepairBatchReviewResult,
+} from "@/types/contracts";
 
-export const repairAdminService = {
-  async updateFlags(recordId: string, input: RepairFlagsInput, actor: AuthorizedActor) {
+/**
+ * 维修记录管理端服务（M6 §64、§68）。
+ *
+ * 与成员侧的分工：成员只能改自己的 `DRAFT` / `REJECTED`（`assertCanEditRepair`），
+ * 这里允许管理员改**任意状态**的记录（需求 §36「修改异常数据」），但：
+ * - 必须写 `reason`，进入时间线与审计；
+ * - 必须走版本乐观锁，不覆盖别人的并发修改；
+ * - **不改状态**：`APPROVED` 改完仍是 `APPROVED`，不触发重新审核，也不写快照表。
+ */
+export const repairAdminService: RepairAdminServiceContract = {
+  async updateFlags(recordId, input, actor) {
     requirePermission(actor, "repair:flag");
     const before = await repairRepository.getById(recordId);
     const changed =
@@ -42,4 +61,136 @@ export const repairAdminService = {
     });
     return toRepairView(updated);
   },
+
+  async updateRecord(recordId, input, actor) {
+    requirePermission(actor, "repair:review");
+    const reason = input.reason?.trim() ?? "";
+    if (!reason || reason.length > 2000)
+      throw new AppError("REPAIR_ADMIN_REASON_REQUIRED", "修改原因必填且不能超过 2000 字");
+    const fields = normalizeDraftFields(input);
+    validateDraftFields(fields);
+    const before = await repairRepository.getById(recordId);
+    if (before.version !== input.version)
+      throw new AppError("REPAIR_VERSION_CONFLICT", "记录已被更新，请刷新后重试");
+    // 分类若被改动，必须指向存在且启用中的分类（与成员提交时的口径一致）。
+    if (fields.categoryId !== undefined && fields.categoryId !== before.categoryId) {
+      if (fields.categoryId !== null) {
+        const category = await getDb().repairCategory.findFirst({
+          where: { id: fields.categoryId, deletedAt: null },
+        });
+        if (!category) throw new AppError("VALIDATION_FAILED", "所选分类不存在");
+        if (!category.isActive) throw new AppError("REPAIR_CATEGORY_INACTIVE", "所选分类已停用");
+      }
+    }
+    const changes = changedFields(before, fields);
+    const now = new Date();
+    const updated = await inSerializableTransaction(async (tx) => {
+      const result = await tx.repairRecord.updateMany({
+        where: { id: recordId, version: input.version, deletedAt: null },
+        data: { ...dataFields(fields), version: { increment: 1 } },
+      });
+      if (result.count !== 1)
+        throw new AppError("REPAIR_VERSION_CONFLICT", "记录已被更新，请刷新后重试");
+      await timeline(
+        tx,
+        recordId,
+        actor.userId,
+        "UPDATED",
+        { fields: changes, byAdmin: true, reason },
+        now,
+      );
+      await appendAuditLog(tx, {
+        actor,
+        actorType: "USER",
+        actorUserId: actor.userId,
+        action: "repair.admin.updated",
+        targetType: "RepairRecord",
+        targetId: recordId,
+        result: "SUCCESS",
+        // 只记录变化了的字段名 + 前后值，避免把整行（含长文本）灌进审计。
+        before: pick(before, changes),
+        after: { ...pick(fields, changes), reason, status: before.status },
+      });
+      return tx.repairRecord.findUniqueOrThrow({
+        where: { id: recordId },
+        include: repairDetailInclude,
+      });
+    });
+    return toRepairView(updated);
+  },
+
+  /**
+   * M6 批量审核。
+   *
+   * 逐条调用 `repairReviewService.review` —— 状态白名单、`PENDING` 条件更新、
+   * 退回原因必填、通知、时间线与审计**全部复用单条路径**，批量不绕过任何规则。
+   * 因此结果允许部分成功：已被别人审过的记录会以 `REPAIR_STATE_CONFLICT` 出现在 `failed` 里。
+   */
+  async batchReview(input: RepairBatchReviewInput, actor: AuthorizedActor) {
+    requirePermission(actor, "repair:review");
+    const recordIds = [...new Set(input.recordIds.map((id) => id.trim()).filter(Boolean))];
+    if (recordIds.length === 0)
+      throw new AppError("VALIDATION_FAILED", "批量审核至少需要选择一条记录");
+    if (recordIds.length > ADMIN_BATCH_LIMIT)
+      throw new AppError(
+        "REPAIR_BATCH_LIMIT_EXCEEDED",
+        `单次批量最多 ${ADMIN_BATCH_LIMIT} 条记录，请分批执行`,
+      );
+    const key = input.idempotencyKey.trim();
+    if (!key || key.length > 96) throw new AppError("VALIDATION_FAILED", "Idempotency-Key 无效");
+    // 退回必填原因：这是**整批**的前置约束，在入口直接拒绝，
+    // 而不是让 N 条记录各自失败一次（那只会给界面刷出 N 条同样的错误）。
+    if (input.decision === "REJECTED" && !input.note?.trim())
+      throw new AppError("REPAIR_REJECTION_NOTE_REQUIRED", "退回时必须填写原因");
+
+    const result: RepairBatchReviewResult = { succeeded: [], failed: [] };
+    for (const recordId of recordIds) {
+      try {
+        await repairReviewService.review(
+          recordId,
+          // 每条记录有自己的幂等键，整批重放不会重复写审核记录。
+          { decision: input.decision, note: input.note, idempotencyKey: `${key}:${recordId}` },
+          actor,
+        );
+        result.succeeded.push(recordId);
+      } catch (error) {
+        const appError =
+          error instanceof AppError
+            ? error
+            : new AppError("INTERNAL_ERROR", "服务暂时不可用，请稍后重试");
+        result.failed.push({
+          recordId,
+          code: appError.code,
+          message: appError.message,
+        });
+      }
+    }
+    await inSerializableTransaction(async (tx) => {
+      await appendAuditLog(tx, {
+        actor,
+        actorType: "USER",
+        actorUserId: actor.userId,
+        action: "repair.batch.reviewed",
+        targetType: "RepairRecord",
+        targetId: recordIds[0]!,
+        result: result.failed.length === 0 ? "SUCCESS" : "FAILURE",
+        after: {
+          decision: input.decision,
+          requested: recordIds,
+          succeeded: result.succeeded,
+          failed: result.failed.map((item) => `${item.recordId}:${item.code}`),
+        },
+      });
+    });
+    return result;
+  },
 };
+
+/** 从对象里取出指定字段（用于只把变化过的字段写进审计摘要）。 */
+function pick(source: Record<string, unknown>, keys: string[]): Record<string, unknown> {
+  return Object.fromEntries(
+    keys
+      .filter((key) => key in source)
+      .map((key) => [key, source[key] === undefined ? null : (source[key] as unknown)]),
+  );
+}

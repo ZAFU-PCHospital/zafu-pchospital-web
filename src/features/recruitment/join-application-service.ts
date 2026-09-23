@@ -2,6 +2,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 
 import { accountProvisionService } from "@/features/accounts/account-provision-service";
 import type { JoinApplication, Prisma } from "@/generated/prisma/client";
+import { dateRangeWhere, parseUtcDateFilter } from "@/lib/api/date-filter";
 import { AppError } from "@/lib/api/errors";
 import { appendAuditLog } from "@/lib/audit/audit-service";
 import { maskPhone, maskQq } from "@/lib/audit/redaction";
@@ -31,19 +32,7 @@ export class JoinApplicationService implements JoinApplicationServiceContract {
       Number.isInteger(input.pageSize) && input.pageSize > 0 && input.pageSize <= 100
         ? input.pageSize
         : 20;
-    const submittedFrom = parseFilterDate(input.submittedFrom, "开始时间");
-    const submittedTo = parseFilterDate(input.submittedTo, "结束时间");
-    if (submittedFrom && submittedTo && submittedTo < submittedFrom) {
-      throw new AppError("VALIDATION_FAILED", "结束时间不能早于开始时间");
-    }
-    const where: Prisma.JoinApplicationWhereInput = {
-      deletedAt: null,
-      status: input.status,
-      provisionStatus: input.provisionStatus,
-      submittedAt:
-        submittedFrom || submittedTo ? { gte: submittedFrom, lte: submittedTo } : undefined,
-      OR: buildSearch(input.query),
-    };
+    const where = joinApplicationListWhere(input);
     const [records, total] = await Promise.all([
       getDb().joinApplication.findMany({
         where,
@@ -75,6 +64,21 @@ export class JoinApplicationService implements JoinApplicationServiceContract {
       include: { reviews: { orderBy: { createdAt: "desc" } } },
     });
     if (!record || record.deletedAt) throw new AppError("RESOURCE_NOT_FOUND", "报名记录不存在");
+    // 需求 §45 明确「查看完整报名敏感信息」必须留痕：`get` 是**唯一**返回报名 QQ / 手机号
+    // 明文的入口（列表只给脱敏值），与成员详情的 `member.detail.viewed` 同一处理。
+    // 缺这条记录时，谁在什么时候看过报名者的联系方式就无法追溯。
+    await inSerializableTransaction((tx) =>
+      appendAuditLog(tx, {
+        actor,
+        actorType: actor.actorType,
+        actorUserId: actor.userId,
+        action: "join.application.detail.viewed",
+        targetType: "JoinApplication",
+        targetId: record.id,
+        result: "SUCCESS",
+        after: { ticketNo: record.ticketNo, recruitmentCycle: record.recruitmentCycle },
+      }),
+    );
     return {
       ...toView(record),
       ticketNo: record.ticketNo,
@@ -300,11 +304,25 @@ function validateSubmission(input: SubmitJoinApplicationInput): void {
   }
 }
 
-function parseFilterDate(value: string | undefined, label: string): Date | undefined {
-  if (!value) return undefined;
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) throw new AppError("VALIDATION_FAILED", `${label}格式无效`);
-  return parsed;
+/**
+ * 报名列表的筛选谓词。**导出与列表共用这一份**（与维修导出的 `listWhere` 同一做法），
+ * 否则「筛选后导出」会与「界面所见」悄悄分叉。
+ *
+ * 提交时间是**时刻**（`DATETIME(3)`），因此日期筛选按 `Asia/Shanghai` 自然日解释、
+ * 结束日包含全天。原先用 `lte: new Date("2026-09-22")` 会把 9-22 当天 08:00 之后的报名
+ * 全部排除，界面上表现为「筛同一天得到 0 条」。
+ */
+export function joinApplicationListWhere(
+  input: Omit<JoinApplicationListInput, "page" | "pageSize">,
+): Prisma.JoinApplicationWhereInput {
+  const submitted = parseUtcDateFilter(input.submittedFrom, input.submittedTo, "提交时间");
+  return {
+    deletedAt: null,
+    status: input.status,
+    provisionStatus: input.provisionStatus,
+    submittedAt: dateRangeWhere(submitted),
+    OR: buildSearch(input.query),
+  };
 }
 
 function buildSearch(query: string | undefined): Prisma.JoinApplicationWhereInput[] | undefined {

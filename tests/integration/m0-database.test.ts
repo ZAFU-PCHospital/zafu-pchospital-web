@@ -23,6 +23,7 @@ import {
   listApprovedRepairsForAnalytics,
 } from "../../src/features/repairs/repair-query-service";
 import { repairReviewService } from "../../src/features/repairs/repair-review-service";
+import { assertDestructiveDbAllowed } from "./db-guard";
 
 const enabled = process.env.RUN_DB_TESTS === "1" || process.env.npm_lifecycle_event === "test:db";
 const dbTest = enabled ? test : test.skip;
@@ -31,6 +32,9 @@ let uploadTestRoot = "";
 
 before(async () => {
   if (!enabled) return;
+  // 这个文件的第一件事是**整表清空**（身份、口令、档案、审计……），所以先过闸门：
+  // 本地 .env 的 DATABASE_URL 指向开发库，直接跑会把开发库的所有账号打成「有用户没身份」。
+  assertDestructiveDbAllowed();
   uploadTestRoot = await mkdtemp(join(tmpdir(), "pc-hospital-m2-"));
   process.env.UPLOAD_PATH = uploadTestRoot;
   const db = getDb();

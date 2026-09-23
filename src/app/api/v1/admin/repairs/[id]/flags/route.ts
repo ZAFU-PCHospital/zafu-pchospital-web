@@ -1,4 +1,5 @@
 import { repairAdminService } from "@/features/repairs/repair-admin-service";
+import { requiredBool } from "@/features/repairs/repair-http";
 import { apiFailure, apiSuccess } from "@/lib/api/response";
 import { getRequestId } from "@/lib/api/request-id";
 import { assertSameOrigin, authenticateRequest } from "@/lib/auth/request";
@@ -12,7 +13,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return apiSuccess(
       await repairAdminService.updateFlags(
         (await params).id,
-        { isDifficult: body.isDifficult === true, isTypical: body.isTypical === true },
+        {
+          // 两个标记必须显式给出：漏传不再被静默当成 false（见 requiredBool 注释）。
+          isDifficult: requiredBool(body, "isDifficult"),
+          isTypical: requiredBool(body, "isTypical"),
+        },
         actor,
       ),
       requestId,

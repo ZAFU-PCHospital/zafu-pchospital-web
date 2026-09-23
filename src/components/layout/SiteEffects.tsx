@@ -154,9 +154,14 @@ export function SiteEffects() {
 
   /* ============ 每次换页：进场揭示（含兜底） ============ */
   useEffect(() => {
-    /* 只接管尚未揭示过的元素；已经带 .is-in 的保持原状，不重播动画 */
+    /* 只接管尚未揭示过的元素；已经带 .is-in 的保持原状，不重播动画。
+       **跳过后台**（`.admin-shell` 内）：管理台是密集数据界面，进后台还要等内容淡入属于
+       装饰性动画，CSS 里已经把这块的 `.reveal` 中性化。更重要的是：直接改 class 会让
+       DOM 与 React 的 vdom 分叉，之后只要路由器重渲染到这一棵子树，React 就报
+       hydration 不匹配（实测 `/admin` 首页必现，公开页不会）。后台不参与揭示，
+       这个分叉也就不存在了。 */
     const pending = Array.from(document.querySelectorAll<HTMLElement>(".reveal")).filter(
-      (el) => !el.classList.contains("is-in"),
+      (el) => !el.classList.contains("is-in") && !el.closest(".admin-shell"),
     );
 
     if (!("IntersectionObserver" in window)) {

@@ -1,4 +1,4 @@
-import { memberCopy, formatCount, formatDurationMinutes } from "@/config/member";
+import { memberCopy, formatDurationMinutes } from "@/config/member";
 import type { MemberRepairSummary, MetricValue } from "@/types/contracts";
 
 /**
@@ -11,6 +11,9 @@ import type { MemberRepairSummary, MetricValue } from "@/types/contracts";
  * 关键约束：`status === "UNCONFIGURED"`（如学期区间未配置）时显示「待配置」，
  * **绝不**回退为伪造的「0 次」—— `value` 此时必为 `null`，
  * 出现 `AVAILABLE` + `null` 的组合只能说明上游违约，这里按未配置渲染兜底。
+ *
+ * 计数类的渲染是「大号数字 + 小号单位 span」，不要改用 `config/member.ts` 的
+ * `formatCount()`：那个helper返回的字符串自带「次」，叠上单位 span 就是「1 次次」。
  */
 
 export type MemberMetricsProps = {
@@ -80,9 +83,13 @@ function renderValue(entry: MetricEntry) {
 
   const value = entry.metric.value as number;
   if (entry.duration) return formatDurationMinutes(value);
+  /* 这里**不能**再用 `formatCount`：它返回的字符串本身已经带「次」，
+     配合下面那个单位 span 会渲染成「1 次次」（M3 起的既有缺陷）。
+     指标卡的小号单位是 `.member-metric__unit`，与「待处理维修」队列同一套写法：
+     数字走大号，单位走 13px 的次级文字。 */
   return (
     <>
-      {formatCount(value, memberCopy.common.unconfigured)}
+      {value}
       {entry.unit ? <span className="member-metric__unit">{entry.unit}</span> : null}
     </>
   );

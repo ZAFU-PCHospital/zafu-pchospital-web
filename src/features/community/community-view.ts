@@ -36,7 +36,15 @@ type CommentRow = {
   mentions: Array<{ mentioned: MemberNameSource }>;
 };
 
-export function toCommentView(row: CommentRow, actor: AuthorizedActor, selfMemberProfileId: string): RepairCommentView {
+/**
+ * `selfMemberProfileId` 允许为 `null`：管理员可能没有成员档案（纯管理员账号），
+ * 此时「是不是我写的」恒为假，`canDelete` 退化为按权限判断。
+ */
+export function toCommentView(
+  row: CommentRow,
+  actor: AuthorizedActor,
+  selfMemberProfileId: string | null,
+): RepairCommentView {
   const author = memberRef(row.author);
   return {
     id: row.id,
@@ -46,7 +54,8 @@ export function toCommentView(row: CommentRow, actor: AuthorizedActor, selfMembe
     mentions: row.mentions.map((entry) => memberRef(entry.mentioned)),
     createdAt: row.createdAt.toISOString(),
     canDelete:
-      row.authorMemberProfileId === selfMemberProfileId || actor.permissions.includes("comment:delete"),
+      (selfMemberProfileId !== null && row.authorMemberProfileId === selfMemberProfileId) ||
+      actor.permissions.includes("comment:delete"),
     replies: [],
   };
 }

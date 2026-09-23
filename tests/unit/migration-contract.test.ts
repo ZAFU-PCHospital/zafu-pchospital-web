@@ -18,6 +18,10 @@ const m4MigrationPath = new URL(
   "../../prisma/migrations/20260918120000_p2_m4_community/migration.sql",
   import.meta.url,
 );
+const m6SettingsMigrationPath = new URL(
+  "../../prisma/migrations/20260923100000_p2_m6_public_content_settings/migration.sql",
+  import.meta.url,
+);
 
 test("初始 Migration 固定 GreatSQL 字符集、引擎与邀请码计数约束", async () => {
   const sql = await readFile(migrationPath, "utf8");
@@ -70,6 +74,26 @@ test("M4 Migration 建立评论、提及、收藏与通知且外键指向成员�
   assert.match(sql, /comment_mentions_comment_member_uq/);
   assert.match(sql, /REFERENCES `member_profiles`/);
   assert.match(sql, /REFERENCES `repair_records`/);
+  const ddl = sql
+    .split("\n")
+    .filter((line) => !line.trim().startsWith("--"))
+    .join("\n");
+  assert.doesNotMatch(ddl, /qq|phone|student_id/i);
+});
+
+test("M6 批次 2 Migration 建立公开内容设置单行表并约束展示策略取值", async () => {
+  const sql = await readFile(m6SettingsMigrationPath, "utf8");
+  assert.match(sql, /CREATE TABLE `public_content_settings`/);
+  assert.match(sql, /PRIMARY KEY \(`id`\)/);
+  assert.match(
+    sql,
+    /CHECK \(`ranking_display_name` IN \('REAL_NAME', 'NICKNAME', 'HIDDEN'\)\)/,
+  );
+  assert.match(sql, /DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci ENGINE=InnoDB/);
+  assert.match(sql, /REFERENCES `users`\(`id`\)/);
+  // 单行表：只允许一个主键，不允许出现额外的唯一键或业务外键（策略不挂在成员身上）。
+  assert.doesNotMatch(sql, /UNIQUE INDEX/);
+  assert.doesNotMatch(sql, /REFERENCES `member_profiles`|REFERENCES `repair_records`/);
   const ddl = sql
     .split("\n")
     .filter((line) => !line.trim().startsWith("--"))

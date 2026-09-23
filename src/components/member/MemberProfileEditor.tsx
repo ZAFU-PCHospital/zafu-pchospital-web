@@ -4,7 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { memberCopy } from "@/config/member";
-import { MemberSkillPicker, mergeSkillOptions } from "@/components/member/MemberSkillPicker";
+import { TagPicker } from "@/components/ui/TagPicker";
+import { mergeSkillOptions } from "@/features/skills/skill-options";
 import {
   MEMBER_NICKNAME_MAX_LENGTH,
   MEMBER_SKILL_LIMIT,
@@ -225,12 +226,18 @@ export function MemberProfileEditor({
           <span className="member-section__tag">{copy.skillsTag}</span>
         </header>
         <p className="member-section__note">{skillsLead}</p>
-        <MemberSkillPicker
-          labelledBy="member-skills-editor-title"
-          availableSkills={skillOptions}
+        <TagPicker
+          options={skillOptions}
           selectedIds={selectedSkillIds}
           limit={MEMBER_SKILL_LIMIT}
           disabled={skillsStatus.kind === "saving"}
+          labels={{
+            empty: copy.skillsEmpty,
+            remaining: copy.skillsRemaining,
+            remove: copy.skillsRemove,
+            inactive: copy.skillInactiveSelected,
+            limitReached: copy.skillsLimitReached,
+          }}
           onChange={(next) => {
             setSelectedSkillIds(next);
             setSkillsStatus({ kind: "idle" });

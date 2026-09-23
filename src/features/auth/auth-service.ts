@@ -6,6 +6,7 @@ import { permissionsForRoles } from "@/lib/auth/permissions";
 import { getDb } from "@/lib/db/client";
 import { inSerializableTransaction } from "@/lib/db/transaction";
 import { normalizeQq } from "@/lib/security/normalization";
+import { isPasswordLengthValid, passwordLengthMessage } from "@/lib/security/password-policy";
 import {
   digestLoginThrottleKey,
   digestSessionToken,
@@ -171,8 +172,8 @@ export class AuthService {
   ): Promise<AuthSessionResult> {
     if (input.newPassword !== input.newPasswordConfirmation)
       throw new AppError("PASSWORD_CONFIRMATION_MISMATCH", "两次输入的新密码不一致");
-    if (input.newPassword.length < 12 || input.newPassword.length > 128)
-      throw new AppError("VALIDATION_FAILED", "密码长度必须为 12–128 个字符");
+    if (!isPasswordLengthValid(input.newPassword))
+      throw new AppError("VALIDATION_FAILED", passwordLengthMessage());
     const current = await this.authenticate(token);
     const credential = await getDb().passwordCredential.findUniqueOrThrow({
       where: { userId: current.userId },

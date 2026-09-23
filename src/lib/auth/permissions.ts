@@ -45,6 +45,12 @@ export const rolePermissions: Readonly<Record<RoleCode, readonly Permission[]>> 
     "favorite:manage",
     "notification:read",
     "analytics:read_internal",
+    // M6：导出等于把站内数据带出系统，只给管理员。
+    "data:export",
+    // M6 批次 2
+    "comment:moderate",
+    "skill:manage",
+    "settings:manage",
   ],
 };
 

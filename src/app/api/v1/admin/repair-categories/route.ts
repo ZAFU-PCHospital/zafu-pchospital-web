@@ -3,6 +3,18 @@ import { apiFailure, apiSuccess } from "@/lib/api/response";
 import { getRequestId } from "@/lib/api/request-id";
 import { assertSameOrigin, authenticateRequest } from "@/lib/auth/request";
 export const runtime = "nodejs";
+/** 管理端分类列表：含已停用分类与引用计数，供 `/admin/categories` 使用。 */
+export async function GET(request: Request) {
+  const requestId = getRequestId(request.headers);
+  try {
+    const { actor } = await authenticateRequest(request, requestId);
+    return apiSuccess(await repairCategoryService.listAll(actor), requestId, {
+      headers: { "Cache-Control": "private, no-store" },
+    });
+  } catch (error) {
+    return apiFailure(error, requestId);
+  }
+}
 export async function POST(request: Request) {
   const requestId = getRequestId(request.headers);
   try {

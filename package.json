@@ -27,11 +27,12 @@
     "db:health": "tsx tools/db-health.ts",
     "test": "tsx --test tests/**/*.test.ts",
     "test:unit": "tsx --test tests/unit/**/*.test.ts",
-    "test:db": "tsx --test --test-concurrency=1 tests/integration/**/*.test.ts"
+    "test:db": "tsx --env-file=.env --test --test-concurrency=1 tests/integration/**/*.test.ts"
   },
   "dependencies": {
     "@prisma/adapter-mariadb": "7.10.0",
     "@prisma/client": "7.10.0",
+    "exceljs": "^4.4.0",
     "mariadb": "3.4.5",
     "next": "^15.5.4",
     "react": "^19.1.0",

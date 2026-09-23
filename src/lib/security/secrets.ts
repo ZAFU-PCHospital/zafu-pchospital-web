@@ -2,6 +2,7 @@ import { createHmac, randomBytes, scrypt as scryptCallback, timingSafeEqual } fr
 import { promisify } from "node:util";
 
 import { getServerEnv } from "@/lib/env";
+import { isPasswordLengthValid, passwordLengthMessage } from "@/lib/security/password-policy";
 import { normalizeInviteCode } from "@/lib/security/normalization";
 
 const scrypt = promisify(scryptCallback);
@@ -39,8 +40,9 @@ function digestSecret(value: string, secret: string): Uint8Array<ArrayBuffer> {
 }
 
 export async function hashPassword(password: string): Promise<string> {
-  if (password.length < 12 || password.length > 128) {
-    throw new Error("密码长度必须为 12–128 个字符");
+  // 长度策略只有一个来源（`password-policy.ts`）：表单、服务端校验、这里三处必须一致。
+  if (!isPasswordLengthValid(password)) {
+    throw new Error(passwordLengthMessage());
   }
   const salt = randomBytes(16);
   const derived = (await scrypt(password, salt, 64)) as Buffer;

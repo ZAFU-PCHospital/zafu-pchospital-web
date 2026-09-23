@@ -2,6 +2,7 @@
 import { useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
+import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from "@/lib/security/password-policy";
 export function InviteRegistrationForm() {
   const router = useRouter();
   const key = useRef(crypto.randomUUID());
@@ -42,7 +43,7 @@ export function InviteRegistrationForm() {
     ["passwordConfirmation", "确认密码", "password", "new-password"],
   ] as const;
   return (
-    <form className="signup__form" onSubmit={submit}>
+    <form method="post" className="signup__form" onSubmit={submit}>
       {fields.map(([name, label, type, autoComplete]) => (
         <div className="field" key={name}>
           <label className="field__label" htmlFor={`register-${name}`}>
@@ -57,8 +58,8 @@ export function InviteRegistrationForm() {
             name={name}
             type={type}
             autoComplete={autoComplete}
-            minLength={type === "password" ? 12 : undefined}
-            maxLength={type === "password" ? 128 : 80}
+            minLength={type === "password" ? PASSWORD_MIN_LENGTH : undefined}
+            maxLength={type === "password" ? PASSWORD_MAX_LENGTH : 80}
             required={name !== "studentId" && name !== "className"}
           />
         </div>

@@ -15,7 +15,7 @@ import {
   formatDurationMinutes,
   formatShanghaiDate,
 } from "../../src/config/member";
-import { mergeSkillOptions } from "../../src/components/member/MemberSkillPicker";
+import { mergeSkillOptions } from "../../src/features/skills/skill-options";
 import { approvedRepairWhere } from "../../src/features/repairs/repair-query-service";
 
 /**

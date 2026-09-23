@@ -6,9 +6,12 @@ import {
   resolveOrCreateUser,
   setRegistrationPassword,
 } from "@/features/accounts/account-repository";
-import type { InviteCode } from "@/generated/prisma/client";
+import type { InviteCode, Prisma } from "@/generated/prisma/client";
+import { paginationMeta } from "@/lib/api/pagination";
 import { AppError } from "@/lib/api/errors";
+import { isPasswordLengthValid, passwordLengthMessage } from "@/lib/security/password-policy";
 import { appendAuditLog } from "@/lib/audit/audit-service";
+import { maskPhone, maskQq } from "@/lib/audit/redaction";
 import { requirePermission } from "@/lib/auth/permissions";
 import { inSerializableTransaction } from "@/lib/db/transaction";
 import { getDb } from "@/lib/db/client";
@@ -18,7 +21,10 @@ import type {
   AuthorizedActor,
   CreateInviteCodeInput,
   CreateInviteCodeResult,
+  InviteCodeAdminView,
   InviteCodeEffectiveStatus,
+  InviteCodeListInput,
+  InviteCodeListResult,
   InviteCodeServiceContract,
   InviteCodeView,
   MemberRegistrationResult,
@@ -39,14 +45,39 @@ export function getInviteCodeEffectiveStatus(
 }
 
 export class InviteCodeService implements InviteCodeServiceContract {
-  async list(actor: AuthorizedActor): Promise<InviteCodeView[]> {
+  /**
+   * 管理端列表（M6 批次 2）。
+   *
+   * 原实现是硬编码 `take: 100` 的裸数组：没有任何分页元数据，第 101 条之后直接消失，
+   * 界面上看不出「还有更多」。现在改为标准分页 + 筛选。
+   *
+   * `status` 过滤的是**生效状态**（`getInviteCodeEffectiveStatus` 的派生结果），
+   * 不是存储状态：`EXPIRED` / `EXHAUSTED` / `NOT_STARTED` 在库里都是 `status = 'ACTIVE'`
+   * 加时间或计数条件推出来的。因此这里必须把同一套判定**下推到 SQL**，
+   * 否则「筛选已失效」会拿到空结果（行都在，只是被内存过滤前的分页切掉了）。
+   * `EXPIRED` / `EXHAUSTED` / `ACTIVE` 三者的分支顺序与纯函数逐条对应。
+   */
+  async list(input: InviteCodeListInput, actor: AuthorizedActor): Promise<InviteCodeListResult> {
     requirePermission(actor, "invite:read");
-    const records = await getDb().inviteCode.findMany({
-      where: { deletedAt: null },
-      orderBy: { createdAt: "desc" },
-      take: 100,
-    });
-    return records.map(toView);
+    const now = new Date();
+    const where: Prisma.InviteCodeWhereInput = {
+      deletedAt: null,
+      ...effectiveStatusWhere(input.status, now),
+      OR: buildSearch(input.query),
+    };
+    const [records, total] = await Promise.all([
+      getDb().inviteCode.findMany({
+        where,
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        skip: (input.page - 1) * input.pageSize,
+        take: input.pageSize,
+      }),
+      getDb().inviteCode.count({ where }),
+    ]);
+    return {
+      items: records.map((record) => ({ ...toView(record), ...adminFields(record) })),
+      pagination: paginationMeta(input, total),
+    };
   }
   async create(
     input: CreateInviteCodeInput,
@@ -172,8 +203,8 @@ export class InviteCodeService implements InviteCodeServiceContract {
     input: RedeemInviteCodeInput,
     context: PublicRequestContext,
   ): Promise<MemberRegistrationResult> {
-    if (input.password.length < 12 || input.password.length > 128) {
-      throw new AppError("VALIDATION_FAILED", "密码长度必须为 12–128 个字符");
+    if (!isPasswordLengthValid(input.password)) {
+      throw new AppError("VALIDATION_FAILED", passwordLengthMessage());
     }
     if (input.realName.trim().length < 2 || input.realName.trim().length > 64) {
       throw new AppError("VALIDATION_FAILED", "姓名长度应为 2–64 个字符");
@@ -329,6 +360,78 @@ function toView(record: InviteCode): InviteCodeView {
     maxUses: record.maxUses,
     usedCount: record.usedCount,
   };
+}
+
+/**
+ * 生效状态下推到 SQL。
+ *
+ * 与 `getInviteCodeEffectiveStatus` 的分支**顺序严格对应**（REVOKED → NOT_STARTED →
+ * EXPIRED → EXHAUSTED → ACTIVE），任何一侧改了判定，另一侧必须同步改。
+ *
+ * ⚠️ 时间条件一律走 `AND: [{ OR: … }, …]`，**不能**把两个 `OR` 平铺进同一个对象：
+ * 后写的键会覆盖先写的（后者是同一个 `OR` 键），而且 `list` 还要在最外层挂关键字检索的
+ * `OR`，平铺写法会连检索条件一起吃掉。这两个坑都实际踩到过。
+ *
+ * `used_count` 与 `max_uses` 的比较用 Prisma 的字段引用写成列对列比较：
+ * 把 `maxUses` 读出来当常量比较需要 N 次查询，且无法把分页下推到 SQL。
+ */
+function effectiveStatusWhere(
+  status: InviteCodeEffectiveStatus | undefined,
+  now: Date,
+): Prisma.InviteCodeWhereInput {
+  if (!status) return {};
+  if (status === "REVOKED") return { status: "REVOKED" };
+  const started: Prisma.InviteCodeWhereInput = {
+    OR: [{ activeFrom: null }, { activeFrom: { lte: now } }],
+  };
+  const notExpired: Prisma.InviteCodeWhereInput = {
+    OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+  };
+  const fields = getDb().inviteCode.fields;
+  switch (status) {
+    case "NOT_STARTED":
+      return { status: "ACTIVE", activeFrom: { gt: now } };
+    case "EXPIRED":
+      return { status: "ACTIVE", AND: [started], expiresAt: { lte: now } };
+    case "EXHAUSTED":
+      return {
+        status: "ACTIVE",
+        AND: [started, notExpired],
+        usedCount: { gte: fields.maxUses },
+      };
+    default:
+      return {
+        status: "ACTIVE",
+        AND: [started, notExpired],
+        usedCount: { lt: fields.maxUses },
+      };
+  }
+}
+
+/**
+ * 管理端附加字段。
+ *
+ * 绑定信息按 PII 规则脱敏：列表页只需要「这条码是否绑定了某个 QQ / 手机号」，
+ * 不需要拿到原文；要核对绑定关系时看脱敏值的前后几位就足够。
+ */
+function adminFields(record: InviteCode): Omit<InviteCodeAdminView, keyof InviteCodeView> {
+  return {
+    boundQqMasked: record.boundQqNormalized ? maskQq(record.boundQqNormalized) : null,
+    boundPhoneMasked: record.boundPhoneNormalized ? maskPhone(record.boundPhoneNormalized) : null,
+    createdAt: record.createdAt.toISOString(),
+    revokedAt: record.revokedAt?.toISOString() ?? null,
+  };
+}
+
+/** 关键字：明文前缀（`displayPrefix` 是唯一可检索的码片段）与绑定的 QQ / 手机号。 */
+function buildSearch(query: string | undefined): Prisma.InviteCodeWhereInput[] | undefined {
+  const value = query?.trim();
+  if (!value) return undefined;
+  const digits = value.replace(/\D/g, "");
+  return [
+    { displayPrefix: { contains: value.toUpperCase() } },
+    ...(digits ? [{ boundQqNormalized: digits }, { boundPhoneNormalized: digits }] : []),
+  ];
 }
 
 export const inviteCodeService = new InviteCodeService();

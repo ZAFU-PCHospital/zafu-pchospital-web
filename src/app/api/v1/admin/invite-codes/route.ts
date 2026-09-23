@@ -1,13 +1,31 @@
+import { queryOneOf, queryString } from "@/features/admin/admin-http";
 import { inviteCodeService } from "@/features/invitations/invite-code-service";
+import { parsePagination } from "@/lib/api/pagination";
 import { apiFailure, apiSuccess } from "@/lib/api/response";
 import { getRequestId } from "@/lib/api/request-id";
 import { assertSameOrigin, authenticateRequest } from "@/lib/auth/request";
+import { InviteCodeEffectiveStatus } from "@/types/contracts";
 export const runtime = "nodejs";
+/**
+ * 邀请码列表。M6 批次 2 之前是硬编码 `take: 100` 的裸数组：没有分页元数据，
+ * 第 101 条之后直接消失且界面看不出来。现在返回标准分页信封。
+ *
+ * `status` 过滤的是**生效状态**（含派生的过期 / 用尽 / 未生效），不是库里的存储状态。
+ */
 export async function GET(request: Request) {
   const requestId = getRequestId(request.headers);
   try {
     const { actor } = await authenticateRequest(request, requestId);
-    return apiSuccess(await inviteCodeService.list(actor), requestId);
+    const params = new URL(request.url).searchParams;
+    const result = await inviteCodeService.list(
+      {
+        ...parsePagination(params),
+        status: queryOneOf(params, "status", InviteCodeEffectiveStatus),
+        query: queryString(params, "query"),
+      },
+      actor,
+    );
+    return apiSuccess(result.items, requestId, { pagination: result.pagination });
   } catch (error) {
     return apiFailure(error, requestId);
   }

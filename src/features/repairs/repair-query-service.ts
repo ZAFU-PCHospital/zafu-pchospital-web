@@ -21,7 +21,12 @@ import type {
 export const repairQueryService: RepairQueryServiceContract = {
   async list(input, actor) {
     requirePermission(actor, "repair:read");
-    await repairRepository.activeMemberForUser(actor.userId);
+    // 只有成员视角才需要「我自己是谁」——`listWhere` 会按 `repair:review` 决定可见范围。
+    // 纯管理员账号（有 ADMIN 角色但没有成员档案）必须能进管理端列表，
+    // 否则 `GET /api/v1/admin/repairs` 会对它永久返回 403 MEMBER_REQUIRED。
+    if (!actor.permissions.includes("repair:review")) {
+      await repairRepository.activeMemberForUser(actor.userId);
+    }
     const where = listWhere(input, actor);
     const [total, rows] = await Promise.all([
       getDb().repairRecord.count({ where }),
@@ -232,7 +237,13 @@ function excerpt(content: string | null): string {
   return chars.length > 60 ? `${chars.slice(0, 60).join("")}…` : flat;
 }
 
-function listWhere(
+/**
+ * 维修列表的筛选谓词（含按 `repair:review` 分派的可见范围）。
+ *
+ * 导出复用它，保证「筛选后导出」与「界面看到的列表」是同一个结果集 ——
+ * 各写一套筛选条件是导出功能最容易出的错。
+ */
+export function listWhere(
   input: RepairListInput,
   actor: { userId?: string; permissions: readonly string[] },
 ): Prisma.RepairRecordWhereInput {

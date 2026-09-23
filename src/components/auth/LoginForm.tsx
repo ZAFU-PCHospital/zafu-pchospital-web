@@ -22,7 +22,7 @@ export function LoginForm() {
     });
     const payload = (await response.json()) as {
       success: boolean;
-      data?: { mustChangePassword?: boolean };
+      data?: { mustChangePassword?: boolean; roles?: string[] };
       error?: { message?: string };
     };
     if (!response.ok || !payload.success) {
@@ -30,11 +30,23 @@ export function LoginForm() {
       setBusy(false);
       return;
     }
-    router.replace(payload.data?.mustChangePassword ? "/account/change-password" : "/member");
+    // 管理员落到管理后台：只有 ADMIN 角色、没有成员档案的账号在 /member 上只会看到
+    // 「尚未开通成员身份」的空态，等于进不去任何页面（M6 之后 /admin 才是它的落点）。
+    const isAdmin = payload.data?.roles?.includes("ADMIN") ?? false;
+    router.replace(
+      payload.data?.mustChangePassword
+        ? "/account/change-password"
+        : isAdmin
+          ? "/admin"
+          : "/member",
+    );
     router.refresh();
   }
   return (
-    <form className="auth-login__form" onSubmit={submit}>
+    // method="post"：JS 未 hydrate 时浏览器会退化成原生提交。没有它默认是 GET，
+    // 会把 QQ 与**密码明文拼进 URL**（历史记录、访问日志、Referer 全都拿得到）。
+    // M1 任务书明确要求凭据不得进入 URL，因此这里必须显式声明 POST。
+    <form className="auth-login__form" method="post" onSubmit={submit}>
       <Field
         name="qq"
         label={loginCopy.qqLabel}
@@ -50,7 +62,10 @@ export function LoginForm() {
         placeholder={loginCopy.passwordPlaceholder}
         type="password"
         autoComplete="current-password"
-        minLength={12}
+        // **不设 `minLength`**：登录是校验密码，不是设置密码。写死下限的后果是
+        // 「用短口令的账号在前端就被拦住、连提交都提交不了」（第十一轮实测踩到：
+        // 验收账号密码 123456，登录表单上写着 minLength={12}）。长度规则只在
+        // 设置 / 修改密码处生效，登录交给服务端判定。
         maxLength={128}
       />
       <Button className="auth-login__submit" type="submit" variant="solid" disabled={busy}>
@@ -71,7 +86,7 @@ function Field(props: {
   placeholder: string;
   type: string;
   autoComplete: string;
-  minLength: number;
+  minLength?: number;
   maxLength: number;
 }) {
   const [revealed, setRevealed] = useState(false);

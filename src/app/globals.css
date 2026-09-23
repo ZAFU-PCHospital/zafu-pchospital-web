@@ -394,6 +394,11 @@ html[data-theme="black-yellow"] {
     scroll-behavior: smooth;
     -webkit-text-size-adjust: 100%;
 
+    /* 始终给滚动条留出位置。后台的长短页面会在「有滚动条 / 没滚动条」之间切换
+       （列表页几千像素、只有几行的分类页正好一屏），每次切换整页宽度变 15px，
+       看起来就是切页时「抖一下」。留出固定槽位后宽度不再随页面高度变化。 */
+    scrollbar-gutter: stable;
+
     /* 画布底色也走令牌：color-scheme 无法插值，切换时会瞬时生效，
        若画布没有自己的过渡色，就会在令牌插值到位前闪出一帧系统底色。 */
     background: var(--bg);
@@ -424,6 +429,13 @@ html[data-theme="black-yellow"] {
 
   body {
     margin: 0;
+    /* 粘性页脚：内容不足一屏时（例如只有 8 行分类的后台页），页脚不该紧跟着内容
+       浮到屏幕中间 —— 它属于页面最底部。body 做纵向 flex、main 吃掉剩余高度即可，
+       固定定位的索引栏 / 顶栏 / 背景网格都不受影响。 */
+    display: flex;
+    flex-direction: column;
+    min-block-size: 100vh;
+    min-block-size: 100dvh;
     background: var(--bg);
     color: var(--ink);
     font-family: var(--font-sans);
@@ -516,6 +528,11 @@ html[data-theme="black-yellow"] {
     max-width: var(--maxw);
     margin-inline: auto;
     padding-inline: var(--gutter);
+  }
+
+  /* 正文吃掉剩余高度，把页脚顶到最下面（配合 body 的纵向 flex）。 */
+  main {
+    flex: 1 0 auto;
   }
 
   .skip-link {
@@ -2383,13 +2400,20 @@ html[data-theme="black-yellow"] {
     padding-top: var(--s-4);
     border-top: 1px solid var(--line-soft);
   }
-  .repair-filters__checks {
+  /* 复选框 + 文字的横排一行。`.admin-checkrow` 是同一视觉的通用别名：
+     `.repair-filters__checks` 这个名字来自维修筛选栏，但同样的形态在后台的设置页
+     与详情窗口里也要用（与 `.admin-table` 之于 `.repair-table` 同一处理）。
+     注意 `.admin-check` 是**复选框本身**的尺寸类，只能加在 input 上；
+     加在 <label> 上会把整个标签压成 1rem 宽，文字被挤成一列字（实际踩到过）。 */
+  .repair-filters__checks,
+  .admin-checkrow {
     display: grid;
     align-content: end;
     gap: var(--s-3);
     min-height: 46px;
   }
-  .repair-filters__checks label {
+  .repair-filters__checks label,
+  .admin-checkrow label {
     display: flex;
     align-items: center;
     gap: var(--s-3);
@@ -2412,18 +2436,28 @@ html[data-theme="black-yellow"] {
     margin: 0;
   }
 
-  .repair-table-wrap {
+  /* 表格基座：M2 维修列表与 M6 管理后台共用同一套视觉。
+     `.admin-table` 是同一视觉的通用别名 —— 后台成员表/维修表列数不同，
+     因此它用 `table-layout: auto` 覆盖 `.repair-table` 的固定列宽，
+     其余声明完全共享（含下方 ≤1099px 的卡片式降级），不另造第二套表格样式。 */
+  .repair-table-wrap,
+  .admin-table-wrap {
     border: 1px solid var(--line);
     border-radius: var(--r-mid);
     background: var(--surface-1);
     overflow: hidden;
   }
-  .repair-table {
+  .repair-table,
+  .admin-table {
     width: 100%;
     border-collapse: collapse;
     table-layout: fixed;
   }
-  .repair-table th {
+  .admin-table {
+    table-layout: auto;
+  }
+  .repair-table th,
+  .admin-table th {
     padding: 0.75rem var(--s-3);
     border-bottom: 1px solid var(--line);
     background: var(--surface-2);
@@ -2433,7 +2467,8 @@ html[data-theme="black-yellow"] {
     letter-spacing: 0.04em;
     color: var(--ink-3);
   }
-  .repair-table td {
+  .repair-table td,
+  .admin-table td {
     padding: 0.85rem var(--s-3);
     border-bottom: 1px solid var(--line-soft);
     vertical-align: middle;
@@ -2441,13 +2476,16 @@ html[data-theme="black-yellow"] {
     line-height: 1.45;
     color: var(--ink-2);
   }
-  .repair-table tbody tr:last-child td {
+  .repair-table tbody tr:last-child td,
+  .admin-table tbody tr:last-child td {
     border-bottom: 0;
   }
-  .repair-table tbody tr {
+  .repair-table tbody tr,
+  .admin-table tbody tr {
     transition: background var(--d-fast) var(--ease-quart);
   }
-  .repair-table tbody tr:hover {
+  .repair-table tbody tr:hover,
+  .admin-table tbody tr:hover {
     background: var(--surface-2);
   }
   .repair-table th:nth-child(1) {
@@ -2506,7 +2544,8 @@ html[data-theme="black-yellow"] {
     color: var(--ink-2);
     font-weight: 650;
   }
-  .repair-table__empty {
+  .repair-table__empty,
+  .admin-table__empty {
     margin: 0;
     padding: var(--s-7) var(--s-4);
     text-align: center;
@@ -2543,13 +2582,15 @@ html[data-theme="black-yellow"] {
     color: var(--ink-2);
   }
 
-  .repair-pagination {
+  .repair-pagination,
+  .admin-pagination {
     display: flex;
     align-items: center;
     justify-content: flex-end;
     gap: var(--s-3);
   }
-  .repair-pagination > span {
+  .repair-pagination > span,
+  .admin-pagination > span {
     min-width: 4rem;
     text-align: center;
     font-family: var(--font-latin);
@@ -2589,21 +2630,27 @@ html[data-theme="black-yellow"] {
 
   @media (max-width: 1099px) {
     .repair-table,
-    .repair-table tbody {
+    .repair-table tbody,
+    .admin-table,
+    .admin-table tbody {
       display: block;
     }
-    .repair-table thead {
+    .repair-table thead,
+    .admin-table thead {
       display: none;
     }
-    .repair-table tbody tr {
+    .repair-table tbody tr,
+    .admin-table tbody tr {
       display: grid;
       padding: var(--s-4);
       border-bottom: 1px solid var(--line);
     }
-    .repair-table tbody tr:last-child {
+    .repair-table tbody tr:last-child,
+    .admin-table tbody tr:last-child {
       border-bottom: 0;
     }
-    .repair-table td {
+    .repair-table td,
+    .admin-table td {
       display: grid;
       grid-template-columns: 5.5rem minmax(0, 1fr);
       gap: var(--s-3);
@@ -2611,12 +2658,28 @@ html[data-theme="black-yellow"] {
       border: 0;
       text-align: left;
     }
-    .repair-table td::before {
+    .repair-table td::before,
+    .admin-table td::before {
       content: attr(data-label);
       font-size: var(--t-xs);
       font-weight: 700;
       letter-spacing: 0.04em;
       color: var(--ink-4);
+    }
+    /* 卡片布局下拖动手柄没有字段名可显示（表头那一列本来就是空的）：
+       不写 `content: none` 的话，每个卡片顶上会多出一条空的标签格。
+       760–1099px 仍然可能是鼠标环境（窄窗口的桌面浏览器），手柄保留；
+       ≤759px 由下面那条规则直接隐藏（触屏上拖放不生效）。 */
+    .admin-table td.admin-table__grip {
+      grid-template-columns: auto;
+    }
+    .admin-table td.admin-table__grip::before {
+      content: none;
+    }
+    /* 卡片布局里表格已经没有「列」了（`thead` 都不显示），列宽竖线必须收起来：
+       竖线位置是按列宽累加算出来的（不再靠量 DOM），不收的话卡片上会飘着几条竖线。 */
+    .admin-colgrid {
+      display: none;
     }
     .repair-table__content a {
       white-space: normal;
@@ -2627,7 +2690,8 @@ html[data-theme="black-yellow"] {
   }
 
   @media (min-width: 760px) and (max-width: 1099px) {
-    .repair-table tbody tr {
+    .repair-table tbody tr,
+    .admin-table tbody tr {
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 0 var(--s-6);
     }
@@ -2993,63 +3057,6 @@ html[data-theme="black-yellow"] {
   }
 
   /* 技能选择（编辑态）：原生 checkbox 保证键盘与焦点可见 */
-  .member-skill-picker {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.4rem;
-    margin: 0;
-    padding: 0;
-    border: 0;
-  }
-  .member-skill-option {
-    position: relative;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-    min-height: 38px;
-    padding: 0.4rem 0.75rem;
-    border: 1px solid var(--line-strong);
-    border-radius: 999px;
-    background: transparent;
-    color: var(--ink-2);
-    font-size: var(--t-xs);
-    font-weight: 600;
-    cursor: pointer;
-  }
-  .member-skill-option input {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    margin: 0;
-    padding: 0;
-    border: 0;
-    opacity: 0;
-    pointer-events: none;
-  }
-  .member-skill-option__status {
-    color: var(--ink-4);
-    font-size: var(--t-micro);
-    font-weight: 600;
-  }
-  .member-skill-option:hover {
-    border-color: var(--accent);
-  }
-  .member-skill-option:has(input:focus-visible) {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
-  }
-  /* 选中态：描边 + 淡底 + 勾选标记（三重线索） */
-  .member-skill-option:has(input:checked) {
-    border-color: var(--accent);
-    background: var(--accent-wash);
-    color: var(--accent-deep);
-  }
-  .member-skill-option:has(input:disabled) {
-    border-color: var(--line);
-    color: var(--ink-4);
-    cursor: not-allowed;
-  }
-
   /* 资料表（只读字段）：语义用 dl，不伪装成输入框 */
   .member-fields {
     display: grid;
@@ -3865,9 +3872,12 @@ html[data-theme="black-yellow"] {
   }
 
   /* -------------------------------------------------------------- 页脚 */
+  /* 第五轮验收：页脚是「页面结束的落款」，不是一块内容区。
+     原先上下各有 var(--s-6) / var(--s-7) 的内边距，加上两段都带 border-top 的说明，
+     整块高度接近 240px；现在压到 ~150px，三段之间只留一个 --s-3 的呼吸。 */
   .footer {
     border-top: 1px solid var(--line);
-    padding-block: var(--s-6) var(--s-7);
+    padding-block: var(--s-4) var(--s-5);
     font-family: var(--font-latin);
     font-size: var(--t-micro);
     letter-spacing: 0.14em;
@@ -3877,21 +3887,22 @@ html[data-theme="black-yellow"] {
   .footer__row {
     display: flex;
     flex-wrap: wrap;
-    gap: var(--s-3) var(--s-6);
+    gap: var(--s-2) var(--s-6);
     justify-content: space-between;
     align-items: center;
   }
+  /* 免责说明：**不设 max-width**。这句话是一句完整的话，宽度够就应当一行读完；
+     按 ch 限宽会在一行只差二三十像素的时候硬折成两行（1440px 桌面实测）。 */
   .footer__note {
-    margin-top: var(--s-4);
-    padding-top: var(--s-4);
+    margin-top: var(--s-3);
+    padding-top: var(--s-3);
     border-top: 1px solid var(--line-soft);
     font-family: var(--font-sans);
     font-size: var(--t-xs);
     letter-spacing: 0;
     text-transform: none;
-    line-height: 1.8;
+    line-height: 1.65;
     color: var(--ink-4);
-    max-width: 78ch;
   }
   /* 备案号：页脚最底部居中，比免责说明再小一档（--t-micro 是设计文档里「编号」的档位）。
      颜色用 --ink-4：页脚没有自己的背景，直接落在 --bg 上（实测 body 背景），
@@ -3900,10 +3911,10 @@ html[data-theme="black-yellow"] {
   .footer__record {
     display: flex;
     flex-wrap: wrap;
-    gap: var(--s-3) var(--s-4);
+    gap: var(--s-2) var(--s-4);
     justify-content: center;
-    margin-top: var(--s-4);
-    padding-top: var(--s-4);
+    margin-top: var(--s-3);
+    padding-top: var(--s-3);
     border-top: 1px solid var(--line-soft);
     font-family: var(--font-sans);
     font-size: var(--t-micro);
@@ -4197,6 +4208,1509 @@ html[data-theme="black-yellow"] {
     /* 进度条是功能性指示，不是装饰动效，保留其滚动驱动行为 */
     .progress-line__bar {
       animation-duration: auto !important;
+    }
+  }
+
+  /* ---------------------------------------------------------------- M6 管理后台
+     后台是密集型数据界面：页头与成员工作台同构，真正新增的只有内部导航、
+     筛选栏、批量操作条与角色徽标。表格（`.admin-table`）、分页（`.admin-pagination`）、
+     状态标签（`.repair-tag`）与表单控件（`.field`）全部复用已有实现，不另造一套。
+     另外两个后台专属构件：`.admin-panel`（给 `.card` 补内边距与内部节奏）、
+     `.admin-modal`（成员/记录详情窗口：底色加深的遮罩 + 窗口，不用投影）。 */
+
+  .admin-workspace {
+    padding-block: clamp(5.75rem, 10vh, 7rem) var(--s-8);
+  }
+  .admin-workspace__content {
+    display: grid;
+    gap: var(--s-5);
+  }
+  .admin-workspace__header {
+    display: grid;
+    gap: var(--s-4);
+    align-items: end;
+  }
+  .admin-workspace__title {
+    margin: 0;
+    font-size: var(--t-xl);
+    font-weight: 800;
+    line-height: 1.14;
+    color: var(--ink);
+  }
+  .admin-workspace__lead {
+    margin: var(--s-3) 0 0;
+    max-width: var(--measure);
+    color: var(--ink-3);
+  }
+
+  /* ---------------------------------------------------------- 后台外壳（左栏 + 内容） */
+  /* 参考邮箱类客户端：左侧固定导航栏常驻，右侧内容区独立滚动。
+     外壳渲染在 `app/admin/layout.tsx` 里，客户端导航之间保持挂载，切页时侧栏不重建。 */
+  .admin-shell {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+  }
+  /* 后台不显示站脚。页脚里那句「浙江农林大学电脑医院 · 志愿技术服务」、英文名、年份、
+     文档来源说明与备案号都属于**公开站点**的落款；后台是登录后的工作台，这些信息既没用
+     又占掉一屏看不了几行的高度（第六轮验收要求去掉）。
+     用 `:has()` 而不是在根 layout 判断路由：根 layout 渲染 `<Footer/>` 时并不知道当前是
+     哪个路由，而 `:has()` 表达的正是「页面带后台外壳时不显示页脚」，不需要搬动路由结构。 */
+  body:has(.admin-shell) .footer {
+    display: none;
+  }
+  .admin-shell__main {
+    min-inline-size: 0;
+  }
+  /* 后台不做进场揭示：`.reveal` 的初始隐藏态（`html.js .reveal { opacity: 0 }`）在这里
+     被直接中性化，元素一开始就是可见的。管理台是密集数据界面，切页还等淡入属于装饰性动画；
+     另外 SiteEffects 会跳过 `.admin-shell`，两边一致，DOM 不会与 React 的 vdom 分叉。 */
+  .admin-shell .reveal {
+    opacity: 1;
+    transform: none;
+  }
+
+  .admin-nav {
+    display: grid;
+    gap: var(--s-4);
+    align-content: start;
+    padding: var(--s-4) var(--s-3) var(--s-5);
+  }
+  .admin-nav__brand {
+    display: grid;
+    gap: 0.15rem;
+    margin: 0;
+    padding-inline: 0.7rem;
+  }
+  .admin-nav__brand-en {
+    font-size: var(--t-micro);
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-4);
+  }
+  .admin-nav__brand-cn {
+    font-size: var(--t-lg);
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    color: var(--ink);
+  }
+  .admin-nav__list {
+    display: grid;
+    gap: 1px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .admin-nav__link {
+    display: grid;
+    grid-template-columns: 1.7rem minmax(0, 1fr);
+    align-items: center;
+    gap: var(--s-2);
+    padding: 0.5rem 0.7rem;
+    /* 当前项靠左侧那道强调色边标出。全站禁用 box-shadow，也不做整块高饱和底色。 */
+    border-inline-start: 2px solid transparent;
+    border-radius: var(--r-base);
+    color: var(--ink-2);
+    font-size: var(--t-sm);
+    font-weight: 650;
+    transition:
+      background var(--d-fast) var(--ease-quart),
+      color var(--d-fast) var(--ease-quart);
+  }
+  .admin-nav__link:hover,
+  .admin-nav__link:focus-visible {
+    background: var(--surface-2);
+    color: var(--ink);
+  }
+  .admin-nav__link[aria-current="page"] {
+    border-inline-start-color: var(--accent);
+    background: var(--surface-2);
+    color: var(--ink);
+    font-weight: 750;
+  }
+  .admin-nav__link .eyebrow {
+    font-size: var(--t-micro);
+  }
+  .admin-nav__label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .admin-filters {
+    display: grid;
+    gap: var(--s-3);
+    padding: var(--s-4);
+    border: 1px solid var(--line);
+    border-radius: var(--r-mid);
+    background: var(--surface-1);
+  }
+  .admin-filters__row {
+    display: grid;
+    gap: var(--s-3);
+  }
+  .admin-filters__row > .btn {
+    align-self: end;
+  }
+
+  .admin-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--s-2);
+  }
+  .admin-actions form {
+    display: inline-flex;
+  }
+  /* 上移 / 下移是一组「调整顺序」的动作，紧挨着显示；与后面的「编辑 / 停用」保留正常间距。 */
+  .admin-actions__group {
+    display: inline-flex;
+    align-items: center;
+    gap: 0;
+  }
+  .admin-actions__group > .btn {
+    min-inline-size: 1.6rem;
+    padding-inline: 0.4rem;
+    justify-content: center;
+    font-size: 0.95rem;
+    line-height: 1;
+  }
+
+  /* ------------------------------------------------ 拖动排序（技能 / 分类） */
+  /* 手柄：只有它是 draggable，行本身不可拖（否则表格里的文字选不中）。 */
+  .admin-drag {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: 1.35rem;
+    block-size: 1.35rem;
+    color: var(--ink-4);
+    cursor: grab;
+    /* 拖动的抓手要够大，但表格行只有 ~30px：靠负外边距把可点区域撑到行高。 */
+    margin-block: -0.25rem;
+    border-radius: var(--r-base);
+  }
+  .admin-drag:hover {
+    color: var(--accent-deep);
+    background: var(--surface-2);
+  }
+  .admin-drag:active {
+    cursor: grabbing;
+  }
+  .admin-drag svg {
+    inline-size: 0.9rem;
+    block-size: 0.9rem;
+  }
+  /* 拖起来的那一行淡出，表示「它正跟着指针」 */
+  .admin-table tbody tr.is-dragging {
+    opacity: 0.4;
+  }
+  /* 落点指示线：用绝对定位的伪元素，**不能用 border / box-shadow** ——
+     前者会改变行高（拖动时表格整体跳动），后者是设计基准禁止的。 */
+  .admin-table tbody tr {
+    position: relative;
+  }
+  .admin-table tbody tr.is-drop-before::before,
+  .admin-table tbody tr.is-drop-after::after {
+    content: "";
+    position: absolute;
+    inset-inline: 0;
+    z-index: 1;
+    block-size: 2px;
+    background: var(--accent);
+  }
+  .admin-table tbody tr.is-drop-before::before {
+    inset-block-start: -1px;
+  }
+  .admin-table tbody tr.is-drop-after::after {
+    inset-block-end: -1px;
+  }
+
+  .admin-tags {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: var(--s-1);
+  }
+  .admin-tag {
+    display: inline-flex;
+    align-items: center;
+    min-height: 1.6rem;
+    padding: 0.15rem 0.45rem;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--r-full);
+    background: var(--bg);
+    font-size: var(--t-micro);
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    color: var(--ink-2);
+  }
+  .admin-tag--accent {
+    border-color: var(--accent-line);
+    background: var(--accent-wash);
+    color: var(--accent-deep);
+  }
+  .admin-tag--muted {
+    border-color: var(--line);
+    color: var(--ink-3);
+  }
+
+  .admin-check {
+    width: 1.05rem;
+    height: 1.05rem;
+    accent-color: var(--accent-deep);
+  }
+
+  .admin-form {
+    display: grid;
+    gap: var(--s-5);
+  }
+  .admin-form__grid {
+    display: grid;
+    gap: var(--s-4);
+  }
+  .admin-status {
+    margin: 0;
+    font-size: var(--t-sm);
+    color: var(--ink-2);
+  }
+  .admin-status--error {
+    padding-left: var(--s-3);
+    border-left: 2px solid var(--accent);
+    color: var(--ink);
+  }
+  .admin-note {
+    margin: 0;
+    font-size: var(--t-sm);
+    color: var(--ink-3);
+  }
+  .admin-stats {
+    display: grid;
+    gap: var(--s-5);
+  }
+
+  /* 后台表单面板。
+     `.card` 只给描边、底色与圆角，**自身没有内边距**（`/docs` 的预览卡由
+     `.docpreview__bar` / `__body` 各自带 padding）。后台把表单直接放进 `<Card>`
+     就会让标题与控件顶着左上角，看着像「样式没加载出来的纯文本」。
+     这里统一补内边距与内部节奏，后台所有卡片式表单都用它。 */
+  .admin-panel {
+    display: grid;
+    gap: var(--s-5);
+    padding: clamp(1.25rem, 2.6vw, 1.75rem);
+  }
+  /* 面板/窗口内部的标题。不能直接用 `.admin-workspace__title`（那是页头尺寸，
+     `--t-xl` 最大 2.75rem）：卡片里的「新增分类」要是跟页面标题一样大，
+     层级就反了 —— 之前正是这个问题。 */
+  .admin-panel__title {
+    margin: 0;
+    font-size: var(--t-lg);
+    font-weight: 800;
+    line-height: 1.2;
+    color: var(--ink);
+  }
+
+  /* -------------------------------------------------------- 详情窗口 */
+  .admin-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 96; /* 高于移动端索引浮层（95），窗口必须始终在最上层 */
+    display: grid;
+    place-items: center;
+    padding: var(--gutter);
+  }
+  .admin-modal__veil {
+    position: absolute;
+    inset: 0;
+    /* 遮罩用加深的底色（`--bg-deep`）而不是半透明黑：深色主题下它几乎全黑，
+       浅色主题下它把页面压成更深的纸面色 —— 两套主题都不需要投影。
+       92% 不透明度：背景仍能看出「后面还有一页」，但已不可读，焦点稳定落在窗口上。 */
+    background: var(--bg-deep);
+    opacity: 0.92;
+  }
+  .admin-modal__window {
+    position: relative;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    inline-size: min(64rem, 100%);
+    max-block-size: min(88vh, 64rem);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--r-mid);
+    background: var(--surface-1);
+    overflow: hidden;
+    animation: admin-modal-in var(--d-mid) var(--ease-quart) both;
+  }
+  .admin-modal__head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    gap: var(--s-4);
+    padding: var(--s-5) clamp(1.25rem, 3vw, 2rem);
+    border-bottom: 1px solid var(--line);
+  }
+  .admin-modal__head > .btn {
+    white-space: nowrap;
+  }
+  .admin-modal__title {
+    margin: 0;
+    font-size: var(--t-lg);
+    font-weight: 800;
+    line-height: 1.2;
+    color: var(--ink);
+  }
+  .admin-modal__lead {
+    margin: var(--s-2) 0 0;
+    font-size: var(--t-sm);
+    color: var(--ink-3);
+  }
+  .admin-modal__body {
+    display: grid;
+    align-content: start;
+    gap: var(--s-6);
+    padding: var(--s-5) clamp(1.25rem, 3vw, 2rem) var(--s-6);
+    overflow-y: auto;
+  }
+  /* 字段表 + 紧跟其后的说明文字：它们是一组，间距要明显小于段落之间。 */
+  .admin-modal__facts {
+    display: grid;
+    gap: var(--s-3);
+  }
+  /* 窗口内不再套第二层卡片：各段之间用一条细线分隔即可。 */
+  .admin-modal__body > .admin-form + .admin-form,
+  .admin-modal__body > .admin-form + .signup__actions,
+  .admin-modal__body > .admin-stats + .admin-form {
+    padding-top: var(--s-5);
+    border-top: 1px solid var(--line-soft);
+  }
+
+  /* 记录详情里的维修照片。
+     审核必须看得见照片，但列表接口只带记录摘要（导出也只输出 URL），
+     因此窗口打开时单独取一次记录详情再渲染这一块。 */
+  .admin-photos {
+    display: grid;
+    gap: var(--s-3);
+  }
+  .admin-photos__list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 11rem), 1fr));
+    gap: var(--s-3);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .admin-photos__item {
+    display: grid;
+    gap: var(--s-2);
+    border: 1px solid var(--line);
+    border-radius: var(--r-base);
+    background: var(--bg);
+    overflow: hidden;
+  }
+  .admin-photos__item:hover,
+  .admin-photos__item:focus-visible {
+    border-color: var(--line-strong);
+  }
+  .admin-photos__image {
+    display: block;
+    inline-size: 100%;
+    block-size: 8.5rem;
+    object-fit: cover;
+  }
+  /* 照片读不出来时的占位：不显示裂图，也不给「打开原图」的链接
+     （点进去只会看到一张 JSON 错误页）。 */
+  .admin-photos__fallback {
+    display: grid;
+    place-items: center;
+    block-size: 8.5rem;
+    padding: var(--s-3);
+    background: var(--surface-2);
+    font-size: var(--t-micro);
+    line-height: 1.6;
+    color: var(--ink-3);
+    text-align: center;
+  }
+  .admin-photos__meta {
+    padding-inline: var(--s-2);
+    font-size: var(--t-micro);
+    color: var(--ink-3);
+    overflow-wrap: anywhere;
+  }
+  .admin-photos__action {
+    padding: 0 var(--s-2) var(--s-2);
+    font-size: var(--t-micro);
+    font-weight: 700;
+    color: var(--accent-deep);
+  }
+
+  @keyframes admin-modal-in {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  /* ---------------------------------------------------------- 反馈浮层 */
+  /* 操作反馈（「分类已停用。」这类）走顶部居中浮层，不再内联插在内容里：
+     内联的那一行会把下面的东西顶下去，还得等下次操作才能被覆盖掉。 */
+  .admin-toast {
+    position: fixed;
+    inset-block-start: var(--s-5);
+    inset-inline: 0;
+    z-index: 100; /* 高于详情窗口（96）：窗口内部触发的反馈也要看得见 */
+    display: flex;
+    justify-content: center;
+    padding-inline: var(--gutter);
+    pointer-events: none; /* 只有提示条本身可点，其余区域照常操作页面 */
+  }
+  .admin-toast__body {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--s-3);
+    max-inline-size: min(32rem, 100%);
+    padding: var(--s-3) var(--s-3) var(--s-3) var(--s-4);
+    pointer-events: auto;
+    animation: admin-toast-in var(--d-mid) var(--ease-quart) both;
+  }
+  .admin-toast__body > svg {
+    inline-size: 1.125rem;
+    block-size: 1.125rem;
+    color: var(--accent-deep);
+  }
+  /* neutral：操作成功了，但结果是「关掉」（停用 / 禁用 / 退回 / 软删除）。
+     图标换成叉并退到次级文字色 —— 不用颜色区分成败：本站只有一个强调色，
+     也没有危险色令牌，结果已经由文案说清楚。 */
+  .admin-toast__body--neutral > svg {
+    color: var(--ink-3);
+  }
+  .admin-toast__text {
+    margin: 0;
+    font-size: var(--t-sm);
+    color: var(--ink);
+  }
+  .admin-toast__close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: 1.75rem;
+    block-size: 1.75rem;
+    border: 1px solid transparent;
+    border-radius: var(--r-base);
+    color: var(--ink-3);
+    transition:
+      border-color var(--d-fast) var(--ease-quart),
+      color var(--d-fast) var(--ease-quart);
+  }
+  .admin-toast__close:hover,
+  .admin-toast__close:focus-visible {
+    border-color: var(--line-strong);
+    color: var(--ink);
+  }
+  .admin-toast__close svg {
+    inline-size: 0.875rem;
+    block-size: 0.875rem;
+  }
+
+  @keyframes admin-toast-in {
+    from {
+      opacity: 0;
+      transform: translateY(-10px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  /* ---------------------------------------------------------- 批 2 构件 */
+  /* 评论正文：表格里只给一个可读的块，长评论按行截断到 4 行。
+     正文上限 2000 码点，整段铺开会把这一行撑到十几行高，把整张表拽散。 */
+  .admin-comment__body {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 4;
+    line-clamp: 4;
+    overflow: hidden;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+  /* 审计的变更摘要：JSON 原样展示，保留缩进与换行。
+     底色用 `--surface-2` + 细描边（与 `.card` 同一套取值），不引入代码高亮或新色板。 */
+  .admin-json {
+    margin: 0;
+    padding: var(--s-3);
+    border: 1px solid var(--line);
+    border-radius: var(--r-base);
+    background: var(--surface-2);
+    color: var(--ink-2);
+    font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+    font-size: var(--t-xs);
+    line-height: 1.6;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    max-block-size: 18rem;
+    overflow: auto;
+  }
+  /* 窗口与设置页里的普通条目列表：只需要「一行一条 + 缩进」，不用再套一层卡片。 */
+  .admin-plain-list {
+    margin: 0;
+    padding-inline-start: 1.1rem;
+    display: grid;
+    gap: 0.35rem;
+    font-size: var(--t-sm);
+    color: var(--ink-2);
+  }
+  .admin-plain-list > li {
+    overflow-wrap: anywhere;
+  }
+  /* 标签选择器（参考 B 站投稿页）：上半部分是一个「装标签的输入框」，
+     下半部分是一行候选标签。两处都可以点：已选中的再点一次即取消。 */
+  .tagpicker {
+    display: grid;
+    gap: var(--s-3);
+  }
+  .tagpicker__box {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--s-3);
+    min-block-size: 3rem;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--r-base);
+    background: var(--bg);
+  }
+  /* 焦点环由内部的候选按钮与 × 提供，容器本身不吃焦点，所以不做 focus-within 高亮。 */
+  .tagpicker__box[data-disabled] {
+    background: var(--surface-2);
+    opacity: 0.7;
+  }
+  .tagpicker__selected {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+    min-inline-size: 0;
+  }
+  .tagpicker__placeholder {
+    font-size: var(--t-sm);
+    color: var(--ink-4);
+  }
+  .tagpicker__chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.2rem 0.35rem 0.2rem 0.6rem;
+    border: 1px solid var(--accent-line);
+    border-radius: var(--r-base);
+    background: var(--accent-wash);
+    font-size: var(--t-sm);
+    color: var(--accent-deep);
+  }
+  .tagpicker__chip-remove {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: 1.1rem;
+    block-size: 1.1rem;
+    border-radius: var(--r-base);
+    font-size: 0.95rem;
+    line-height: 1;
+    color: var(--accent-deep);
+  }
+  .tagpicker__chip-remove:hover,
+  .tagpicker__chip-remove:focus-visible {
+    background: var(--accent);
+    color: var(--bg);
+  }
+  /* 已停用但仍被持有的标签：标记出来，否则它占着上限却看不出为什么还在。 */
+  .tagpicker__chip-status {
+    font-size: var(--t-micro);
+    font-weight: 600;
+    color: var(--ink-3);
+  }
+  .tagpicker__remaining {
+    flex: none;
+    padding-block-start: 0.15rem;
+    font-size: var(--t-xs);
+    color: var(--ink-3);
+    white-space: nowrap;
+  }
+  .tagpicker__options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+  .tagpicker__option {
+    padding: 0.25rem 0.6rem;
+    border: 1px solid var(--line);
+    border-radius: var(--r-base);
+    background: var(--surface-2);
+    font-size: var(--t-sm);
+    color: var(--ink-2);
+    transition:
+      border-color var(--d-fast) var(--ease-quart),
+      background var(--d-fast) var(--ease-quart),
+      color var(--d-fast) var(--ease-quart);
+  }
+  .tagpicker__option:hover,
+  .tagpicker__option:focus-visible {
+    border-color: var(--line-strong);
+    color: var(--ink);
+  }
+  .tagpicker__option[aria-pressed="true"] {
+    border-color: var(--ink);
+    background: var(--ink);
+    color: var(--bg);
+  }
+  .tagpicker__option:disabled {
+    opacity: 0.45;
+  }
+
+  /* 记录详情窗口里的评论列表：一行一条评论（作者 + 时间 + 正文 + 删除），
+     回复再缩进一层。不给每条套卡片 —— 窗口里已经分了段，再套会碎成一片方块。 */
+  .admin-comments {
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: var(--s-3);
+    list-style: none;
+  }
+  .admin-comments--replies {
+    margin-block-start: var(--s-3);
+    padding-inline-start: var(--s-5);
+    border-inline-start: 1px solid var(--line-soft);
+  }
+  .admin-comments__row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.25rem var(--s-3);
+    align-items: start;
+  }
+  .admin-comments__meta {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--s-2);
+    margin: 0;
+    font-size: var(--t-xs);
+    color: var(--ink-3);
+  }
+  .admin-comments__author {
+    font-weight: 700;
+    color: var(--ink-2);
+  }
+  .admin-comments__body {
+    margin: 0;
+    font-size: var(--t-sm);
+    line-height: 1.6;
+    color: var(--ink-2);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  /* 设置页的「首页预览」：一块**模拟官网渲染结果**的小面板。
+     底色取 `--surface-2`（比设置表单的 `--surface-1` 更深），让「这是预览、不是设置项」
+     一眼可分；不加投影、不加新色板。 */
+  .admin-preview {
+    display: grid;
+    gap: var(--s-3);
+    padding: var(--s-4);
+    border: 1px solid var(--line);
+    border-radius: var(--r-mid);
+    background: var(--surface-2);
+  }
+  .admin-preview__title {
+    margin: 0;
+    font-size: var(--t-sm);
+    font-weight: 700;
+    color: var(--ink);
+  }
+  .admin-preview__list {
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.4rem;
+    list-style: none;
+  }
+  /* 名次 / 名称 / 数量三列：数字列用等宽数字对齐，名字过长时省略而不是撑破面板。 */
+  .admin-preview__row {
+    display: grid;
+    grid-template-columns: 2rem minmax(0, 1fr) auto;
+    gap: var(--s-3);
+    align-items: baseline;
+    font-size: var(--t-sm);
+    color: var(--ink-2);
+  }
+  .admin-preview__rank {
+    font-family: var(--font-latin);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink-3);
+  }
+  .admin-preview__name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .admin-preview__count {
+    font-family: var(--font-latin);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink);
+  }
+
+  /* 侧栏：宽屏常驻在左侧并跟随滚动（`position: sticky`），窄屏退回顶部一条横向可滚动导航。
+     1100px 是站点既有断点 —— 后台表格本身也要到 1100px 才够宽。 */
+  @media (min-width: 1100px) {
+    .admin-shell {
+      grid-template-columns: 13.5rem minmax(0, 1fr);
+      gap: var(--s-5);
+    }
+    .admin-nav {
+      position: sticky;
+      /* `inset-block-start` 必须是 0，不能是 --s-4。
+         sticky 的偏移量受**包含块高度**限制：页面内容高时侧栏被顶到 16px，
+         内容矮（例如加载骨架那一屏、或只有 8 行分类的短页面）时这个位移被夹掉，
+         侧栏回到 0 —— 于是「Admin Console 上方的空白」在切页时忽然变小再弹回来。
+         视觉上的那点留白改由侧栏自身的 `padding-block-start` 提供，与页面高度无关。 */
+      inset-block-start: 0;
+      max-block-size: calc(100vh - var(--s-7));
+      overflow-y: auto;
+      border-inline-end: 1px solid var(--line);
+      padding-inline-end: var(--s-4);
+    }
+  }
+  @media (max-width: 1099px) {
+    .admin-nav {
+      padding-block-end: var(--s-4);
+      border-block-end: 1px solid var(--line);
+    }
+    .admin-nav__list {
+      grid-auto-flow: column;
+      grid-auto-columns: max-content;
+      overflow-x: auto;
+      padding-block-end: var(--s-1);
+    }
+    .admin-nav__link {
+      grid-template-columns: auto minmax(0, 1fr);
+      border-inline-start: 0;
+      border-block-end: 2px solid transparent;
+    }
+    .admin-nav__link[aria-current="page"] {
+      border-block-end-color: var(--accent);
+    }
+  }
+
+  /* 导航加载态骨架：只用 `--surface-2` 的块，不做动效。 */
+  .admin-skeleton {
+    display: grid;
+    gap: var(--s-4);
+  }
+  .admin-skeleton__title,
+  .admin-skeleton__line,
+  .admin-skeleton__block,
+  .admin-skeleton__field,
+  .admin-skeleton__row {
+    display: block;
+    border-radius: var(--r-base);
+    background: var(--surface-2);
+  }
+  .admin-skeleton__title {
+    inline-size: min(14rem, 60%);
+    block-size: 2.25rem;
+  }
+  .admin-skeleton__line {
+    inline-size: min(26rem, 90%);
+    block-size: 0.9rem;
+  }
+  .admin-skeleton__block {
+    block-size: 12rem;
+  }
+  /* 筛选栏骨架：与真实筛选栏同一排布（一行若干控件），高度取输入框档位 */
+  .admin-skeleton--filters {
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 12rem);
+    justify-content: start;
+    padding: var(--s-3);
+    border: 1px solid var(--line);
+    border-radius: var(--r-mid);
+    background: var(--surface-1);
+  }
+  .admin-skeleton__field {
+    block-size: 1.75rem;
+  }
+  /* 列表面板骨架：顶栏一行 + 若干行，行高与真实表格行一致（~2rem），
+     这样载荷到达时表格不会把页面高度改掉一大截。 */
+  .admin-skeleton__list {
+    display: grid;
+    gap: 0;
+    padding: 0;
+  }
+  .admin-skeleton__row {
+    block-size: 2rem;
+    margin-inline: var(--s-2);
+    border-radius: var(--r-base);
+  }
+
+  @media (min-width: 760px) {
+    .admin-workspace__header {
+      grid-template-columns: minmax(0, 1fr) auto;
+    }
+    .admin-workspace__header > .btn {
+      justify-self: end;
+    }
+    /* 筛选控件按页面数量不同（成员 3 个、审计 7 个），写死列数总有一页对不上：
+       原先 1100px 以上固定 5 列，评论/审计页的 7 个控件就得折行。
+       改成 `auto-fit`：在可用宽度里塞进尽量多的控件，能一行就一行。 */
+    .admin-filters__row {
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr));
+      align-items: end;
+    }
+    /* 按钮按内容宽度显示，不被拉伸成一整格 */
+    .admin-filters__row > .btn {
+      justify-self: start;
+    }
+    .admin-form__grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  /* ----------------------------------------------------------- 列表面板 */
+  /* 工具栏 + 表格共用一层描边（邮箱客户端的列表就是这样一整块），
+     而不是「一条横杠 + 另一张表」两个框各自带边。 */
+  .admin-list {
+    border: 1px solid var(--line);
+    border-radius: var(--r-mid);
+    background: var(--surface-1);
+    overflow: hidden;
+  }
+  .admin-list > .admin-table-wrap {
+    border: 0;
+    border-radius: 0;
+  }
+  /* 批量操作条已改为**列表顶栏**（这里）：常驻、未选中时按钮禁用 ——
+     既没有出现/消失，也就没有任何位移，同时「选中后能做什么」在操作前就看得见。 */
+  .admin-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--s-2);
+    padding: 0.25rem var(--s-2);
+    border-block-end: 1px solid var(--line);
+    background: var(--surface-2);
+  }
+  .admin-toolbar__actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--s-2);
+    min-inline-size: 0;
+  }
+  .admin-toolbar__count {
+    margin: 0;
+    font-size: var(--t-xs);
+    color: var(--ink-3);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .admin-toolbar__sep {
+    inline-size: 1px;
+    align-self: stretch;
+    background: var(--line);
+  }
+
+  /* 列表末尾：已加载条数 + 兜底的「加载更多」 */
+  .admin-listend {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--s-2);
+    padding-block: var(--s-3);
+  }
+  .admin-listend__count {
+    margin: 0;
+    font-size: var(--t-xs);
+    color: var(--ink-3);
+    font-variant-numeric: tabular-nums;
+  }
+  .admin-listend__sentinel {
+    block-size: 1px;
+  }
+
+  /* ------------------------------------------------- 单元格与表头（第六轮） */
+  /* 表格一旦信息变多，宽度就得有退路：`.admin-table-wrap` 原来是 `overflow: hidden`
+     （只为裁圆角），列一多只会把每一列压窄，最后行内 flex 组换行、行高翻倍。
+     改成横向可滚动，列宽按内容给足，宽度不够时用户横向看，而不是被压扁。 */
+  .admin-table-wrap {
+    overflow-x: auto;
+  }
+  /* 单元格一律左对齐。第九轮验收把「加入时间 / 维修记录」的右对齐撤了：
+     表里混着文本列与数字列，右对齐只让这两列看起来被推出队列（用户反馈
+     「加入时间为什么擅自改成右对齐，单元格都是左对齐 + 垂直居中好看」）。
+     等宽数字由 `.admin-contacts` / `.admin-rownum` 自己声明，不靠对齐方式。 */
+  /* 单元格里的文字只有一层：**主值 + 同行次级说明**。
+     第八轮验收推翻了「第二行小字」的做法：单元格里出现第二行会让行高不一致
+     （33px / 43px 混在一起），整张表参差，而且「一个单元格 = 一个字段值」这件事失真 ——
+     后续做单元格就地编辑时，编辑对象就不统一了。
+     次级说明用 --ink-3：--ink-4 落在行 hover 的 --surface-2 上只有 4.27:1，掉出 AA。 */
+  .admin-cell__main {
+    color: var(--ink);
+    font-weight: 650;
+  }
+  .admin-cell__aside,
+  .admin-cell__muted {
+    color: var(--ink-3);
+  }
+  .admin-cell__aside {
+    margin-inline-start: 0.25rem;
+  }
+  /* 角色标签里的补充说明（「· 已停用」）：跟在同一枚标签内，不撑列宽。 */
+  .admin-tag__note {
+    margin-inline-start: 0.25rem;
+    font-weight: 400;
+    opacity: 0.85;
+  }
+
+  /* ------------------------------------------ 行首（第八 / 第九轮验收） */
+  /* 行首与「成员」**共用同一个单元格**：第九轮之前序号单独占一列（56px），
+     复选框右边缘到姓名之间横着 25px 空白，用户反馈「复选框到成员之间还是雷霆大宽度，
+     你设计成和首列属性共享一个区域好了」。并进首列之后只剩一个固定间距，
+     而且行首随首列一起被拖动列宽。 */
+  .admin-membercell {
+    display: inline-flex;
+    align-items: center;
+    max-inline-size: 100%;
+    min-inline-size: 0;
+    vertical-align: middle;
+  }
+  .admin-rowhead {
+    display: inline-flex;
+    align-items: center;
+    block-size: 1.2rem;
+    margin-inline-end: 0.5rem;
+    user-select: none;
+    vertical-align: middle;
+  }
+  /* 六点手柄：**长按**才进入拖动（见 `useRowSelect`），光标与提示语都要说清楚。
+     出现时机与复选框**完全同步**（用户要求「六面骰 icon 和复选框的出现是同步的」）：
+     平时隐藏，指针进入这一行 —— 或键盘焦点可见地落进来 —— 时一起淡入。
+     用 `opacity` 而不是 `display`：它始终占着那 1rem，出现时不会把姓名挤动。 */
+  .admin-rowgrip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: 1rem;
+    block-size: 100%;
+    margin-inline-end: 0.15rem;
+    color: var(--ink-4);
+    opacity: 0;
+    cursor: grab;
+    touch-action: none;
+    vertical-align: middle;
+    transition: opacity 0.12s linear;
+  }
+  .admin-rowgrip:hover {
+    color: var(--accent-deep);
+  }
+  /* 长按蓄力完成（可以开始拖了）：手柄亮起来，用户不必继续盲按着等。 */
+  .admin-rowgrip.is-armed {
+    color: var(--accent-deep);
+    cursor: grabbing;
+  }
+  .admin-table tbody tr:hover .admin-rowgrip,
+  .admin-table tbody tr:has(:focus-visible) .admin-rowgrip {
+    opacity: 1;
+  }
+  /* 拖动排序进行中：手柄与目标位置提示都要看得见（指针可能已经离开原行）。 */
+  .admin-rowgrip.is-armed,
+  .admin-table tbody tr.is-dragging .admin-rowgrip {
+    opacity: 1;
+  }
+  .admin-rowgrip svg {
+    inline-size: 0.85rem;
+    block-size: 0.85rem;
+  }
+  .admin-rownum {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: 1.2rem;
+    block-size: 100%;
+    vertical-align: middle;
+    font-variant-numeric: tabular-nums;
+    font-size: var(--t-xs);
+    color: var(--ink-3);
+  }
+  /* 序号与复选框占同一个盒子，用 `opacity` 换而不是 `display`：两者尺寸相同，
+     切换时行高、列宽、其它单元格的位置都不动（`AGENTS.md` 的硬规则）。 */
+  .admin-rownum__n {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 1;
+    transition: opacity 0.12s linear;
+  }
+  /* 复选框**必须显式居中**：它是替换元素，`inset: 0` 配上 `.admin-check` 的固定宽高，
+     浏览器会把「左 / 上」当定位、「右 / 下」当多余约束丢掉，于是它压在盒子左上角
+     （用户实测反馈「复选框压在左上角」）。`margin: auto` 让上下左右余量平分，两轴居中。 */
+  .admin-rownum__box {
+    position: absolute;
+    inset: 0;
+    margin: auto;
+    opacity: 0;
+    cursor: pointer;
+    transition: opacity 0.12s linear;
+  }
+  /* 悬浮整行、或键盘焦点**可见地**落在这一行时显形。
+     这里必须用 `:has(:focus-visible)` 而不是 `:focus-within`：鼠标点完复选框，
+     焦点会留在 input 上，`:focus-within` 于是把复选框一直钉在那里 ——
+     取消勾选后也不退回序号（用户实测反馈）。`:focus-visible` 只在键盘操作时为真。 */
+  .admin-table tbody tr:hover .admin-rownum__n,
+  .admin-table tbody tr:has(:focus-visible) .admin-rownum__n {
+    opacity: 0;
+  }
+  .admin-table tbody tr:hover .admin-rownum__box,
+  .admin-table tbody tr:has(:focus-visible) .admin-rownum__box {
+    opacity: 1;
+  }
+  /* 已选中的行始终显示复选框（勾选状态不能藏起来） */
+  .admin-rownum__box:checked {
+    opacity: 1;
+  }
+  /* 长文本列（班级名最长 80 字符）截断显示，完整值在单元格的 `title` 上。 */
+  .admin-cell--ellipsis {
+    display: inline-block;
+    max-inline-size: 9rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    vertical-align: bottom;
+  }
+
+  /* 列宽策略：**只有内容列吸收富余宽度**，其余列按内容收窄。
+     原先 `table-layout: auto` 把富余宽度平均分给每一列，窄列（状态、角色、操作）
+     之间因此出现大片空白，一屏看不到几列。
+     用「内容列 `width: 100%`」而不是「其它列 `width: 1%`」：后者会让浏览器在
+     容器不够宽时把窄列压到比内容还窄，于是行内的 flex 组（`.admin-actions` /
+     `.admin-contacts`）换行，行高反而翻倍 —— 实测踩到过。 */
+  .admin-table th:not(.admin-table__grow),
+  .admin-table td:not(.admin-table__grow) {
+    white-space: nowrap;
+  }
+  .admin-table th.admin-table__grow,
+  .admin-table td.admin-table__grow {
+    inline-size: 100%;
+    white-space: normal;
+  }
+  /* ------------------------------------------- 可调列宽的表格（第七轮） */
+  /* `table-layout: fixed` 是列宽拖拽的前提：auto 布局会按内容重新分配宽度，
+     用户拖出来的数字下一帧就被浏览器改掉。只有成员表用它，其余列表保持 auto。
+     列宽拖拽的模型（相邻两列对冲、总宽恒等于容器宽）写在
+     `components/admin/useColumnResize.ts` 顶部的注释里 —— 那里面记着
+     「拖了线不动、列却变形」这个坑的完整实测数据。 */
+  .admin-table--resizable {
+    table-layout: fixed;
+  }
+  .admin-table--resizable th {
+    position: relative;
+    /* 表头文字比列宽长时（把「联系方式」拖到 54px，而四个字要 58px）也必须自己裁：
+       表头是**第一行**，它的溢出会被算进 `.admin-table-wrap` 的滚动宽度 —— 表格明明
+       铺满容器，却多出 4px 横向滚动（实测 bisect 到 thead）。裁掉之后多余的字以省略号收尾。 */
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  /* 首列的姓名要给右边的「查看」小框留出不再被压住的空间：
+     名字过长时截断显示（完整值在 `title` 上），而不是被按钮盖住一截。 */
+  .admin-membercell .admin-cell__main,
+  .admin-membercell .admin-cell__aside {
+    min-inline-size: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  /* 行高必须唯一。技能 / 角色标签自报身高 21.7px（11px 文字 × 1.5 + 上下内边距 3.2 + 描边 2），
+     比正文行框（13px × 1.5 = 19.5px）高，于是**有标签的行 29px、没标签的行 27px** ——
+     一屏里混着两种行高（实测 40 行里第 29 行是 27px）。
+     让行框比标签高就行：1.75 × 13px = 22.75px > 21.7px，行高恒为 29px，
+     而且有标签的行本来就长这样，观感零变化。
+     两个坑：① 压标签的 `min-height` 没用 —— 它的高度是内容 + 描边撑出来的，不是最小值撑的；
+     ② 选择器要写成 `.admin-table.admin-table--resizable`（两层）—— 下方后台工作区那段
+     `@media` 里的 `.admin-table td { line-height: 1.5 }` 权重相同但位置更靠后，
+     光写一个类名会被它盖掉（实测改了没生效）。 */
+  .admin-table.admin-table--resizable td {
+    line-height: 1.75;
+  }
+  /* 标签的 `line-height` 必须**自己钉住**：它是继承来的，行框一改高，标签跟着一起长
+     （实测：行框 1.5 → 标签 21.7px，行框 1.75 → 标签 24px），永远比行框高，行高就永远
+     统一不了。钉回 1.5 之后标签还是原来的 21.7px 高，行框 22.75px 稳压它一头。 */
+  .admin-table--resizable .admin-tag {
+    line-height: 1.5;
+  }
+  /* 内容比列宽长时（技能标签是一整排 nowrap 标签、联系方式是并排两串掩码号），
+     容器与容器里的每一项都要能收缩 + 自己裁：只裁外层的 `td` / 容器没用 ——
+     子元素照样比父元素宽，浏览器仍会把它算进 `.admin-table-wrap` 的滚动宽度
+     （实测：联系方式里有元素比容器宽 90px，表格明明铺满容器却多出 4~8px 横向滚动），
+     于是横向滚动条一闪、容器高度跟着变，拖动过程中表格会往上跳一下。
+     收缩之后内容以省略号收尾，比「在字符中间被切断」也好认。 */
+  .admin-table--resizable .admin-contacts,
+  .admin-table--resizable .admin-tags {
+    max-inline-size: 100%;
+    overflow: hidden;
+  }
+  .admin-table--resizable .admin-contacts > *,
+  .admin-table--resizable .admin-tags > * {
+    min-inline-size: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  /* 列宽竖线（Excel 式）：覆盖层里的一条竖条，**贯穿表头与所有行**，
+     指针在整条线上任何位置按下都能拖 —— 不再只在表头放一个小柄。
+     覆盖层 `pointer-events: none`，只有竖线本身接收指针。 */
+  .admin-table-wrap--resizable {
+    position: relative;
+  }
+  .admin-colgrid {
+    position: absolute;
+    inset-block: 0;
+    inset-inline: 0;
+    pointer-events: none;
+  }
+  /* 命中区整个放在**边界左侧**（`translate: -100%`），竖线本身贴命中区的右边缘：
+     这样每条竖线都落在表格内部，最右一列也不会把表格撑出几像素横向溢出（实测 5px）。 */
+  .admin-colline {
+    position: absolute;
+    inset-block: 0;
+    inline-size: 0.6rem;
+    translate: -100% 0;
+    cursor: col-resize;
+    touch-action: none;
+    pointer-events: auto;
+  }
+  /* 视觉上的那 1px：平时与行分隔线同色（表格本来的样子），
+     悬停 / 聚焦 / 拖动时换成强调色。 */
+  .admin-colline::after {
+    content: "";
+    position: absolute;
+    inset-block: 0;
+    inset-inline-end: 0;
+    inline-size: 1px;
+    background: var(--line);
+  }
+  .admin-colline:hover::after,
+  .admin-colline:focus-visible::after,
+  .admin-colline.is-active::after {
+    background: var(--accent);
+  }
+  .admin-colline:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+    border-radius: var(--r-base);
+  }
+  /* 单元格里的「查看」小框：悬浮整行（或键盘焦点落进这一行）时出现。
+     `opacity` 而不是 `display` —— 它始终占据原来的位置，始终可聚焦，没有出现/消失。 */
+  .admin-table--resizable td {
+    position: relative;
+    /* 列宽由用户拖出来，内容就可能比列宽长（技能标签是一整排 nowrap 的标签）。
+       不裁的话它会压进右邻列，还把 `.admin-table-wrap` 的滚动宽度撑出 25px（实测），
+       于是表格明明铺满容器却冒出横向滚动条。裁掉的完整值在单元格 / 标签的 `title` 上。 */
+    overflow: hidden;
+  }
+  .admin-peek {
+    position: absolute;
+    inset-inline-end: var(--s-2);
+    inset-block-start: 50%;
+    translate: 0 -50%;
+    padding: 0.1rem 0.45rem;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--r-base);
+    background: var(--surface-1);
+    font-size: var(--t-micro);
+    line-height: 1.5;
+    color: var(--ink-2);
+    opacity: 0;
+    cursor: pointer;
+  }
+  /* 「查看」小框：**全场最多出现一个**，跟着鼠标悬浮的那一行走（用户要求
+     「查看只跟着鼠标悬浮单元行的位置走，全场不会出现多个查看」）。
+     三条规则的顺序与权重是有意的：
+     ① 指针在表上时，先把**非悬浮行**的「查看」一律收起 —— 权重 (0,4,2) 高于下面那条
+        「按钮自己拿到焦点」的规则，所以「A 行点过查看、鼠标移到 B 行」不会再出现两个；
+     ② 悬浮的那一行显示；
+     ③ 指针不在表上时，才轮到**键盘焦点落在按钮自己身上**的那一个显示（Tab 过来看得见）。
+        这里刻意**不写** `tr:has(:focus-visible)`：焦点落在行里的复选框上时不该顺带把
+        「查看」点亮 —— 那也是「鼠标没停在这行，却冒出一个查看」。 */
+  .admin-table--resizable tbody:hover tr:not(:hover) .admin-peek {
+    opacity: 0;
+  }
+  .admin-table--resizable tbody tr:hover .admin-peek,
+  .admin-peek:focus-visible {
+    opacity: 1;
+  }
+  .admin-peek:hover {
+    border-color: var(--accent);
+    color: var(--accent-deep);
+  }
+
+  /* 单元格里的横排组不允许换行：`white-space: nowrap` 管不到 flex 容器，
+     不显式禁止的话「详情 / 重置密码」会被折成两行，行高从 30px 涨到 60px。 */
+  .admin-table .admin-actions,
+  .admin-table .admin-contacts,
+  .admin-table .admin-tags {
+    flex-wrap: nowrap;
+  }
+
+  /* ------------------------------------------- 后台的空间利用（宽屏） */
+  /* 后台页面仍然复用了官网的 `<Section variant="page-head">`，于是连带继承了官网首屏的
+     留白策略 —— 那套是给「巨型标题 + 水印 + 向下滚动」用的，在管理台里就是纯浪费。
+     实测 1440px：页头 padding-block 100px、`.shell` 左右各 60px，
+     右侧 1097px 的可用宽度里内容只占到 976px。下面三处把它收回来。 */
+  @media (min-width: 1100px) {
+    .admin-workspace.page-head {
+      padding-block: var(--s-4) var(--s-5);
+    }
+    /* 官网的 `.shell` 是「居中 + 侧边距 + max-width」三件套；后台已经有自己的左栏与栅格，
+       再套一层等于两侧各丢 60px。窄屏保留 gutter（那里还需要呼吸感）。 */
+    .admin-workspace > .shell {
+      max-width: none;
+      padding-inline: 0;
+    }
+    /* 左栏已经提供了左侧间隔，右侧留一点点，别让内容顶到视口边缘。 */
+    .admin-shell__main {
+      padding-inline-end: var(--s-4);
+    }
+  }
+
+  /* ------------------------------------------------- 后台密度（宽屏） */
+  /* 管理台是**密集数据界面**，不是官网页面。官网那套尺寸（`.btn` 46px、`.field__input`
+     46px / 16px 字号、表头表尾大留白）在官网是对的 —— 那里要的是呼吸感与触控面积；
+     搬到后台就变成：一屏放不下 8 行记录、每个控件都盯着你看。参考邮箱类客户端把密度提上来。
+
+     **只在 ≥760px 生效**：窄屏仍然是手指操作，`.field__input` 的 16px 也兼着
+     「iOS Safari 聚焦时不放大整页」这个作用，不能一起压小。
+     作用域收在 `.admin-workspace` 与 `.admin-*` 里，官网与成员端不受影响；
+     详情窗口 Portal 到 body，因此单独列 `.admin-modal`。 */
+  @media (min-width: 760px) {
+    /* 页头：标题从 `--t-xl`（最大 2.75rem）降到 `--t-lg`，说明文字降一档 */
+    .admin-workspace__title {
+      font-size: var(--t-lg);
+      line-height: 1.25;
+    }
+    .admin-workspace__lead {
+      margin-block-start: var(--s-1);
+      font-size: var(--t-sm);
+    }
+    .admin-workspace__header {
+      gap: var(--s-2);
+    }
+    .admin-workspace__content {
+      gap: var(--s-4);
+    }
+
+    /* 按钮：46px → 30px；内边距与图标间距同步收紧 */
+    /* 30px 还是偏高：表格行高由最高的单元格撑开，按钮每矮 6px 一屏就多出一行。
+       24px 配 13px 字（邮箱客户端就是这个密度），鼠标操作够用，窄屏不受影响。 */
+    .admin-workspace .btn,
+    .admin-modal .btn {
+      gap: var(--s-2);
+      min-height: 1.5rem;
+      padding: 0.15rem 0.55rem;
+      font-size: var(--t-sm);
+      letter-spacing: 0.02em;
+    }
+    .admin-workspace .btn svg,
+    .admin-modal .btn svg {
+      inline-size: 0.875rem;
+      block-size: 0.875rem;
+    }
+
+    /* 表单控件：46px → 30px；标签与提示各降一档 */
+    .admin-workspace .field__input,
+    .admin-modal .field__input {
+      min-height: 1.75rem;
+      padding: 0.2rem 0.5rem;
+      font-size: var(--t-sm);
+    }
+    .admin-workspace .field__label,
+    .admin-modal .field__label {
+      font-size: var(--t-xs);
+      font-weight: 650;
+    }
+    .admin-workspace .field__hint,
+    .admin-modal .field__hint {
+      font-size: var(--t-micro);
+      line-height: 1.5;
+    }
+    /* 后台的表单不靠一行一个字段撑开，字段之间的间距也收紧 */
+    .admin-workspace .field,
+    .admin-modal .field {
+      gap: 0.2rem;
+    }
+
+    /* 卡片：内边距从 clamp(1.25–1.75rem) 降到 1rem，内部节奏降一档 */
+    .admin-panel {
+      gap: var(--s-3);
+      padding: var(--s-4);
+    }
+    .admin-panel__title {
+      font-size: 0.9375rem;
+    }
+
+    /* 筛选栏与批量条 */
+    .admin-filters {
+      gap: var(--s-2);
+      padding: var(--s-3);
+    }
+    /* 筛选栏改成 flex（邮箱客户端的工具栏就是这个排布）：
+       控件按内容占宽、不互相拉开；关键字框拿双倍宽；「清除筛选」推到最右。
+       用 grid 的 `auto-fit` 时每一项都会被拉成等宽，页面越宽控件之间的空隙越大 ——
+       正是「字段和字段之间空白太多」的来源。
+       基准宽度取 8.25rem：维修审核有 6 个筛选字段（关键字 + 4 个下拉 + 2 个日期），
+       按 10rem 算一行放不下，会折出「结束日期」单独一行 ——
+       同一套筛选栏在成员管理是一行、在维修审核是两行，看起来像两个后台。 */
+    .admin-filters__row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: end;
+      gap: var(--s-2);
+    }
+    .admin-filters__row > .field {
+      flex: 1 1 8.25rem;
+      min-inline-size: 0;
+    }
+    .admin-filters__row > .field:first-child {
+      flex: 2 1 12rem;
+    }
+    .admin-filters__row > .btn {
+      flex: 0 0 auto;
+    }
+    /* 最后一个按钮（「清除筛选」）靠右，与左侧的筛选控件分开 */
+    .admin-filters__row > .btn:last-child {
+      margin-inline-start: auto;
+    }
+    .admin-filters__row > .signup__actions {
+      margin-inline-start: auto;
+    }
+
+    /* 表格：行高从 ~44px 压到 ~30px。后台一屏要看到十几行，行高比「留白」重要得多。 */
+    .admin-table th,
+    .repair-table th {
+      padding: 0.3rem var(--s-2);
+    }
+    .admin-table td,
+    .repair-table td {
+      padding: 0.2rem var(--s-2);
+      font-size: var(--t-sm);
+      line-height: 1.5;
+    }
+    .admin-table__empty {
+      padding: var(--s-5) var(--s-4);
+    }
+    .admin-actions {
+      gap: var(--s-1);
+    }
+    /* 表格里的标签（状态 / 角色）压小一点，别把行撑高 */
+    .admin-workspace .repair-tag,
+    .admin-workspace .admin-tag {
+      min-height: 1.35rem;
+      padding: 0.1rem 0.4rem;
+      font-size: var(--t-micro);
+    }
+    .admin-workspace .repair-table__flags {
+      margin-block-start: 0;
+      font-size: var(--t-micro);
+    }
+    /* 联系方式这类「两行小字」在宽屏改成并排，省一半行高。
+       `nowrap`：`white-space: nowrap` 管不到 flex 容器，不显式禁止会被折成两行。 */
+    .admin-workspace .admin-contacts {
+      display: inline-flex;
+      gap: 0.5rem;
+      flex-wrap: nowrap;
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* 侧栏：条目高度从 ~40px 降到 ~32px */
+    .admin-nav {
+      gap: var(--s-3);
+      padding-block: var(--s-3) var(--s-4);
+    }
+    .admin-nav__brand-cn {
+      font-size: var(--t-base);
+    }
+    .admin-nav__link {
+      padding: 0.35rem 0.6rem;
+      font-size: var(--t-xs);
+    }
+
+    /* 详情窗口里的段落节奏同步收紧 */
+    .admin-modal__facts {
+      gap: var(--s-2);
+    }
+    .admin-modal__body {
+      gap: var(--s-3);
+    }
+  }
+
+  @media (max-width: 759px) {
+    .admin-workspace__header > .btn {
+      width: 100%;
+      justify-content: center;
+    }
+    .admin-pagination {
+      justify-content: space-between;
+    }
+    /* 窄屏窗口铺满可用高度：详情里有两三个表单，留白比留边更重要。 */
+    .admin-modal {
+      padding: var(--s-3);
+    }
+    .admin-modal__window {
+      block-size: 100%;
+      max-block-size: none;
+    }
+    /* 窄屏顶部有固定顶栏（`.topbar`），反馈条要让开它，否则压住品牌与「索引」按钮 */
+    .admin-toast {
+      inset-block-start: 4.5rem;
+    }
+    /* 拖动手柄在触屏上没有意义（HTML5 拖放根本不触发），而窄屏表格已经降级成
+       「一字段一行」的卡片，留着它只会在每张卡片顶部多占一行。
+       顺序调整这条路交给同行的 ↑ ↓ 按钮。
+       选择器要写成 `td.admin-table__grip`：卡片布局里的 `.admin-table td` 是
+       `display: grid`，权重比单个类名高，光写 `.admin-table__grip` 会被它盖掉
+       （实测：改了没生效，卡片顶上还是那六个点）。 */
+    .admin-table td.admin-table__grip {
+      display: none;
+    }
+    /* 行首的六点手柄同样收起来：触屏没有「长按拖动选行」这一套（指针事件在滚动里
+       会被浏览器抢走），卡片布局里它只是在复选框前面多一个没用的点阵。 */
+    .admin-rowgrip {
+      display: none;
+    }
+    /* 触屏没有「悬浮」：列宽竖线收起来，「查看」小框改成卡片里的常驻按钮。 */
+    .admin-colgrid {
+      display: none;
+    }
+    /* 触屏没有悬浮：复选框直接常显，别让它藏在 hover 后面。 */
+    .admin-rownum__n {
+      opacity: 0;
+      visibility: hidden;
+    }
+    .admin-rownum__box {
+      opacity: 1;
+    }
+    .admin-peek {
+      position: static;
+      translate: none;
+      opacity: 1;
+      margin-top: var(--s-2);
     }
   }
 }

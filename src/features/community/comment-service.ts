@@ -71,7 +71,10 @@ function notFound(): never {
 export const repairCommentService: RepairCommentServiceContract = {
   async list(recordId, input, actor) {
     requirePermission(actor, "comment:read");
-    const self = await repairRepository.activeMemberForUser(actor.userId);
+    // 可空解析：纯管理员（只有 ADMIN 角色、没有成员档案）在 M6 的记录详情窗口里
+    // 也要能读评论 —— 那里是「评论管理 → 所属记录」的落点。
+    // `self` 只用于计算每条评论的 `canDelete`；为 null 时该字段退化为按权限判断。
+    const self = await repairRepository.findActiveMemberForUser(actor.userId);
     const record = await repairRepository.getById(recordId);
     assertCanReadRepair(actor, record);
 
@@ -109,11 +112,12 @@ export const repairCommentService: RepairCommentServiceContract = {
             orderBy: [{ createdAt: "asc" }, { id: "asc" }],
           });
 
+    const selfId = self?.id ?? null;
     const items = pageRoots.map((root) => {
-      const view = toCommentView(root, actor, self.id);
+      const view = toCommentView(root, actor, selfId);
       view.replies = replies
         .filter((reply) => reply.parentCommentId === root.id)
-        .map((reply) => toCommentView(reply, actor, self.id));
+        .map((reply) => toCommentView(reply, actor, selfId));
       return view;
     });
     return { items, pagination: paginationMeta(input, total) };
@@ -189,14 +193,17 @@ export const repairCommentService: RepairCommentServiceContract = {
   },
 
   async softDelete(recordId, commentId, actor) {
-    const self = await repairRepository.activeMemberForUser(actor.userId);
+    // 可空解析而不是 `activeMemberForUser`：纯管理员（只有 ADMIN 角色、没有成员档案）
+    // 也要能删除违规评论，抛 `MEMBER_REQUIRED` 会把管理能力一起挡掉。
+    // 没有档案时 `isAuthor` 恒为 false，于是必然走 `comment:delete` —— 只有管理员持有它。
+    const self = await repairRepository.findActiveMemberForUser(actor.userId);
     const record = await repairRepository.getById(recordId);
     assertCanReadRepair(actor, record);
     const comment = await getDb().repairComment.findFirst({
       where: { id: commentId, repairRecordId: recordId, deletedAt: null },
     });
     if (!comment) notFound();
-    const isAuthor = comment.authorMemberProfileId === self.id;
+    const isAuthor = self !== null && comment.authorMemberProfileId === self.id;
     if (!isAuthor) requirePermission(actor, "comment:delete");
     else requirePermission(actor, "comment:create");
 

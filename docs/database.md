@@ -100,6 +100,9 @@ Route、调用方、Contract、测试与文档；不能留下字段、Enum、错
 - `repair_favorites` 再次收藏恢复同一行并刷新 `created_at` / `updated_at`；
   唯一约束 `(member_profile_id, repair_record_id)` 保证并发下不会产生重复关联。
 - 通知软删除不改 `status` / `read_at`。评论创建、删除与收藏增减与 `AuditLog` 同事务。
+- 公开内容与展示策略是**单行配置**（`public_content_settings`，主键固定为 `public-content`），
+  写入走 upsert 而不是 insert；表里没有行时按契约默认值（全部关闭 + 仅昵称）处理，
+  读不到配置**不等于**可以公开。
 
 M3 引入 `skills` 与 `user_skills` 两张表（Migration `20260917100000_p2_m3_member_dashboard`）。
 两者都不含 QQ 或任何联系方式，成员侧的引用键始终是 `member_profiles.id`。
@@ -108,6 +111,15 @@ M4 引入 `repair_comments`、`comment_mentions`、`repair_favorites`、`notific
 （Migration `20260918120000_p2_m4_community`）。四张表均为 InnoDB、`utf8mb4_unicode_ci`，
 外键指向 `member_profiles` / `repair_records` / `repair_comments`，`ON DELETE RESTRICT`，
 不含 QQ、手机号或学号。
+
+M6 批次 2 引入 `public_content_settings`
+（Migration `20260923100000_p2_m6_public_content_settings`）：InnoDB、`utf8mb4_unicode_ci`，
+主键 `id CHAR(32)` 本身就是单行约束；`ranking_display_name` 带 CHECK 约束，只允许
+`REAL_NAME` / `NICKNAME` / `HIDDEN`；`updated_by_user_id` 指向 `users`，`ON DELETE RESTRICT`，
+用于回答「这份对外策略是谁在什么时候改的」。该表**不含**任何成员联系方式，
+也不挂 `member_profiles` / `repair_records` 外键 —— 它是全局策略，不属于任何成员或记录。
+M6 批次 2 的其余能力（技能标签库 CRUD、评论管理、邀请码列表、审计查询、报名导出）
+全部建立在既有表上，没有新增表或列。
 
 完整字段与状态语义见 `docs/contracts/data-contract.md`。
 

@@ -38,6 +38,32 @@ export function draftInput(body: Record<string, unknown>) {
 export function idempotencyKey(request: Request): string {
   return request.headers.get("idempotency-key") ?? "";
 }
+/**
+ * 请求体里的必填布尔字段。
+ *
+ * `RepairFlagsInput` 是**整体替换**语义（两个标记一起提交），所以缺字段不能静默当 false ——
+ * 那会让「只想改一个标记」的调用把另一个标记悄悄清掉。缺字段或类型不对一律 400。
+ */
+export function requiredBool(body: Record<string, unknown>, name: string): boolean {
+  const value = body[name];
+  if (typeof value !== "boolean") throw new AppError("VALIDATION_FAILED", `${name} 必须是布尔值`);
+  return value;
+}
+/** 请求体里的必填字符串字段。空串视为缺失。 */
+export function requiredString(body: Record<string, unknown>, name: string): string {
+  const value = body[name];
+  if (typeof value !== "string" || !value.trim())
+    throw new AppError("VALIDATION_FAILED", `${name} 不能为空`);
+  return value;
+}
+/** 请求体里的字符串数组字段（批量操作入参）。 */
+export function stringArray(body: Record<string, unknown>, name: string): string[] {
+  const value = body[name];
+  if (!Array.isArray(value)) throw new AppError("VALIDATION_FAILED", `${name} 必须是数组`);
+  const items = value.map((item) => (typeof item === "string" ? item.trim() : ""));
+  if (items.some((item) => !item)) throw new AppError("VALIDATION_FAILED", `${name} 含非法元素`);
+  return [...new Set(items)];
+}
 function value(params: URLSearchParams, key: string) {
   return params.get(key) || undefined;
 }

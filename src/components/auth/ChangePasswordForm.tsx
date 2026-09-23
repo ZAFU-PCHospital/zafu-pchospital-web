@@ -2,6 +2,7 @@
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
+import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from "@/lib/security/password-policy";
 export function ChangePasswordForm() {
   const router = useRouter();
   const [problem, setProblem] = useState("");
@@ -30,7 +31,7 @@ export function ChangePasswordForm() {
     router.refresh();
   }
   return (
-    <form className="signup__form" onSubmit={submit}>
+    <form method="post" className="signup__form" onSubmit={submit}>
       {[
         ["currentPassword", "当前密码", "current-password"],
         ["newPassword", "新密码", "new-password"],
@@ -47,13 +48,15 @@ export function ChangePasswordForm() {
             name={name}
             type="password"
             autoComplete={autoComplete}
-            minLength={12}
-            maxLength={128}
+            minLength={PASSWORD_MIN_LENGTH}
+            maxLength={PASSWORD_MAX_LENGTH}
             required
           />
         </div>
       ))}
-      <p className="field__hint">密码长度为 12–128 个字符；修改后其他登录会话将立即失效。</p>
+      <p className="field__hint">
+        {`密码长度为 ${PASSWORD_MIN_LENGTH}–${PASSWORD_MAX_LENGTH} 个字符；修改后其他登录会话将立即失效。`}
+      </p>
       <div className="signup__actions">
         <Button type="submit" variant="solid" disabled={busy}>
           {busy ? "保存中" : "修改密码"}

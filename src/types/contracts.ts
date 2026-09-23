@@ -82,6 +82,50 @@ export type AnalyticsScope = ValueOf<typeof AnalyticsScope>;
 export type RankingMetric = ValueOf<typeof RankingMetric>;
 export type AnalyticsStatus = ValueOf<typeof AnalyticsStatus>;
 
+/* ------------------------------------------------------------------ M6 管理后台 */
+
+/** 导出格式。两者共用同一条数据路径（`RepairExportRow[]`），只在出口处分叉。 */
+export const ExportFormat = ["CSV", "XLSX"] as const;
+export type ExportFormat = ValueOf<typeof ExportFormat>;
+
+/**
+ * 单次导出行数上限。超过即拒绝（`EXPORT_ROW_LIMIT_EXCEEDED`），**不得**静默截断 ——
+ * 静默截断会让管理员以为拿到了全量数据。
+ */
+export const EXPORT_MAX_ROWS = 20000;
+/** 批量操作单次上限。逐条调用既有 Service，因此上限也是事务次数的上限。 */
+export const ADMIN_BATCH_LIMIT = 50;
+
+/** `GET /api/v1/admin/repairs/export` 的入参：与列表完全相同的筛选，去掉分页。 */
+export type RepairExportInput = Omit<RepairListInput, "page" | "pageSize">;
+
+/** 导出行。列顺序即表头顺序，CSV 与 XLSX 共用。 */
+export type RepairExportRow = {
+  repairDate: string;
+  memberName: string;
+  categoryName: string;
+  result: string;
+  durationMinutes: string;
+  status: string;
+  createdAt: string;
+  /** 记录 ID 与照片 URL，按需求「图片不嵌入 Excel，只输出链接或记录 ID」。 */
+  repairRecordId: string;
+  photoUrls: string;
+};
+
+export type RepairExportResult = {
+  format: ExportFormat;
+  fileName: string;
+  contentType: string;
+  /**
+   * 导出字节流。用 `Uint8Array<ArrayBuffer>` 而不是 Node 的 `Buffer`：
+   * 契约文件会被客户端组件间接引用，且 `Response` 的 `BodyInit` 只接受
+   * `ArrayBuffer` 支撑的视图（与 `lib/security/secrets.ts` 的 `digest` 同一处理）。
+   */
+  body: Uint8Array<ArrayBuffer>;
+  rowCount: number;
+};
+
 export const Permission = [
   "join:submit",
   "join:read",
@@ -111,6 +155,18 @@ export const Permission = [
   "favorite:manage",
   "notification:read",
   "analytics:read_internal",
+  // M6 管理后台：导出会把成员姓名、学号等写进站外文件，因此单列一个权限码，
+  // 不复用 repair:review —— 维修审核与「把数据带出系统」是两件事。
+  "data:export",
+  // M6 批次 2。
+  // `comment:moderate` 不复用 `comment:read`：成员也有 `comment:read`，而管理端评论列表
+  // 是**跨记录**的（不过 `assertCanReadRepair`），拿成员权限放行会绕过记录可见性。
+  "comment:moderate",
+  // 技能标签库与故障分类是两类资源，各自管理；不复用 `member:manage`
+  // （那是「给某个成员分配标签」，和「维护标签库本身」不是一件事）。
+  "skill:manage",
+  // 公开统计展示策略决定官网对外展示什么，与站内管理操作分开。
+  "settings:manage",
 ] as const;
 export type Permission = ValueOf<typeof Permission>;
 
@@ -303,6 +359,87 @@ export type MemberView = {
 };
 export type MemberMutationResult = { member: MemberView; initializationSecret?: string };
 
+/* --------------------------------------------------- M6 成员管理（管理端） */
+
+/**
+ * 管理端成员列表筛选。
+ * `query` 只做「姓名 / 昵称 / 学号 / 班级 / 已脱敏 QQ / 手机号」的模糊匹配，
+ * **不返回明文联系方式** —— 明文只在成员详情里出现，且读取要写审计。
+ */
+export type MemberListInput = PaginationInput & {
+  query?: string;
+  status?: MemberStatus;
+  role?: RoleCode;
+};
+
+/** 列表条目。QQ 与手机号一律脱敏（`maskQq` / `maskPhone`）。 */
+export type MemberListEntry = {
+  id: string;
+  userId: string;
+  realName: string;
+  nickname: string | null;
+  studentId: string | null;
+  className: string | null;
+  status: MemberStatus;
+  roles: RoleCode[];
+  /** 账号是否被停用。`memberProfile.status` 为 `REVOKED` 时用户仍可能保留管理员角色。 */
+  userStatus: UserStatus;
+  /**
+   * 技能标签（第六轮验收：成员表要能直接看到，不必为此打开详情）。
+   *
+   * 只带展示需要的三个字段，顺序与成员端一致（按标签库的 `sortOrder`）；
+   * 完整标签库在 `/api/v1/admin/skills`。**不是敏感信息**，与 QQ / 手机号不同 ——
+   * 那两个仍然只在详情接口里给明文。
+   */
+  skills: MemberSkillTag[];
+  qqMasked: string | null;
+  phoneMasked: string | null;
+  /** 正式统计口径：`APPROVED AND deletedAt IS NULL` 的记录数。 */
+  approvedRepairCount: number;
+  /** 同一口径的维修总时长（分钟）。列表里与次数同格显示，明细见成员详情的统计。 */
+  approvedRepairMinutes: number;
+  joinedAt: string;
+  version: number;
+};
+
+/** 成员身上的一枚技能标签（列表用；`isActive` 为 false 表示该标签已被停用）。 */
+export type MemberSkillTag = { id: string; name: string; isActive: boolean };
+
+export type MemberListResult = { items: MemberListEntry[]; pagination: PaginationMeta };
+
+/** 成员详情。管理端**唯一**返回 QQ / 手机号明文的位置，读取必须写审计。 */
+export type MemberDetail = MemberListEntry & {
+  qq: string | null;
+  phone: string | null;
+  skills: SkillView[];
+};
+
+export type UpdateMemberInput = {
+  realName?: string;
+  studentId?: string | null;
+  className?: string | null;
+  nickname?: string | null;
+  /** 乐观锁：必须回传列表/详情里拿到的版本号。 */
+  version: number;
+};
+
+/** 设置角色。必须是角色的**全量集合**，不是增量。 */
+export type SetMemberRolesInput = { roles: readonly RoleCode[] };
+
+export type MemberBatchToggleInput = {
+  memberIds: readonly string[];
+  enabled: boolean;
+};
+
+/**
+ * 批量结果。逐条调用既有 `setEnabled`，因此**允许部分成功**，
+ * 每条失败都带稳定错误码，界面必须逐条展示而不是只报一句“失败”。
+ */
+export type MemberBatchToggleResult = {
+  succeeded: string[];
+  failed: { memberId: string; code: string; message: string }[];
+};
+
 export type RepairPhotoView = {
   id: string;
   contentUrl: string;
@@ -319,6 +456,13 @@ export type RepairCategoryView = {
   description: string | null;
   sortOrder: number;
   isActive: boolean;
+};
+
+/** 管理端分类视图：多一个引用计数，用来回答「能不能停用 / 有没有人用」。 */
+export type RepairCategoryAdminView = RepairCategoryView & {
+  /** 引用它的未软删除维修记录条数。> 0 说明该分类已有历史数据，只能停用不能物理删除。 */
+  usedByRepairCount: number;
+  createdAt: string;
 };
 export type RepairMemberOption = { id: string; name: string };
 export type RepairTimelineView = {
@@ -378,6 +522,37 @@ export type ReviewRepairInput = {
   note?: string;
   idempotencyKey: string;
 };
+
+/* --------------------------------------------------- M6 维修管理（管理端） */
+
+/**
+ * 管理端修改异常数据。
+ *
+ * 与成员自己的 `UpdateRepairInput` 有三处不同：
+ * 1. 允许修改任意状态（含 `APPROVED`）的记录 —— 需求 §36 的「修改异常数据」；
+ * 2. `reason` 必填，写入时间线与审计，回答「为什么改」；
+ * 3. **不改状态**：管理员改数据不触发重新审核，`APPROVED` 改动后仍是 `APPROVED`。
+ *    统计口径始终是「当前值的唯一来源」，不引入快照表，因此历史统计只会随当前值重算，
+ *    不会出现两份互相矛盾的数据。改动前后的差异留在 `AuditLog.before/after` 与时间线里。
+ */
+export type RepairAdminUpdateInput = RepairDraftFields & {
+  version: number;
+  reason: string;
+};
+
+export type RepairBatchReviewInput = {
+  recordIds: readonly string[];
+  decision: RepairReviewDecision;
+  note?: string;
+  /** 批量键；逐条派生成 `{key}:{recordId}` 作为各记录自己的幂等键。 */
+  idempotencyKey: string;
+};
+
+/** 批量审核逐条结果，允许部分成功。 */
+export type RepairBatchReviewResult = {
+  succeeded: string[];
+  failed: { recordId: string; code: string; message: string }[];
+};
 export type RepairFlagsInput = { isDifficult: boolean; isTypical: boolean };
 export type RepairListInput = PaginationInput & {
   memberId?: string;
@@ -391,17 +566,226 @@ export type RepairListInput = PaginationInput & {
   query?: string;
 };
 export type RepairListResult = { items: RepairView[]; pagination: PaginationMeta };
+/**
+ * 新增故障分类。
+ *
+ * `code` 与 `sortOrder` 都**改由系统生成**（M6 第三轮验收）：
+ * - `code` 是稳定标识，管理员不该为了加一个「散热清灰」去编一个英文 code，
+ *   留空时由 `stableCodeFromName` 按名称生成（见 `src/lib/stable-code.ts`）；
+ * - `sortOrder` 留空时排到末尾，顺序由列表里的「上移 / 下移」调整
+ *   （让用户手填一个 10/20/30 的整数去控制顺序，是把系统的活儿推给人）。
+ */
 export type CreateRepairCategoryInput = {
-  code: string;
+  code?: string;
   name: string;
   description?: string | null;
   sortOrder?: number;
 };
+
+/** 排序调整方向。一次只挪一格，避免出现「拖到第 3 位」这类需要猜位次的输入。 */
+export const ReorderDirection = ["UP", "DOWN"] as const;
+export type ReorderDirection = ValueOf<typeof ReorderDirection>;
 export type UpdateRepairCategoryInput = {
   name?: string;
   description?: string | null;
   sortOrder?: number;
 };
+
+// ---------------------------------------------------------------------------
+// M6 批次 2（管理端）：技能标签库 / 评论管理 / 邀请码 / 审计 / 公开统计配置 / 报名导出
+// ---------------------------------------------------------------------------
+
+/** 技能标签库管理视图。`usedByMemberCount` 只统计**当前生效**的成员关联，回答「停用会不会影响人」。 */
+export type SkillAdminView = SkillView & { usedByMemberCount: number };
+
+/** 新增技能标签。`code` / `sortOrder` 同 {@link CreateRepairCategoryInput}，由系统生成。 */
+export type CreateSkillInput = {
+  code?: string;
+  name: string;
+  description?: string | null;
+  sortOrder?: number;
+};
+
+export type UpdateSkillInput = {
+  name?: string;
+  description?: string | null;
+  sortOrder?: number;
+};
+
+/**
+ * 评论管理列表的删除态筛选。
+ *
+ * 默认只看未删除的；`DELETED` 用来复核「刚才那条是不是真的删掉了」——
+ * 软删除后评论仍在库里，界面若完全看不见，管理员无法确认删除结果。
+ */
+export const CommentModerationFilter = ["ACTIVE", "DELETED", "ALL"] as const;
+export type CommentModerationFilter = ValueOf<typeof CommentModerationFilter>;
+
+export type AdminCommentListInput = PaginationInput & {
+  query?: string;
+  recordId?: string;
+  authorMemberProfileId?: string;
+  deleted?: CommentModerationFilter;
+  createdFrom?: string;
+  createdTo?: string;
+};
+
+/**
+ * 管理端评论条目。
+ *
+ * 与成员端的 `RepairCommentView` 不同：这里**面向审核**，因此带上所属记录的最小摘要
+ * （成员名 / 维修日期 / 审核状态）与回复、提及计数，且**不**返回 `canDelete` 一类
+ * 以当前成员视角计算的字段 —— 管理端的动作由权限决定，不由条目字段决定。
+ */
+export type AdminCommentEntry = {
+  id: string;
+  body: string;
+  author: MemberRef;
+  record: {
+    id: string;
+    memberName: string;
+    repairDate: string | null;
+    status: RepairStatus;
+  };
+  parentCommentId: string | null;
+  replyCount: number;
+  mentionCount: number;
+  createdAt: string;
+  deletedAt: string | null;
+};
+
+export type AdminCommentListResult = {
+  items: AdminCommentEntry[];
+  pagination: PaginationMeta;
+};
+
+/** 邀请码管理列表入参。`status` 是**生效状态**（含派生的过期/用尽），不是存储状态。 */
+export type InviteCodeListInput = PaginationInput & {
+  status?: InviteCodeEffectiveStatus;
+  query?: string;
+};
+
+/**
+ * 邀请码管理视图。
+ *
+ * `displayPrefix` 是明文的前 8 位（列表里用于人工核对），**完整明文只在创建响应里出现一次**：
+ * 库里只存 `codeDigest`，任何列表都取不回完整邀请码。绑定信息按 PII 规则脱敏。
+ */
+export type InviteCodeAdminView = InviteCodeView & {
+  boundQqMasked: string | null;
+  boundPhoneMasked: string | null;
+  createdAt: string;
+  revokedAt: string | null;
+};
+
+export type InviteCodeListResult = {
+  items: InviteCodeAdminView[];
+  pagination: PaginationMeta;
+};
+
+export const AuditResult = ["SUCCESS", "FAILURE"] as const;
+export type AuditResult = ValueOf<typeof AuditResult>;
+
+export type AuditLogListInput = PaginationInput & {
+  action?: string;
+  actorUserId?: string;
+  targetType?: string;
+  targetId?: string;
+  requestId?: string;
+  result?: AuditResult;
+  createdFrom?: string;
+  createdTo?: string;
+};
+
+/**
+ * 审计条目。
+ *
+ * `beforeSummary` / `afterSummary` 在**写入时**就已经过 `redactAuditSummary` 脱敏
+ * （凭据类字段整条丢弃、QQ / 手机号打码），因此读取时不再二次处理；
+ * 也正因如此，「查看审计」本身不再写一条审计 —— 那会变成自我增殖的记录流。
+ */
+export type AuditLogEntry = {
+  id: string;
+  actorType: AuditActorType;
+  actorUserId: string | null;
+  /** 操作者展示名（昵称 / 实名 / 账号名回退）。系统写入为 `null`。 */
+  actorName: string | null;
+  action: string;
+  targetType: string;
+  targetId: string;
+  requestId: string;
+  result: AuditResult;
+  errorCode: string | null;
+  beforeSummary: unknown;
+  afterSummary: unknown;
+  createdAt: string;
+};
+
+export type AuditLogListResult = {
+  items: AuditLogEntry[];
+  pagination: PaginationMeta;
+};
+
+/** 审计动作筛选项：按出现次数降序，供筛选下拉使用（避免管理员手打动作名）。 */
+export type AuditActionOption = {
+  action: string;
+  count: number;
+};
+
+/** 公开排行榜的展示名策略（需求 §33 / §74）。QQ、学号、后台 ID 一律不可公开。 */
+export const RankingDisplayNameMode = ["REAL_NAME", "NICKNAME", "HIDDEN"] as const;
+export type RankingDisplayNameMode = ValueOf<typeof RankingDisplayNameMode>;
+
+/**
+ * 公开内容与展示策略（`/admin/settings`，需求 §31 / §32 / §74）。
+ *
+ * 单行配置表，**默认全部关闭**：在管理员明确打开之前，官网首页不展示任何真实统计，
+ * 不会因为「M7 还没做」而意外把内部数据暴露出去。
+ */
+export type PublicContentSettings = {
+  /** 首页展示累计维修设备数（需求 §31）。 */
+  publicRepairStatsEnabled: boolean;
+  /** 首页额外展示本学期维修数与累计维修时长（需求 §31 的辅助数据）。 */
+  publicRepairStatsDetailEnabled: boolean;
+  /** 首页展示简化排行榜（需求 §32）。 */
+  publicRankingsEnabled: boolean;
+  /** 排行榜展示名：真实姓名 / 仅昵称 / 隐藏（需求 §74）。 */
+  rankingDisplayName: RankingDisplayNameMode;
+  updatedAt: string | null;
+  updatedBy: { userId: string; name: string } | null;
+};
+
+export type UpdatePublicContentSettingsInput = {
+  publicRepairStatsEnabled: boolean;
+  publicRepairStatsDetailEnabled: boolean;
+  publicRankingsEnabled: boolean;
+  rankingDisplayName: RankingDisplayNameMode;
+};
+
+/**
+ * 报名数据导出行（需求 §4.4「查看、筛选和导出新成员报名数据」）。
+ *
+ * 与维修导出分开列模型：报名导出**故意包含 QQ 与手机号明文** —— 招募联系本人需要它，
+ * 而需求 §34 对维修导出的要求是可核对的记录 ID，两者口径不同。
+ * 因此这条路径使用独立权限与审计动作，不复用 `repair.exported`。
+ */
+export type JoinApplicationExportRow = {
+  ticketNo: string;
+  recruitmentCycle: string;
+  realName: string;
+  qq: string;
+  phone: string;
+  status: string;
+  provisionStatus: string;
+  preferredDirection: string;
+  submittedAt: string;
+  lastReviewedAt: string;
+  applicationId: string;
+};
+
+export type JoinApplicationExportInput = Omit<JoinApplicationListInput, "page" | "pageSize">;
+
+export type JoinApplicationExportResult = RepairExportResult;
 
 // ---------------------------------------------------------------------------
 // M3 成员工作台与个人主页
@@ -796,6 +1180,70 @@ export interface MemberDashboardServiceContract {
 export interface MemberAnalyticsServiceContract {
   /** 本人正式统计：累计/本月/学期/时长 + 分类分布 + 12 个月趋势。 */
   getMemberAnalytics(actor: AuthorizedActor): Promise<MemberAnalytics>;
+  /**
+   * 管理端指定成员统计（M6「查看成员统计」）。
+   *
+   * 与被上面的本人版本**口径完全一致**（同一 Repository 函数），唯一区别是
+   * 允许显式传入 `memberProfileId`，因此必须单独校验 `analytics:read_internal`，
+   * 且**不得**把本人版本改成接受 `memberProfileId` —— 那会让任何成员遍历他人统计。
+   */
+  getMemberAnalyticsFor(memberProfileId: string, actor: AuthorizedActor): Promise<MemberAnalytics>;
+}
+
+/** M6 成员管理（管理端）。与成员自助的 `MemberProfileServiceContract` 分开，避免权限串味。 */
+export interface MemberServiceContract {
+  create(input: CreateMemberInput, actor: AuthorizedActor): Promise<MemberMutationResult>;
+  list(input: MemberListInput, actor: AuthorizedActor): Promise<MemberListResult>;
+  getDetail(memberId: string, actor: AuthorizedActor): Promise<MemberDetail>;
+  update(memberId: string, input: UpdateMemberInput, actor: AuthorizedActor): Promise<MemberView>;
+  setEnabled(memberId: string, enabled: boolean, actor: AuthorizedActor): Promise<MemberView>;
+  batchSetEnabled(
+    input: MemberBatchToggleInput,
+    actor: AuthorizedActor,
+  ): Promise<MemberBatchToggleResult>;
+  resetPassword(memberId: string, actor: AuthorizedActor): Promise<MemberMutationResult>;
+  /**
+   * 拖动排序：把 `memberIds`（1..50 位，保持它们之间的原有先后）整体挪到 `beforeId` 之前
+   * （`null` = 挪到末尾）。落在原位时幂等成功（返回 `false`，不写审计）；任一位成员不存在则 404。
+   */
+  move(memberIds: string[], beforeId: string | null, actor: AuthorizedActor): Promise<boolean>;
+  setRoles(
+    memberId: string,
+    input: SetMemberRolesInput,
+    actor: AuthorizedActor,
+  ): Promise<MemberListEntry>;
+  setSkills(
+    memberId: string,
+    input: UpdateMemberSkillsInput,
+    actor: AuthorizedActor,
+  ): Promise<UpdateMemberSkillsResult>;
+}
+
+/** M6 维修管理（管理端审核之外的部分：改数据、软删除、批量审核）。 */
+export interface RepairAdminServiceContract {
+  updateFlags(
+    recordId: string,
+    input: RepairFlagsInput,
+    actor: AuthorizedActor,
+  ): Promise<RepairView>;
+  updateRecord(
+    recordId: string,
+    input: RepairAdminUpdateInput,
+    actor: AuthorizedActor,
+  ): Promise<RepairView>;
+  batchReview(
+    input: RepairBatchReviewInput,
+    actor: AuthorizedActor,
+  ): Promise<RepairBatchReviewResult>;
+}
+
+/** M6 数据导出。 */
+export interface RepairExportServiceContract {
+  export(
+    input: RepairExportInput,
+    format: ExportFormat,
+    actor: AuthorizedActor,
+  ): Promise<RepairExportResult>;
 }
 
 export interface RankingServiceContract {
@@ -824,6 +1272,7 @@ export interface JoinApplicationServiceContract {
 }
 
 export interface InviteCodeServiceContract {
+  list(input: InviteCodeListInput, actor: AuthorizedActor): Promise<InviteCodeListResult>;
   create(input: CreateInviteCodeInput, actor: AuthorizedActor): Promise<CreateInviteCodeResult>;
   update(
     inviteCodeId: string,
@@ -835,6 +1284,48 @@ export interface InviteCodeServiceContract {
     input: RedeemInviteCodeInput,
     context: PublicRequestContext,
   ): Promise<MemberRegistrationResult>;
+}
+
+export interface SkillAdminServiceContract {
+  /** 管理端列表：**含已停用**，并带当前生效的成员关联计数。 */
+  list(actor: AuthorizedActor): Promise<SkillAdminView[]>;
+  create(input: CreateSkillInput, actor: AuthorizedActor): Promise<SkillView>;
+  update(skillId: string, input: UpdateSkillInput, actor: AuthorizedActor): Promise<SkillView>;
+  /** 停用 / 启用。技能标签与故障分类同策略：不做物理删除。 */
+  setActive(skillId: string, isActive: boolean, actor: AuthorizedActor): Promise<SkillView>;
+  /** 上移 / 下移一格。列表顺序对成员侧的标签展示有意义，用按钮比让人填序号可靠。 */
+  reorder(skillId: string, direction: ReorderDirection, actor: AuthorizedActor): Promise<void>;
+  /**
+   * 拖动排序：把 `skillId` 放到 `beforeId` 之前（`null` = 末尾）。
+   * 拖动会跨越任意格数，因此一次算出最终顺序、一次写库；与 `reorder` 结果等价。
+   */
+  move(skillId: string, beforeId: string | null, actor: AuthorizedActor): Promise<void>;
+}
+
+export interface CommentAdminServiceContract {
+  list(input: AdminCommentListInput, actor: AuthorizedActor): Promise<AdminCommentListResult>;
+  softDelete(commentId: string, actor: AuthorizedActor): Promise<void>;
+}
+
+export interface AuditLogServiceContract {
+  list(input: AuditLogListInput, actor: AuthorizedActor): Promise<AuditLogListResult>;
+  listActions(actor: AuthorizedActor): Promise<AuditActionOption[]>;
+}
+
+export interface PublicContentSettingsServiceContract {
+  get(actor: AuthorizedActor): Promise<PublicContentSettings>;
+  update(
+    input: UpdatePublicContentSettingsInput,
+    actor: AuthorizedActor,
+  ): Promise<PublicContentSettings>;
+}
+
+export interface JoinApplicationExportServiceContract {
+  export(
+    input: JoinApplicationExportInput,
+    format: ExportFormat,
+    actor: AuthorizedActor,
+  ): Promise<JoinApplicationExportResult>;
 }
 
 export interface AccountProvisionServiceContract {

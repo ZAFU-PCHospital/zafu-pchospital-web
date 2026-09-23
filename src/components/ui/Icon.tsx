@@ -22,7 +22,14 @@ export type IconName =
   | "eye"
   | "eyeOff"
   | "sun"
-  | "moon";
+  | "moon"
+  // M6 管理后台需要的最小集：新增/编辑/删除/导出/通过。仍遵守 24 格、stroke 2、round 端点。
+  | "plus"
+  | "edit"
+  | "trash"
+  | "download"
+  | "check"
+  | "grip";
 
 const shapes: Record<IconName, ReactNode> = {
   menu: (
@@ -30,6 +37,39 @@ const shapes: Record<IconName, ReactNode> = {
       <line x1="4" x2="20" y1="12" y2="12" />
       <line x1="4" x2="20" y1="6" y2="6" />
       <line x1="4" x2="20" y1="18" y2="18" />
+    </>
+  ),
+  plus: (
+    <>
+      <path d="M12 5v14" />
+      <path d="M5 12h14" />
+    </>
+  ),
+  edit: (
+    <>
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z" />
+    </>
+  ),
+  trash: (
+    <>
+      <path d="M3 6h18" />
+      <path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" />
+      <path d="M19 6l-1 14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1L5 6" />
+      <path d="M10 11v6" />
+      <path d="M14 11v6" />
+    </>
+  ),
+  download: (
+    <>
+      <path d="M12 3v12" />
+      <path d="m7 10 5 5 5-5" />
+      <path d="M4 20h16" />
+    </>
+  ),
+  check: (
+    <>
+      <path d="m4 12 5 5L20 6" />
     </>
   ),
   close: (
@@ -103,6 +143,23 @@ const shapes: Record<IconName, ReactNode> = {
     </>
   ),
   moon: <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />,
+  /**
+   * 拖动排序的手柄（M6 第五轮）。
+   *
+   * 两个竖列各三个点：这是「可拖动」最通用的画法（同一条线段的 `menu` 图标
+   * 会被读成「打开菜单」）。点是实心圆，因此这里单独覆盖 fill / stroke ——
+   * 图标集其余形状都是描边，只有它是实心。
+   */
+  grip: (
+    <g fill="currentColor" stroke="none">
+      <circle cx="9" cy="6" r="1.4" />
+      <circle cx="15" cy="6" r="1.4" />
+      <circle cx="9" cy="12" r="1.4" />
+      <circle cx="15" cy="12" r="1.4" />
+      <circle cx="9" cy="18" r="1.4" />
+      <circle cx="15" cy="18" r="1.4" />
+    </g>
+  ),
 };
 
 export type IconProps = { name: IconName } & SVGProps<SVGSVGElement>;
