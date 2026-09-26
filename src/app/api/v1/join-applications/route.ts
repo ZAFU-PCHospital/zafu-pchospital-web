@@ -1,14 +1,17 @@
 import { apiFailure, apiSuccess } from "@/lib/api/response";
 import { getRequestId } from "@/lib/api/request-id";
 import { enforceRateLimit } from "@/lib/api/rate-limit";
+import { clientIp } from "@/lib/api/client-ip";
+import { assertSameOrigin } from "@/lib/auth/request";
 import { joinApplicationService } from "@/features/recruitment/join-application-service";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
   const requestId = getRequestId(request.headers);
-  const ipAddress = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
+  const ipAddress = clientIp(request);
   try {
+    assertSameOrigin(request);
     enforceRateLimit(`join:${ipAddress}`);
     const body = (await request.json()) as Record<string, unknown>;
     const receipt = await joinApplicationService.submit(

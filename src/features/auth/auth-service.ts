@@ -29,6 +29,8 @@ const SESSION_TOUCH_INTERVAL_MS = 5 * 60 * 1_000;
 const THROTTLE_WINDOW_MS = 15 * 60 * 1_000;
 const THROTTLE_BLOCK_MS = 15 * 60 * 1_000;
 const THROTTLE_MAX_FAILURES = 5;
+const THROTTLE_PURGE_INTERVAL_MS = 60 * 60 * 1_000;
+let lastThrottlePurgeAt = 0;
 let placeholderHash: Promise<string> | undefined;
 
 export class AuthService {
@@ -329,6 +331,25 @@ async function recordFailure(
       errorCode: "AUTH_INVALID_CREDENTIALS",
     });
   });
+  await purgeInertThrottles(now);
+}
+
+/**
+ * 清掉已经失效的节流记录。键是 `(qq, ip)`，被刷时会不断建新行把表撑大（审计 F2）。
+ * `blocked_until` 最多是 `updated_at + THROTTLE_BLOCK_MS`，所以早于该时刻的行不再拦截任何请求，
+ * 删除是安全的。最多每小时扫一次，避免每次登录失败都在失败路径上做全表比较。
+ */
+async function purgeInertThrottles(now: Date): Promise<void> {
+  if (now.getTime() - lastThrottlePurgeAt < THROTTLE_PURGE_INTERVAL_MS) return;
+  lastThrottlePurgeAt = now.getTime();
+  try {
+    await getDb().loginThrottle.deleteMany({
+      where: { updatedAt: { lt: new Date(now.getTime() - THROTTLE_BLOCK_MS) } },
+    });
+  } catch (error) {
+    // 清理失败不能把「密码错误」变成 500；下个小时会再试一次
+    console.error("[auth] 清理失效登录节流记录失败", error);
+  }
 }
 
 async function auditAuth(

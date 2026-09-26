@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { SESSION_COOKIE_NAME } from "../../src/lib/auth/request";
 import { getDb } from "../../src/lib/db/client";
+import { getServerEnv } from "../../src/lib/env";
 import { digestSessionToken } from "../../src/lib/security/secrets";
 import type { RoleCode } from "../../src/types/contracts";
 
@@ -14,11 +15,21 @@ import type { RoleCode } from "../../src/types/contracts";
  */
 
 /**
+ * 写接口的同源头：`assertSameOrigin()` 只认 `APP_BASE_URL` 白名单，**不再**拿请求自带的
+ * Host / X-Forwarded-Host 当基准（2026-09 安全审计 F4：那两个值由请求方控制）。
+ *
+ * 所以这里给的是「应用自己配置的来源」，而不是按 `url` 推导 —— 用例里的
+ * `http://localhost/...` 只是路径占位，和浏览器真实发出的 Origin 无关。
+ */
+export function sameOriginHeaders(): Record<string, string> {
+  return { origin: new URL(getServerEnv().APP_BASE_URL).origin };
+}
+
+/**
  * 直接调用路由处理函数。
  *
- * 写接口会走 `assertSameOrigin()`：它要求 origin 与 host 同时存在且一致。
- * undici 的 `Request` 不允许手工覆盖 `host`（会被剥离），因此这里给 `assertSameOrigin`
- * 优先读取的 `x-forwarded-host`。
+ * 写接口会走 `assertSameOrigin()`，见 `sameOriginHeaders()`。`host` / `x-forwarded-host`
+ * 保留只为贴近真实请求，校验本身已经不看它们。
  */
 export async function callRoute(
   handler: (request: Request, context?: never) => Promise<Response>,
@@ -29,7 +40,7 @@ export async function callRoute(
   const request = new Request(url, {
     method: init.method ?? "GET",
     headers: {
-      origin: parsed.origin,
+      ...sameOriginHeaders(),
       "x-forwarded-host": parsed.host,
       host: parsed.host,
       ...(init.body === undefined ? {} : { "Content-Type": "application/json" }),

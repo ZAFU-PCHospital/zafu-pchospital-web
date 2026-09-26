@@ -1,4 +1,6 @@
 import { AppError } from "@/lib/api/errors";
+import { clientIp } from "@/lib/api/client-ip";
+import { getServerEnv } from "@/lib/env";
 import { authService } from "@/features/auth/auth-service";
 import type { AuthorizedActor, PublicRequestContext, SessionPrincipal } from "@/types/contracts";
 
@@ -7,7 +9,7 @@ export const SESSION_COOKIE_NAME = "pc_hospital_session";
 export function requestContext(request: Request, requestId: string): PublicRequestContext {
   return {
     requestId,
-    ipAddress: request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown",
+    ipAddress: clientIp(request),
     userAgent: request.headers.get("user-agent") ?? undefined,
   };
 }
@@ -52,17 +54,40 @@ export async function authenticateRequest(
   };
 }
 
+/** 允许的请求来源：APP_BASE_URL（生产是站点正式域名）及其 www 变体。 */
+function allowedOrigins(): Set<string> {
+  let base: URL;
+  try {
+    base = new URL(getServerEnv().APP_BASE_URL);
+  } catch {
+    throw new AppError("INTERNAL_ERROR", "APP_BASE_URL 配置无效", { status: 500 });
+  }
+  const host = base.hostname.toLowerCase();
+  const alternate = host.startsWith("www.") ? host.slice(4) : `www.${host}`;
+  const port = base.port ? `:${base.port}` : "";
+  return new Set([`${base.protocol}//${host}${port}`, `${base.protocol}//${alternate}${port}`]);
+}
+
+/**
+ * 写接口的 CSRF 防线：Origin 必须落在允许来源白名单内。
+ *
+ * 不要拿 Origin 去比请求自身的 Host / X-Forwarded-Host —— 那两个值由请求方控制，
+ * 伪造 `Host: evil.com` + `Origin: https://evil.com` 就能通过（2026-09 安全审计 F4 实测），
+ * DNS rebinding 下可直接打穿全部写接口。
+ */
 export function assertSameOrigin(request: Request): void {
   const origin = request.headers.get("origin");
-  const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host");
-  if (!origin || !host) throw new AppError("FORBIDDEN", "请求来源无效");
-  let originHost = "";
+  if (!origin) throw new AppError("FORBIDDEN", "请求来源无效");
+  let parsed: URL;
   try {
-    originHost = new URL(origin).host;
+    parsed = new URL(origin);
   } catch {
     throw new AppError("FORBIDDEN", "请求来源无效");
   }
-  if (originHost !== host) throw new AppError("FORBIDDEN", "请求来源无效");
+  const candidate = `${parsed.protocol}//${parsed.hostname.toLowerCase()}${
+    parsed.port ? `:${parsed.port}` : ""
+  }`;
+  if (!allowedOrigins().has(candidate)) throw new AppError("FORBIDDEN", "请求来源无效");
 }
 
 export function sessionCookie(token: string, expiresAt: string) {

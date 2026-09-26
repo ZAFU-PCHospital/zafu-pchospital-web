@@ -19,6 +19,7 @@ import { digestSessionToken } from "../../src/lib/security/secrets";
 import { disconnectDb, getDb } from "../../src/lib/db/client";
 import type { AuthorizedActor } from "../../src/types/contracts";
 import { integrationTestsEnabled } from "./db-guard";
+import { sameOriginHeaders } from "./http-harness";
 
 /* 集成测试的统一闸门：指向非测试库时**在加载阶段就抛错**（`db-guard.ts` 里写了两次
    实际事故）。未开启时返回 false，各文件照常走 test.skip。 */
@@ -240,7 +241,8 @@ async function callRoute<Params extends Record<string, string> = Record<string, 
   const request = new Request(url, {
     method: init.method ?? "GET",
     headers: {
-      origin: parsed.origin,
+      // 写接口会走 assertSameOrigin()，它只认 APP_BASE_URL 白名单，见 sameOriginHeaders()。
+      ...sameOriginHeaders(),
       "x-forwarded-host": parsed.host,
       host: parsed.host,
       ...(init.body === undefined ? {} : { "Content-Type": "application/json" }),

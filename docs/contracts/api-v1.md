@@ -62,7 +62,8 @@
 `RECRUITMENT_CYCLE` 配置，不接受客户端指定。
 
 首次创建返回 201；同一批次相同规范化 QQ 或手机号的重复有效提交返回原回执和 200，
-`data.duplicate=true`。该公开入口保留独立的公开报名限流。
+`data.duplicate=true`。该公开入口保留独立的公开报名限流，并且与其他写接口一样执行
+`assertSameOrigin()`（无 `Origin` 或非白名单来源返回 403）。
 
 ### 认证与当前用户
 
@@ -72,7 +73,10 @@
 - `GET /api/v1/me`：返回当前 User、Role、Permission、MemberProfile 状态与首次改密标记。
 
 管理员初始密码登录后，除 `/me`、改密和登出外均返回 `PASSWORD_CHANGE_REQUIRED`。所有使用
-Cookie 的写接口校验 `Origin` 与 `Host` 同源。Cookie 名为 `pc_hospital_session`，使用
+Cookie 的写接口校验 `Origin`：`Origin` 必须等于服务端配置的 `APP_BASE_URL`（含其 `www`
+变体）的来源，缺失 `Origin` 或非白名单来源返回 403。**不拿请求自带的 `Host` /
+`X-Forwarded-Host` 当比较基准**——那两个头由请求方控制，跟着它们走等于让攻击者自己填写
+白名单（2026-09 安全审计 F4）。Cookie 名为 `pc_hospital_session`，使用
 HttpOnly、SameSite=Lax、Path=/，生产环境启用 Secure。
 
 ### 招募、邀请码与成员核心 API

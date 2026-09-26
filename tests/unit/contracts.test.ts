@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { ApiErrorCode, AppError } from "../../src/lib/api/errors";
-import { enforceRateLimit, resetRateLimitsForTests } from "../../src/lib/api/rate-limit";
+import {
+  enforceRateLimit,
+  rateLimitBucketCountForTests,
+  resetRateLimitsForTests,
+} from "../../src/lib/api/rate-limit";
 import { maskPhone, maskQq, redactAuditSummary } from "../../src/lib/audit/redaction";
 import { normalizePhone, normalizeQq } from "../../src/lib/security/normalization";
 import { digestSessionToken, hashPassword, verifyPassword } from "../../src/lib/security/secrets";
@@ -99,6 +103,20 @@ test("公开端点限流返回稳定错误码", () => {
   );
 });
 
+test("限流桶数量有上限，不会被伪造 IP 撑爆内存", () => {
+  resetRateLimitsForTests();
+  for (let i = 0; i < 20_000; i += 1) enforceRateLimit(`flood:${i}`, 10, 60_000);
+  const count = rateLimitBucketCountForTests();
+  // 没有淘汰时这里必然是 20000（审计 F2：键含客户端可控 IP，可以无限增长）
+  assert.ok(count <= 10_000, `限流桶数量应受上限约束，实际 ${count}`);
+  enforceRateLimit("after-flood", 1, 60_000);
+  assert.throws(
+    () => enforceRateLimit("after-flood", 1, 60_000),
+    (error) => error instanceof AppError && error.code === "RATE_LIMITED",
+  );
+  resetRateLimitsForTests();
+});
+
 test("Session 摘要固定为 32 字节且不等于原令牌", () => {
   const previous = {
     AUTH_SECRET: process.env.AUTH_SECRET,
@@ -126,22 +144,40 @@ test("Cookie 安全属性与写接口同源校验保持固定", () => {
   assert.equal(cookie.httpOnly, true);
   assert.equal(cookie.sameSite, "lax");
   assert.equal(cookie.path, "/");
-  assert.doesNotThrow(() =>
-    assertSameOrigin(
-      new Request("http://localhost/api", {
-        headers: { origin: "http://localhost", host: "localhost" },
-      }),
-    ),
-  );
-  assert.throws(
-    () =>
+
+  const previous = {
+    AUTH_SECRET: process.env.AUTH_SECRET,
+    DATABASE_URL: process.env.DATABASE_URL,
+    INVITE_CODE_PEPPER: process.env.INVITE_CODE_PEPPER,
+    PII_AUDIT_PEPPER: process.env.PII_AUDIT_PEPPER,
+    APP_BASE_URL: process.env.APP_BASE_URL,
+  };
+  process.env.AUTH_SECRET = "unit-test-auth-secret-at-least-32-bytes";
+  process.env.DATABASE_URL = "mysql://unused";
+  process.env.INVITE_CODE_PEPPER = "unit-test-invite-pepper-at-least-32-bytes";
+  process.env.PII_AUDIT_PEPPER = "unit-test-audit-pepper-at-least-32-bytes";
+  process.env.APP_BASE_URL = "https://pczafu.cn";
+  resetServerEnvForTests();
+  try {
+    assert.doesNotThrow(() =>
       assertSameOrigin(
-        new Request("http://localhost/api", {
-          headers: { origin: "https://example.com", host: "localhost" },
-        }),
+        new Request("https://pczafu.cn/api", { headers: { origin: "https://pczafu.cn" } }),
       ),
-    AppError,
-  );
+    );
+    assert.throws(
+      () =>
+        assertSameOrigin(
+          new Request("https://pczafu.cn/api", { headers: { origin: "https://example.com" } }),
+        ),
+      AppError,
+    );
+  } finally {
+    for (const [name, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+    resetServerEnvForTests();
+  }
 });
 
 test("密码只以 scrypt 哈希校验", async () => {

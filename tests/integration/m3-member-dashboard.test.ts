@@ -21,6 +21,7 @@ import { resetAcademicTermConfigForTests } from "../../src/lib/academic-term";
 import type { AuthorizedActor } from "../../src/types/contracts";
 import { MEMBER_SKILL_LIMIT } from "../../src/types/contracts";
 import { integrationTestsEnabled } from "./db-guard";
+import { sameOriginHeaders } from "./http-harness";
 
 /* 集成测试的统一闸门：指向非测试库时**在加载阶段就抛错**（`db-guard.ts` 里写了两次
    实际事故）。未开启时返回 false，各文件照常走 test.skip。 */
@@ -719,10 +720,8 @@ async function callRoute(
   const request = new Request(url, {
     method: init.method ?? "GET",
     headers: {
-      // 写接口会走 assertSameOrigin()，它要求 origin 与 host 同时存在且一致。
-      // undici 的 Request 不允许手工覆盖 `host`（会被剥离），因此这里给
-      // assertSameOrigin 优先读取的 `x-forwarded-host`。
-      origin: parsed.origin,
+      // 写接口会走 assertSameOrigin()，它只认 APP_BASE_URL 白名单，见 sameOriginHeaders()。
+      ...sameOriginHeaders(),
       "x-forwarded-host": parsed.host,
       host: parsed.host,
       ...(init.body === undefined ? {} : { "Content-Type": "application/json" }),

@@ -2,6 +2,9 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  /* 默认会发 `X-Powered-By: Next.js`，等于对外报技术栈（安全审计 F6）。
+     nginx 侧也可以用 `proxy_hide_header` 抹掉，这里从源头关掉更省事。 */
+  poweredByHeader: false,
   async redirects() {
     return [
       {
