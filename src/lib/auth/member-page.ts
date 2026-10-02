@@ -24,7 +24,7 @@ export async function requireMemberPage() {
   try {
     principal = await authService.authenticate(token);
   } catch {
-    redirect("/login");
+    redirect("/login?reason=expired");
   }
   if (principal.mustChangePassword) redirect("/account/change-password");
   return principal;

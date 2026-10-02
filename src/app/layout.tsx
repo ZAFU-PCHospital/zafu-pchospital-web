@@ -3,6 +3,7 @@ import type { Metadata, Viewport } from "next";
 import { Footer } from "@/components/layout/Footer";
 import { Header } from "@/components/layout/Header";
 import { SiteEffects } from "@/components/layout/SiteEffects";
+import { SessionMonitor } from "@/components/auth/SessionMonitor";
 import { siteConfig } from "@/config/site";
 import { DEFAULT_THEME_MODE, resolveTheme } from "@/config/theme";
 import { buildThemeBootstrapScript } from "@/lib/theme";
@@ -76,6 +77,7 @@ export default function RootLayout({
         </a>
 
         <SiteEffects />
+        <SessionMonitor />
         <Header />
 
         <main id="main">{children}</main>

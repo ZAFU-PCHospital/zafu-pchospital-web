@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { loginCopy } from "@/config/auth";
+import { loginDestination } from "@/lib/auth/login-destination";
+import type { RoleCode } from "@/types/contracts";
 
 export function LoginForm() {
   const router = useRouter();
@@ -18,11 +20,15 @@ export function LoginForm() {
     const response = await fetch("/api/v1/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ qq: data.get("qq"), password: data.get("password") }),
+      body: JSON.stringify({
+        qq: data.get("qq"),
+        password: data.get("password"),
+        rememberMe: data.get("rememberMe") === "on",
+      }),
     });
     const payload = (await response.json()) as {
       success: boolean;
-      data?: { mustChangePassword?: boolean; roles?: string[] };
+      data?: { mustChangePassword?: boolean; roles?: RoleCode[] };
       error?: { message?: string };
     };
     if (!response.ok || !payload.success) {
@@ -32,13 +38,11 @@ export function LoginForm() {
     }
     // 管理员落到管理后台：只有 ADMIN 角色、没有成员档案的账号在 /member 上只会看到
     // 「尚未开通成员身份」的空态，等于进不去任何页面（M6 之后 /admin 才是它的落点）。
-    const isAdmin = payload.data?.roles?.includes("ADMIN") ?? false;
     router.replace(
-      payload.data?.mustChangePassword
-        ? "/account/change-password"
-        : isAdmin
-          ? "/admin"
-          : "/member",
+      loginDestination({
+        mustChangePassword: payload.data?.mustChangePassword ?? false,
+        roles: payload.data?.roles ?? [],
+      }),
     );
     router.refresh();
   }
@@ -68,6 +72,12 @@ export function LoginForm() {
         // 设置 / 修改密码处生效，登录交给服务端判定。
         maxLength={128}
       />
+      <div className="admin-checkrow">
+        <label className="min-h-[46px] cursor-pointer">
+          <input className="admin-check" type="checkbox" name="rememberMe" disabled={busy} />
+          {loginCopy.rememberMe}
+        </label>
+      </div>
       <Button className="auth-login__submit" type="submit" variant="solid" disabled={busy}>
         {busy ? loginCopy.submitting : loginCopy.submit}
       </Button>

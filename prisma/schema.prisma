@@ -46,6 +46,7 @@ model AuthSession {
   createdAt       DateTime  @map("created_at") @db.DateTime(3)
   lastSeenAt      DateTime  @map("last_seen_at") @db.DateTime(3)
   expiresAt       DateTime  @map("expires_at") @db.DateTime(3)
+  rememberMe      Boolean   @default(false) @map("remember_me")
   revokedAt       DateTime? @map("revoked_at") @db.DateTime(3)
   ipDigest        Bytes?    @map("ip_digest") @db.Binary(32)
   userAgentDigest Bytes?    @map("user_agent_digest") @db.Binary(32)

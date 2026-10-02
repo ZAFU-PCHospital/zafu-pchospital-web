@@ -7,7 +7,9 @@ export async function GET(request: Request) {
   const requestId = getRequestId(request.headers);
   try {
     const { principal, token } = await authenticateRequest(request, requestId, true);
-    const response = apiSuccess(principal, requestId);
+    const response = apiSuccess(principal, requestId, {
+      headers: { "Cache-Control": "private, no-store" },
+    });
     response.cookies.set(sessionCookie(token, principal.expiresAt));
     return response;
   } catch (error) {

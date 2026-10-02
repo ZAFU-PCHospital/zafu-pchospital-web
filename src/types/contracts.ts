@@ -192,7 +192,7 @@ export type AuthorizedActor = RequestContext & {
   mustChangePassword?: boolean;
 };
 
-export type LoginInput = { qq: string; password: string };
+export type LoginInput = { qq: string; password: string; rememberMe?: boolean };
 export type SessionPrincipal = {
   userId: string;
   displayName: string | null;

@@ -10,6 +10,8 @@ export const loginCopy = {
   passwordPlaceholder: "请输入密码",
   showPassword: "显示密码",
   hidePassword: "隐藏密码",
+  rememberMe: "保持登录状态",
+  sessionExpired: "登录状态已过期，请重新登录",
   submit: "登录",
   submitting: "登录中",
   failed: "登录失败",

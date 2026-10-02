@@ -67,10 +67,13 @@
 
 ### 认证与当前用户
 
-- `POST /api/v1/auth/login`：QQ + 密码登录并设置数据库 Session Cookie。
+- `POST /api/v1/auth/login`：QQ + 密码登录并设置数据库 Session Cookie。可选 `rememberMe`
+  必须是布尔值，省略或 `false` 为 1 天有效期，`true` 为 30 天；其他类型返回
+  `VALIDATION_FAILED`。登录页默认不勾选「保持登录状态」。
 - `POST /api/v1/auth/logout`：撤销当前 Session 并清除 Cookie。
 - `POST /api/v1/auth/password/change`：验证当前密码、修改密码、撤销其他 Session 并轮换当前 Session。
-- `GET /api/v1/me`：返回当前 User、Role、Permission、MemberProfile 状态与首次改密标记。
+- `GET /api/v1/me`：返回当前 User、Role、Permission、MemberProfile 状态、首次改密标记与
+  `rememberMe`。只更新最后访问时间，不延长 Session 或 Cookie 到期时间。
 
 管理员初始密码登录后，除 `/me`、改密和登出外均返回 `PASSWORD_CHANGE_REQUIRED`。所有使用
 Cookie 的写接口校验 `Origin`：`Origin` 必须等于服务端配置的 `APP_BASE_URL`（含其 `www`
@@ -78,6 +81,11 @@ Cookie 的写接口校验 `Origin`：`Origin` 必须等于服务端配置的 `AP
 `X-Forwarded-Host` 当比较基准**——那两个头由请求方控制，跟着它们走等于让攻击者自己填写
 白名单（2026-09 安全审计 F4）。Cookie 名为 `pc_hospital_session`，使用
 HttpOnly、SameSite=Lax、Path=/，生产环境启用 Secure。
+Cookie 的 `Expires` 与数据库 Session 的 `expiresAt` 一致。改密轮换 Session 时保留
+`rememberMe`；登出、管理员重置密码和成员禁用仍撤销有效 Session。
+`/login` 会识别有效 Session，按首次改密 / 管理员 / 成员身份跳转对应页面。
+受保护页面在到期时跳转 `/login?reason=expired`，登录页通过浮层显示过期提醒；
+浏览器恢复焦点或标签恢复可见时重新校验，网络异常不会被当作过期。
 
 ### 招募、邀请码与成员核心 API
 

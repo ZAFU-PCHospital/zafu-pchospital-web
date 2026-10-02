@@ -30,7 +30,7 @@ export async function authenticateRequest(
   requestId: string,
   allowForcedPasswordChange = false,
 ): Promise<{
-  principal: SessionPrincipal & { sessionId: string; expiresAt: string };
+  principal: SessionPrincipal & { sessionId: string; expiresAt: string; rememberMe: boolean };
   actor: AuthorizedActor;
   token: string;
 }> {

@@ -23,8 +23,8 @@ import type {
   SessionPrincipal,
 } from "@/types/contracts";
 
-const SESSION_LIFETIME_MS = 30 * 24 * 60 * 60 * 1_000;
-const SESSION_RENEW_WINDOW_MS = 7 * 24 * 60 * 60 * 1_000;
+const SESSION_LIFETIME_MS = 24 * 60 * 60 * 1_000;
+const REMEMBERED_SESSION_LIFETIME_MS = 30 * 24 * 60 * 60 * 1_000;
 const SESSION_TOUCH_INTERVAL_MS = 5 * 60 * 1_000;
 const THROTTLE_WINDOW_MS = 15 * 60 * 1_000;
 const THROTTLE_BLOCK_MS = 15 * 60 * 1_000;
@@ -35,6 +35,8 @@ let placeholderHash: Promise<string> | undefined;
 
 export class AuthService {
   async login(input: LoginInput, context: PublicRequestContext): Promise<AuthSessionResult> {
+    if (input.rememberMe !== undefined && typeof input.rememberMe !== "boolean")
+      throw new AppError("VALIDATION_FAILED", "rememberMe 必须为布尔值");
     const qq = safeNormalizeQq(input.qq);
     const keyDigest = digestLoginThrottleKey(qq ?? input.qq.trim(), context.ipAddress ?? "unknown");
     await assertNotThrottled(keyDigest);
@@ -76,7 +78,8 @@ export class AuthService {
     await getDb().loginThrottle.deleteMany({ where: { keyDigest } });
     const token = generateSessionToken();
     const now = new Date();
-    const expiresAt = new Date(now.getTime() + SESSION_LIFETIME_MS);
+    const rememberMe = input.rememberMe === true;
+    const expiresAt = new Date(now.getTime() + sessionLifetime(rememberMe));
     const sessionId = randomUUID();
     await inSerializableTransaction(async (tx) => {
       await tx.authSession.create({
@@ -87,6 +90,7 @@ export class AuthService {
           createdAt: now,
           lastSeenAt: now,
           expiresAt,
+          rememberMe,
           ipDigest: context.ipAddress
             ? digestLoginThrottleKey(identity.userId, context.ipAddress)
             : undefined,
@@ -109,7 +113,7 @@ export class AuthService {
 
   async authenticate(
     token: string,
-  ): Promise<SessionPrincipal & { sessionId: string; expiresAt: string }> {
+  ): Promise<SessionPrincipal & { sessionId: string; expiresAt: string; rememberMe: boolean }> {
     if (!token) throw new AppError("AUTH_SESSION_INVALID", "登录状态无效");
     const session = await getDb().authSession.findUnique({
       where: { tokenDigest: digestSessionToken(token) },
@@ -124,18 +128,16 @@ export class AuthService {
       throw new AppError("AUTH_SESSION_EXPIRED", "登录已过期，请重新登录");
     }
     const principal = await this.readPrincipal(session.userId);
-    const update: { lastSeenAt?: Date; expiresAt?: Date } = {};
+    const update: { lastSeenAt?: Date } = {};
     if (now.getTime() - session.lastSeenAt.getTime() >= SESSION_TOUCH_INTERVAL_MS)
       update.lastSeenAt = now;
-    if (session.expiresAt.getTime() - now.getTime() <= SESSION_RENEW_WINDOW_MS) {
-      update.expiresAt = new Date(now.getTime() + SESSION_LIFETIME_MS);
-    }
     if (Object.keys(update).length)
       await getDb().authSession.update({ where: { id: session.id }, data: update });
     return {
       ...principal,
       sessionId: session.id,
-      expiresAt: (update.expiresAt ?? session.expiresAt).toISOString(),
+      expiresAt: session.expiresAt.toISOString(),
+      rememberMe: session.rememberMe,
     };
   }
 
@@ -185,7 +187,7 @@ export class AuthService {
     const passwordHash = await hashPassword(input.newPassword);
     const newToken = generateSessionToken();
     const now = new Date();
-    const expiresAt = new Date(now.getTime() + SESSION_LIFETIME_MS);
+    const expiresAt = new Date(now.getTime() + sessionLifetime(current.rememberMe));
     const sessionId = randomUUID();
     await inSerializableTransaction(async (tx) => {
       await tx.passwordCredential.update({
@@ -204,6 +206,7 @@ export class AuthService {
           createdAt: now,
           lastSeenAt: now,
           expiresAt,
+          rememberMe: current.rememberMe,
         },
       });
       await appendAuditLog(tx, {
@@ -271,6 +274,10 @@ export class AuthService {
       mustChangePassword: user.passwordCredential?.mustChangePassword ?? true,
     };
   }
+}
+
+function sessionLifetime(rememberMe: boolean): number {
+  return rememberMe ? REMEMBERED_SESSION_LIFETIME_MS : SESSION_LIFETIME_MS;
 }
 
 function safeNormalizeQq(value: string): string | null {

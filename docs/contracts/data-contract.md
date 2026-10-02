@@ -29,7 +29,10 @@
 
 - QQ 登录只通过 `user_identities(type=QQ)` 解析 `users.id`，QQ 不是 User 主键。
 - `auth_sessions` 只保存 `HMAC-SHA-256(AUTH_SECRET, token)` 摘要；Cookie 只持有随机明文令牌。
-- Session 默认 30 天，在剩余 7 天内续期；禁用 User、撤销 MemberProfile 或 UserRole 后实时拒绝。
+- Session 默认 1 天，登录时 `rememberMe=true` 为 30 天；`auth_sessions.remember_me`
+  默认 `false`。有效期从登录开始计算，不自动续期，Cookie 到期时间与 Session 一致；
+  已有 Session 保留当前到期时间。改密轮换时保留选择并按 1 / 30 天重新计时。
+  禁用 User、撤销 MemberProfile 或 UserRole 后实时拒绝。
 - `login_throttles` 以 QQ + IP 的不可逆摘要持久化失败窗口，不保存原始 QQ 或 IP，可供多实例共享。
 - 管理员发放的初始密码设置 `must_change_password=true`；邀请码注册的自设密码为 `false`。
 - 改密和管理员重置密码必须撤销已有 Session；改密成功轮换当前 Session。

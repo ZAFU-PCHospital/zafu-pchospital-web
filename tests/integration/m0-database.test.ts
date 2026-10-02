@@ -24,6 +24,9 @@ import {
 } from "../../src/features/repairs/repair-query-service";
 import { repairReviewService } from "../../src/features/repairs/repair-review-service";
 import { assertDestructiveDbAllowed, integrationTestsEnabled } from "./db-guard";
+import { sameOriginHeaders } from "./http-harness";
+import { POST as loginRoute } from "../../src/app/api/v1/auth/login/route";
+import { GET as meRoute } from "../../src/app/api/v1/me/route";
 
 /* 集成测试的统一闸门：指向非测试库时**在加载阶段就抛错**（`db-guard.ts` 里写了两次
    实际事故）。未开启时返回 false，各文件照常走 test.skip。 */
@@ -350,6 +353,84 @@ dbTest("邀请码注册使用自设密码且不要求首次改密", async () => 
     Buffer.from(stored.tokenDigest).toString("hex"),
     Buffer.from(login.token).toString("hex"),
   );
+  const day = 24 * 60 * 60 * 1_000;
+  assert.equal(stored.rememberMe, false);
+  assert.equal(stored.expiresAt.getTime() - stored.createdAt.getTime(), day);
+  const invalidRemember = await loginRoute(
+    new Request("http://localhost/api/v1/auth/login", {
+      method: "POST",
+      headers: { ...sameOriginHeaders(), "Content-Type": "application/json" },
+      body: JSON.stringify({ qq, password, rememberMe: "false" }),
+    }),
+  );
+  assert.equal(invalidRemember.status, 400);
+  assert.equal((await invalidRemember.json()).error.code, "VALIDATION_FAILED");
+  for (const rememberMe of [false, true]) {
+    const response = await loginRoute(
+      new Request("http://localhost/api/v1/auth/login", {
+        method: "POST",
+        headers: { ...sameOriginHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({ qq, password, rememberMe }),
+      }),
+    );
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    const cookie = response.headers.get("set-cookie")!;
+    assert.match(cookie, /HttpOnly/i);
+    assert.match(cookie, /SameSite=Lax/i);
+    const expiresAt = new Date(payload.data.expiresAt);
+    assert.ok(Math.abs(expiresAt.getTime() - Date.now() - (rememberMe ? 30 : 1) * day) < 5_000);
+    assert.ok(cookie.includes(`Expires=${expiresAt.toUTCString()}`));
+    const token = cookie.split(";")[0].slice(SESSION_COOKIE_NAME.length + 1);
+    const principal = await authService.authenticate(token);
+    const session = await getDb().authSession.findUniqueOrThrow({
+      where: { id: principal.sessionId },
+    });
+    assert.equal(session.rememberMe, rememberMe);
+    assert.equal(session.expiresAt.toISOString(), payload.data.expiresAt);
+    const nearExpiry = new Date(Date.now() + 60_000);
+    await getDb().authSession.update({
+      where: { id: session.id },
+      data: { expiresAt: nearExpiry },
+    });
+    const renewedResponse = await meRoute(
+      new Request("http://localhost/api/v1/me", { headers: { cookie: cookie.split(";")[0] } }),
+    );
+    assert.equal(renewedResponse.status, 200);
+    const renewed = (await renewedResponse.json()).data;
+    assert.equal(renewedResponse.headers.get("cache-control"), "private, no-store");
+    assert.equal(renewed.rememberMe, rememberMe);
+    assert.equal(renewed.expiresAt, nearExpiry.toISOString(), "访问 /me 不得续期");
+    assert.ok(
+      renewedResponse.headers
+        .get("set-cookie")!
+        .includes(`Expires=${new Date(renewed.expiresAt).toUTCString()}`),
+    );
+    const newPassword = `Changed-Invite-${rememberMe}-2026`;
+    const changed = await authService.changePassword(
+      token,
+      { currentPassword: password, newPassword, newPasswordConfirmation: newPassword },
+      { requestId: "req_remember_password" },
+    );
+    const rotated = await getDb().authSession.findUniqueOrThrow({
+      where: { id: changed.sessionId },
+    });
+    assert.equal(rotated.rememberMe, rememberMe);
+    assert.equal(
+      rotated.expiresAt.getTime() - rotated.createdAt.getTime(),
+      (rememberMe ? 30 : 1) * day,
+    );
+    await authService.changePassword(
+      changed.token,
+      { currentPassword: newPassword, newPassword: password, newPasswordConfirmation: password },
+      { requestId: "req_remember_password_restore" },
+    );
+  }
+  // 改密撤销了之前的会话，重新登录供后续过期与登出断言使用。
+  const logoutLogin = await authService.login(
+    { qq, password },
+    { requestId: "req_invite_logout_login" },
+  );
   const expiring = await authService.login(
     { qq, password },
     { requestId: "req_invite_expiring", ipAddress: "127.0.0.32" },
@@ -362,14 +443,14 @@ dbTest("邀请码注册使用自设密码且不要求首次改密", async () => 
     () => authService.authenticate(expiring.token),
     (error) => error instanceof AppError && error.code === "AUTH_SESSION_EXPIRED",
   );
-  await authService.logout(login.token, { requestId: "req_invite_logout" });
+  await authService.logout(logoutLogin.token, { requestId: "req_invite_logout" });
   await assert.rejects(
-    () => authService.authenticate(login.token),
+    () => authService.authenticate(logoutLogin.token),
     (error) => error instanceof AppError && error.code === "AUTH_SESSION_INVALID",
   );
   assert.ok(
     await getDb().auditLog.findFirst({
-      where: { action: "auth.session.revoked", targetId: login.sessionId },
+      where: { action: "auth.session.revoked", targetId: logoutLogin.sessionId },
     }),
   );
 });

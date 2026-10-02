@@ -1,6 +1,7 @@
 import { authService } from "@/features/auth/auth-service";
 import { apiFailure, apiSuccess } from "@/lib/api/response";
 import { getRequestId } from "@/lib/api/request-id";
+import { AppError } from "@/lib/api/errors";
 import { assertSameOrigin, requestContext, sessionCookie } from "@/lib/auth/request";
 
 export const runtime = "nodejs";
@@ -9,8 +10,14 @@ export async function POST(request: Request) {
   try {
     assertSameOrigin(request);
     const body = (await request.json()) as Record<string, unknown>;
+    if (body.rememberMe !== undefined && typeof body.rememberMe !== "boolean")
+      throw new AppError("VALIDATION_FAILED", "rememberMe 必须为布尔值");
     const result = await authService.login(
-      { qq: String(body.qq ?? ""), password: String(body.password ?? "") },
+      {
+        qq: String(body.qq ?? ""),
+        password: String(body.password ?? ""),
+        rememberMe: body.rememberMe,
+      },
       requestContext(request, requestId),
     );
     const response = apiSuccess(
