@@ -204,6 +204,18 @@ export function toDateOnlyBounds(range: UtcRange): { gte: Date; lt: Date } {
 }
 
 /**
+ * 单个上海自然日 `YYYY-MM-DD` → **`DATE` 列可直接比较的 UTC 零点**；非法日期返回 `null`。
+ *
+ * 与 {@link toDateOnlyBounds} 同一用途（见其说明）：需要「结束日包含全天」时，
+ * 调用方自行 `+24h` 取次日零点作为排他上界。
+ */
+export function shanghaiDayToDateOnly(date: string): Date | null {
+  const parsed = parseShanghaiDate(date.trim());
+  if (!parsed.ok) return null;
+  return new Date(Date.UTC(parsed.year, parsed.month - 1, parsed.day));
+}
+
+/**
  * 以 `anchor` 所在上海自然月为**最后一个月**，向前取连续 `count` 个月的 `YYYY-MM`。
  *
  * 复用 `shanghaiMonthRange` 的年月推导，保证与本月/学期口径完全一致；

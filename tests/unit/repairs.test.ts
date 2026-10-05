@@ -10,6 +10,27 @@ import {
 import { repairFieldLimits } from "../../src/config/repairs";
 import { RepairResult, RepairStatus, RepairTimelineEventType } from "../../src/types/contracts";
 import { parseRepairListStatus } from "../../src/features/repairs/repair-http";
+import { listWhere } from "../../src/features/repairs/repair-query-service";
+
+/** 管理端维修列表的筛选：日期走 DATE 列边界，结束日必须含全天（与 issue #75 同源）。 */
+test("维修列表日期筛选：DATE 列边界 + 结束日含全天", () => {
+  const actor = { userId: "u1", permissions: ["repair:review"] as const };
+  const where = listWhere({ repairDateFrom: "2026-09-30", repairDateTo: "2026-09-30" }, actor);
+  const range = where.repairDate as { gte?: Date; lt?: Date; lte?: Date };
+  assert.equal(range.gte?.toISOString(), "2026-09-30T00:00:00.000Z");
+  assert.equal(
+    range.lt?.toISOString(),
+    "2026-10-01T00:00:00.000Z",
+    "结束日含全天 → 次日零点为排他上界",
+  );
+  assert.equal(range.lte, undefined, "不得再用 lte：它只在 Prisma 按 UTC 截断时才碰巧正确");
+
+  // 日历上不存在的日期必须被拒，而不是生成 Invalid Date 交给数据库
+  assert.throws(
+    () => listWhere({ repairDateTo: "2026-02-30" }, actor),
+    (e) => e instanceof AppError && e.code === "VALIDATION_FAILED",
+  );
+});
 
 test("M2 公共枚举与错误码已冻结", () => {
   assert.deepEqual(RepairStatus, ["DRAFT", "PENDING", "APPROVED", "REJECTED"]);

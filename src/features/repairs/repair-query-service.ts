@@ -1,7 +1,7 @@
 import type { Prisma } from "@/generated/prisma/client";
 import { AppError } from "@/lib/api/errors";
 import { paginationMeta } from "@/lib/api/pagination";
-import { toDateOnlyBounds, type UtcRange } from "@/lib/academic-term";
+import { shanghaiDayToDateOnly, toDateOnlyBounds, type UtcRange } from "@/lib/academic-term";
 import { requirePermission } from "@/lib/auth/permissions";
 import { getDb } from "@/lib/db/client";
 import { assertCanReadRepair } from "./repair-policy";
@@ -242,6 +242,20 @@ function excerpt(content: string | null): string {
   return chars.length > 60 ? `${chars.slice(0, 60).join("")}…` : flat;
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** `YYYY-MM-DD` → `DATE` 列可比较的 UTC 零点；日期不存在（如 2 月 30 日）时抛 400。 */
+function requireDateOnly(value: string, label: string): Date {
+  const parsed = shanghaiDayToDateOnly(value);
+  if (!parsed) throw new AppError("VALIDATION_FAILED", `${label}无效`);
+  return parsed;
+}
+
+/** 次日零点 = 「结束日包含全天」的排他上界。 */
+function nextDay(day: Date): Date {
+  return new Date(day.getTime() + DAY_MS);
+}
+
 /**
  * 维修列表的筛选谓词（含按 `repair:review` 分派的可见范围）。
  *
@@ -268,8 +282,11 @@ export function listWhere(
     status: input.status,
     result: input.result,
     repairDate: {
-      gte: input.repairDateFrom ? new Date(`${input.repairDateFrom}T00:00:00.000Z`) : undefined,
-      lte: input.repairDateTo ? new Date(`${input.repairDateTo}T00:00:00.000Z`) : undefined,
+      // `repair_date` 是 DATE 列：走日期边界，且结束日用「次日零点」这个排他上界。
+      // 原来的 `lte: T00:00:00.000Z` 只是**碰巧**正确 —— 它依赖 Prisma 把过滤值按 UTC
+      // 日历日截断；一旦截断行为消失，当天 00:00 之后创建的记录会被整体漏掉。
+      gte: input.repairDateFrom ? requireDateOnly(input.repairDateFrom, "起始日期") : undefined,
+      lt: input.repairDateTo ? nextDay(requireDateOnly(input.repairDateTo, "结束日期")) : undefined,
     },
     isDifficult: input.isDifficult,
     isTypical: input.isTypical,
