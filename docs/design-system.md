@@ -1006,6 +1006,11 @@ border-color: var(--line);
 `src/config/theme.ts` **只登记主题身份与映射关系，不存放色值**。
 两者的对应关系是「ThemeId ↔ `html[data-theme="<id>"]`」。
 
+文档站的配色副本维护在 `ZAFU-PCHospital-Doc/theme/pc-hospital.css`：
+`light` 对应 `swiss-cobalt`，`coal` 对应 `black-yellow`。
+文档仓库 `book.toml` 使用 `preferred-dark-theme = "coal"`，深色模式默认采用黑黄配色。
+官网构建直接使用文档仓库的配置与主题；修改颜色后运行 `pnpm check:palette` 校验两边取值。
+
 ### 9.4 两套主题的实际取值
 
 | 语义令牌        | normal / `swiss-cobalt` | dark / `black-yellow`        |

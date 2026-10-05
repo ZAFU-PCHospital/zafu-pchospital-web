@@ -1,6 +1,5 @@
 import { execFileSync } from "node:child_process";
 import {
-  copyFileSync,
   cpSync,
   existsSync,
   mkdtempSync,
@@ -15,12 +14,13 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import { resolveDocsSourceRoot } from "./docs-source.mjs";
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const sourceRoot = path.resolve(projectRoot, process.env.DOCS_SOURCE_DIR || ".docs-source");
+const sourceRoot = resolveDocsSourceRoot(projectRoot);
 const outputRoot = path.resolve(projectRoot, "public", "handbook");
 const manifestPath = path.resolve(projectRoot, "src", "data", "doc-manifest.json");
-const themeRoot = path.resolve(projectRoot, "tools", "mdbook-theme");
+const themeRoot = path.join(sourceRoot, "theme");
 const themeCssPath = path.join(themeRoot, "pc-hospital.css");
 const themeJsPath = path.join(themeRoot, "pc-hospital.js");
 const summaryPath = path.join(sourceRoot, "src", "SUMMARY.md");
@@ -81,8 +81,6 @@ function ensureSource() {
 function preflight() {
   /* 先查本机与仓库内的条件（便宜、不联网）：这些不满足就没必要下载源码 */
   const problems = [];
-  if (!existsSync(themeCssPath)) problems.push(`缺少官网 mdBook 主题样式：${themeCssPath}`);
-  if (!existsSync(themeJsPath)) problems.push(`缺少官网 mdBook 主题脚本：${themeJsPath}`);
 
   try {
     execFileSync(mdbookBin, ["--version"], { stdio: ["ignore", "pipe", "ignore"] });
@@ -104,7 +102,16 @@ function preflight() {
   const missing = [];
   if (!existsSync(bookConfigPath)) missing.push(`缺少 mdBook 配置：${bookConfigPath}`);
   if (!existsSync(summaryPath)) missing.push(`缺少文档目录：${summaryPath}`);
+  if (!existsSync(themeCssPath)) missing.push(`文档版本缺少主题样式：${themeCssPath}`);
+  if (!existsSync(themeJsPath)) missing.push(`文档版本缺少主题脚本：${themeJsPath}`);
   if (missing.length > 0) fail(`文档源码不完整：\n  - ${missing.join("\n  - ")}`);
+
+  // 校验实际构建的文档版本，而不是官网中的另一份主题副本。
+  execFileSync(process.execPath, [path.join(projectRoot, "tools", "check-theme-palette.mjs")], {
+    cwd: projectRoot,
+    env: { ...process.env, DOCS_SOURCE_DIR: sourceRoot },
+    stdio: "inherit",
+  });
 }
 
 function toPosix(value) {
@@ -231,6 +238,8 @@ function customizeHtml() {
     `<a href="/docs" class="pc-hospital-return" title="返回电脑医院官网" ${marker}>` +
     `<span aria-hidden="true">←</span><span>电脑医院官网</span></a>`;
   const themeBootstrapMarker = 'data-pc-hospital-theme-bootstrap="true"';
+  const siteFont =
+    '<style data-pc-hospital-font="true">@font-face{font-family:Archivo;src:url("/fonts/archivo-latin-wdth.woff2") format("woff2-variations");font-weight:100 900;font-stretch:62% 125%;font-style:normal;font-display:swap}</style>';
   /* 主题引导：解析顺序必须与官网 src/lib/theme.ts 完全一致 ——
        本地存过明确模式 → 用它；否则跟随 prefers-color-scheme；再否则回落到正常模式。
      漏掉「跟随系统」那条会出现：首次访客系统是深色 → 官网深色、文档站却是浅色。
@@ -244,7 +253,7 @@ function customizeHtml() {
     if (!html.includes(themeBootstrapMarker) && html.includes("<!-- Custom HTML head -->")) {
       html = html.replace(
         "<!-- Custom HTML head -->",
-        `<!-- Custom HTML head -->${themeBootstrap}`,
+        `<!-- Custom HTML head -->${themeBootstrap}${siteFont}`,
       );
     }
     if (!html.includes(marker) && html.includes('<div class="left-buttons">')) {
@@ -279,10 +288,11 @@ function validateAssets() {
 function resolveRevision() {
   if (process.env.DOCS_SHA) return process.env.DOCS_SHA;
   try {
-    return execFileSync("git", ["-C", sourceRoot, "rev-parse", "HEAD"], {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
-    }).trim();
+    return execFileSync(
+      "git",
+      ["-c", `safe.directory=${sourceRoot}`, "-C", sourceRoot, "rev-parse", "HEAD"],
+      { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] },
+    ).trim();
   } catch {
     return "local";
   }
@@ -341,8 +351,6 @@ cpSync(sourceRoot, buildSourceRoot, {
     return firstSegment !== ".git" && firstSegment !== "book";
   },
 });
-copyFileSync(themeCssPath, path.join(buildSourceRoot, "pc-hospital.css"));
-copyFileSync(themeJsPath, path.join(buildSourceRoot, "pc-hospital.js"));
 
 if (outputRoot !== path.resolve(projectRoot, "public", "handbook")) {
   fail(`拒绝清理非预期目录：${outputRoot}`);
@@ -359,10 +367,6 @@ execFileSync(
     env: {
       ...process.env,
       MDBOOK_OUTPUT__HTML__SITE_URL: '"/handbook/"',
-      MDBOOK_OUTPUT__HTML__DEFAULT_THEME: '"light"',
-      MDBOOK_OUTPUT__HTML__PREFERRED_DARK_THEME: '"coal"',
-      MDBOOK_OUTPUT__HTML__ADDITIONAL_CSS: '["pc-hospital.css"]',
-      MDBOOK_OUTPUT__HTML__ADDITIONAL_JS: '["pc-hospital.js"]',
     },
     stdio: "inherit",
   },

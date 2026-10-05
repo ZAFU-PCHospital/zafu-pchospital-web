@@ -304,8 +304,11 @@ DATABASE_URL="mysql://app_user:change-me@127.0.0.1:3307/zafu_pchospital_test" pn
 > `pnpm build:site` 用的是**当时磁盘上的**清单：若还是占位清单，`/docs` 页会显示 0 个条目。
 > **不要用它部署** —— 部署必须用 `pnpm build`（含文档构建）。
 
-`tools/mdbook-theme/pc-hospital.css` 是 `globals.css` 主题层的**拷贝**（mdBook 只吃静态 CSS，
-无法引用官网变量）。**改了 `globals.css` 的主题层就必须同步改它**，否则 `pnpm lint` 失败。
+文档仓库的 `theme/pc-hospital.css` 是 `globals.css` 主题层的**拷贝**（mdBook 只吃静态 CSS，
+无法引用官网变量）。官网直接使用文档仓库 `book.toml` 配置的主题，不再维护本地副本。
+**改了 `globals.css` 的主题层就必须同步改文档仓库**，否则 `pnpm lint` 失败。
+`pnpm lint` 需有含主题的文档源码；路径选择与构建相同，`DOCS_SOURCE_DIR` 优先，
+其次 `.docs-source/`
 
 ---
 
@@ -417,7 +420,7 @@ pnpm build     # 必须成功；已包含站内文档构建，需要 mdBook（�
 > `/handbook/` 会缺失，`/docs` 页的链接全部 404。只改页面、本机确实没有 mdBook 时
 > 可以用它做快速自检，但必须在 PR 描述里说明「未验证文档构建」。
 >
-> **改了 `globals.css` 的主题层，必须同步改 `tools/mdbook-theme/pc-hospital.css`
+> **改了 `globals.css` 的主题层，必须同步改 `ZAFU-PCHospital-Doc/theme/pc-hospital.css`
 > 的对应主题块**，否则 `pnpm lint` 会直接失败。
 
 自检清单：

@@ -1,7 +1,7 @@
 /* 校验官网与站内文档站（mdBook）的调色板没有漂移。
  *
  * 背景：官网的主题令牌在 src/app/globals.css 的主题层，文档站的主题令牌是
- * tools/mdbook-theme/pc-hospital.css 里的一份**拷贝**（mdBook 只吃静态 CSS，
+ * ZAFU-PCHospital-Doc/theme/pc-hospital.css 里的一份**拷贝**（mdBook 只吃静态 CSS，
  * 无法直接引用官网的变量）。两份必须逐值一致，否则同一个站点会出现两种观感。
  * 靠人记着「改一边要改另一边」迟早会漂，所以放在 pnpm lint 里强制校验。
  *
@@ -10,16 +10,26 @@
  *
  * 用法：node tools/check-theme-palette.mjs
  */
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import { resolveDocsSourceRoot } from "./docs-source.mjs";
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const globalsCssPath = path.join(projectRoot, "src", "app", "globals.css");
-const mdbookCssPath = path.join(projectRoot, "tools", "mdbook-theme", "pc-hospital.css");
+const sourceRoot = resolveDocsSourceRoot(projectRoot);
+const mdbookCssPath = path.join(sourceRoot, "theme", "pc-hospital.css");
 const themeTsPath = path.join(projectRoot, "src", "lib", "theme.ts");
 const buildDocsPath = path.join(projectRoot, "tools", "build-docs.mjs");
+
+if (!existsSync(mdbookCssPath)) {
+  console.error(
+    `[check-theme-palette] 文档版本缺少主题：${mdbookCssPath}\n` +
+      "请检出包含 theme/pc-hospital.css 的文档版本，或设置 DOCS_SOURCE_DIR 指向修改后的文档仓库。",
+  );
+  process.exit(1);
+}
 
 /** 需要两份文件保持一致的语义令牌（官网名 → 文档站名 = 加 --pc- 前缀） */
 const SEMANTIC_TOKENS = [
@@ -113,10 +123,38 @@ const darkSite = pickBlock(
 );
 
 const mdbookCss = readFileSync(mdbookCssPath, "utf8");
-const normalDocs = pickBlock(mdbookCss, (block) => block.selector.includes(".light"), "tools/mdbook-theme/pc-hospital.css（.light）");
-const darkDocs = pickBlock(mdbookCss, (block) => block.selector.includes(".coal"), "tools/mdbook-theme/pc-hospital.css（.coal）");
+const normalDocs = pickBlock(
+  mdbookCss,
+  (block) => block.selector.includes(".light"),
+  `${mdbookCssPath}（.light）`,
+);
+const darkDocs = pickBlock(
+  mdbookCss,
+  (block) => block.selector.includes(".coal"),
+  `${mdbookCssPath}（.coal）`,
+);
 
 const problems = [];
+const bookConfig =
+  readFileSync(path.join(sourceRoot, "book.toml"), "utf8").match(
+    /\[output\.html\]\s*([\s\S]*?)(?=\n\s*\[|$)/,
+  )?.[1] ?? "";
+for (const [key, value] of [["preferred-dark-theme", "coal"]]) {
+  if (!new RegExp(`^\\s*${key}\\s*=\\s*["']${value}["']`, "m").test(bookConfig)) {
+    problems.push(`文档 book.toml 的 ${key} 必须为 "${value}"，与官网模式映射一致。`);
+  }
+}
+for (const [key, resource] of [
+  ["additional-css", "theme/pc-hospital.css"],
+  ["additional-js", "theme/pc-hospital.js"],
+]) {
+  const resources = bookConfig.match(
+    new RegExp(`^\\s*${key}\\s*=\\s*\\[([^\\]]*)\\]`, "m"),
+  )?.[1];
+  if (!resources?.includes(`"${resource}"`) && !resources?.includes(`'${resource}'`)) {
+    problems.push(`文档 book.toml 的 ${key} 缺少 "${resource}"。`);
+  }
+}
 
 for (const [label, siteTokens, docsTokens] of [
   ["正常模式 normal ↔ .light", normalSite, normalDocs],
@@ -158,11 +196,11 @@ if (problems.length > 0) {
   console.error("[check-theme-palette] 调色板/主题键不一致：\n  - " + problems.join("\n  - "));
   console.error(
     "\n两份文件必须逐值一致：官网改 src/app/globals.css 的主题层时，" +
-      "要同步改 tools/mdbook-theme/pc-hospital.css 对应主题块。",
+      "要同步改 ZAFU-PCHospital-Doc/theme/pc-hospital.css 对应主题块。",
   );
   process.exit(1);
 }
 
 console.log(
-  `[check-theme-palette] 通过：${SEMANTIC_TOKENS.length} 个令牌 × 2 套主题与文档站一致，主题存储键同步。`,
+  `[check-theme-palette] 通过：${SEMANTIC_TOKENS.length} 个令牌 × 2 套主题与文档站一致，主题配置与存储键同步。`,
 );

@@ -119,7 +119,7 @@
 │
 ├── tools/                     # 构建工具与本地验证脚本（不参与运行时）
 │   ├── build-docs.mjs         # 站内文档构建：mdBook 产物 → public/handbook/ + 生成清单
-│   ├── mdbook-theme/          # 官网同款 mdBook 主题（pc-hospital.css / pc-hospital.js）
+│   ├── docs-source.mjs       # 构建与调色板校验共用的文档源码路径解析
 │   ├── check-theme-palette.mjs# 校验官网与文档站的调色板没有漂移
 │   ├── inspect.mjs            # 页面诊断与截图（CDP）
 │   └── console-probe.mjs      # 收集 console 报错与运行时异常（CDP）
@@ -243,13 +243,15 @@ Schema、前向 Migration、生成客户端、Service、Route、调用方、测�
 
 ```text
 ZAFU-PCHospital-Doc ──► .docs-source/ ──► mdbook build ──► public/handbook/
-        （自动浅克隆）      （本地产物）      + 官网定制主题     （生成物，已 gitignore）
+        （自动浅克隆）      （本地产物）      + 文档仓库主题     （生成物，已 gitignore）
 ```
 
 - `build-docs.mjs`：唯一入口。缺 `.docs-source/` 时**自动浅克隆**；产出 mdBook 正文
   与 `src/data/doc-manifest.json`。
-- `mdbook-theme/`：官网同款的 mdBook 主题。mdBook 只吃静态 CSS，无法引用官网变量，
-  所以这里的 `--pc-*` 是 `globals.css` 主题层的**拷贝** —— 见下一条。
+- 文档仓库 `theme/`：官网同款的 mdBook 主题，由文档的 `book.toml` 配置浅色与默认深色主题。
+  官网构建直接使用该配置与资源，只额外注入返回官网入口、Archivo 字体和共享模式引导。
+- `docs-source.mjs`：统一选择源码：`DOCS_SOURCE_DIR` → `.docs-source/` → 同级文档仓库。
+  都不存在时，构建自动克隆到 `.docs-source/`；调色板校验会提示先检出文档。
 - 环境变量：`DOCS_SOURCE_DIR`（指向已有的文档检出）、`MDBOOK_BIN`（mdbook 可执行文件）、
   `DOCS_OFFLINE=1`（禁止联网克隆）、`DOCS_SHA`（覆盖清单里记录的版本号）。
 
@@ -261,7 +263,7 @@ ZAFU-PCHospital-Doc ──► .docs-source/ ──► mdbook build ──► pub
 `tools/check-theme-palette.mjs` 校验官网与文档站两份调色板逐值一致，
 并校验主题存储键在 `src/lib/theme.ts` 与 `build-docs.mjs` 里相同。
 它挂在 `pnpm lint` 后面（也可单独跑 `pnpm check:palette`）——
-**改 `globals.css` 的主题层时必须同步改 `tools/mdbook-theme/pc-hospital.css` 对应主题块**，
+**改 `globals.css` 的主题层时必须同步改 `ZAFU-PCHospital-Doc/theme/pc-hospital.css` 对应主题块**，
 否则 lint 直接失败。
 
 #### 本地诊断

@@ -232,7 +232,7 @@ docs/contracts     「通用列表查询参数」一节 + 该端点的白名单
 | 行虚拟化        | `@tanstack/react-virtual`（7.6 KB gzip）               | 必须保住 `useAdminList` 的「重载不卸载表格」语义，否则会重现滚动跳顶                                                                                                                                                                                                    |
 | 其余表的列筛选  | 按第 8 节三步接入（成员表已完成）                      | 每张表先要有后端白名单与 `where` 映射；审计与维修的列多，先定哪些列值得筛                                                                                                                                                                                               |
 
-> `globals.css` 与主题相关的改动会牵动 `tools/mdbook-theme/pc-hospital.css` 的同步，
+> `globals.css` 与主题相关的改动会牵动 `ZAFU-PCHospital-Doc/theme/pc-hospital.css` 的同步，
 > 因此需要 CSS 的项集中做，并同一轮做截图对拍。
 
 **后台列表的迁移已经做完**：成员、维修审核、审计记录、邀请码、招募报名、评论、技能标签、
