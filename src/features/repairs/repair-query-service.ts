@@ -1,6 +1,7 @@
 import type { Prisma } from "@/generated/prisma/client";
 import { AppError } from "@/lib/api/errors";
 import { paginationMeta } from "@/lib/api/pagination";
+import { toDateOnlyBounds, type UtcRange } from "@/lib/academic-term";
 import { requirePermission } from "@/lib/auth/permissions";
 import { getDb } from "@/lib/db/client";
 import { assertCanReadRepair } from "./repair-policy";
@@ -115,11 +116,11 @@ function approvedForMember(
 ): Prisma.RepairRecordWhereInput {
   return approvedRepairWhere({
     memberProfileId,
-    repairDate: range ? { gte: range.startInclusive, lt: range.endExclusive } : undefined,
+    // `repair_date` 是 DATE 列：区间必须换成日期边界再交给查询构造器，
+    // 否则本月/学期统计会被整体挪一天（issue #75）。
+    repairDate: range ? toDateOnlyBounds(range) : undefined,
   });
 }
-
-type UtcRange = { startInclusive: Date; endExclusive: Date };
 
 /**
  * 成员维修摘要。`termRange` 为 undefined 表示学期未配置，

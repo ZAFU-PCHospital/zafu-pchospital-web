@@ -7,7 +7,9 @@
  * - 日期按 `Asia/Shanghai`（UTC+8，无夏令时）自然日解释，再转换为 UTC 查询边界；
  * - 结束日**包含全天**，统一表达为 `[startInclusive, endExclusive)`；
  * - 当前月同样按 `Asia/Shanghai` 自然月计算；
- * - 不依赖数据库服务器本地时区或浏览器时区。
+ * - 不依赖数据库服务器本地时区或浏览器时区；
+ * - 区间是**时刻**，只可直接用于 `DATETIME` 列；`DATE` 列（`repairDate`）
+ *   必须先经 {@link toDateOnlyBounds} 转成日期边界（见该函数说明）。
  */
 
 import { AppError } from "@/lib/api/errors";
@@ -159,6 +161,46 @@ export function shanghaiDateToUtc(date: string): Date | null {
   const parsed = parseShanghaiDate(date.trim());
   if (!parsed.ok) return null;
   return shanghaiDayStartToUtc(parsed.year, parsed.month, parsed.day);
+}
+
+/** 取某时刻所处的上海自然日，表达为该日的 UTC 零点。 */
+function utcMidnightOfShanghaiDay(instant: Date): Date {
+  const shanghai = new Date(instant.getTime() + SHANGHAI_OFFSET_MS);
+  return new Date(
+    Date.UTC(shanghai.getUTCFullYear(), shanghai.getUTCMonth(), shanghai.getUTCDate()),
+  );
+}
+
+/**
+ * 把上海自然日区间转成 **`DATE` 列可直接比较的日期边界**（issue #75）。
+ *
+ * 为什么必须有这一步：`repair_records.repair_date` 是 `@db.Date`（纯日历日），
+ * 而 Prisma 的查询构造器（`count` / `findMany` / `groupBy` 的 `where`）会把过滤用的
+ * `Date` **按 UTC 日历日截断**。区间两端是「上海某日 00:00」的 UTC 时刻（比日期早 8 小时），
+ * 截断后就变成**前一个日期**，于是整个区间被向前挪一天：
+ *
+ * ```
+ * 上海 2026-09 月：[2026-08-31T16:00Z, 2026-09-30T16:00Z)
+ *   截断成日期后：[2026-08-31,      2026-09-30)      ← 少算了 9-30，多算了 8-31
+ *   经本函数转换：[2026-09-01,      2026-10-01)      ← 正确
+ * ```
+ *
+ * 表现为「上月末的记录被算进本月、本月末的记录不计入本月」（学期同理，
+ * 学期前一天被算进来、学期末日被漏掉）。原生 SQL（`$queryRaw`，M5 的榜单与趋势走这条路）
+ * 把参数按完整时刻比较，本就没有这个问题 —— 不转换的话，同一份数据在「摘要」与「榜单」
+ * 里会得出两个不同的答案。
+ *
+ * 返回的两端都是 UTC 零点，因此在**两种语义下都恰好等于**上海自然日区间：
+ * 被截断成日期时得到 `[2026-09-01, 2026-10-01)`，不被截断时得到等价的 `00:00:00` 时刻。
+ *
+ * **只可用于 `DATE` 列**（当前即 `repairDate`）；`createdAt` / `closedAt` 这类 `DATETIME`
+ * 列仍应直接传区间时刻，否则会把当天 00:00 之后的记录漏掉。
+ */
+export function toDateOnlyBounds(range: UtcRange): { gte: Date; lt: Date } {
+  return {
+    gte: utcMidnightOfShanghaiDay(range.startInclusive),
+    lt: utcMidnightOfShanghaiDay(range.endExclusive),
+  };
 }
 
 /**

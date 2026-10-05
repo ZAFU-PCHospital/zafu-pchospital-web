@@ -5,6 +5,7 @@ import {
   parseAcademicTermConfig,
   shanghaiMonthRange,
   shanghaiDateToUtc,
+  toDateOnlyBounds,
 } from "../../src/lib/academic-term";
 import { ApiErrorCode } from "../../src/lib/api/errors";
 import { Permission } from "../../src/types/contracts";
@@ -107,6 +108,50 @@ test("M3 日期工具：非法日期返回 null", () => {
   assert.equal(shanghaiDateToUtc("2026-02-30"), null);
   assert.equal(shanghaiDateToUtc("not-a-date"), null);
   assert.equal(shanghaiDateToUtc("2026-09-01")?.toISOString(), "2026-08-31T16:00:00.000Z");
+});
+
+// ---------------------------------------------------------------------------
+// DATE 列边界（issue #75）
+// ---------------------------------------------------------------------------
+
+test("M3 DATE 列边界：月区间转成 UTC 零点日期边界", () => {
+  // 上海 2026-09 的 UTC 区间是 [08-31T16:00Z, 09-30T16:00Z)；
+  // 直接交给 Prisma 会被按 UTC 日历日截断成 [08-31, 09-30) → 整体挪前一天。
+  const month = shanghaiMonthRange(new Date("2026-09-15T00:00:00.000Z"));
+  assert.deepEqual(toDateOnlyBounds(month), {
+    gte: new Date("2026-09-01T00:00:00.000Z"),
+    lt: new Date("2026-10-01T00:00:00.000Z"),
+  });
+});
+
+test("M3 DATE 列边界：跨年月份与单日学期", () => {
+  // 12 月：上海 2026-12-31 的次日是 2027-01-01，不能停在同一年的 12-31
+  const december = shanghaiMonthRange(new Date("2026-12-15T00:00:00.000Z"));
+  assert.deepEqual(toDateOnlyBounds(december), {
+    gte: new Date("2026-12-01T00:00:00.000Z"),
+    lt: new Date("2027-01-01T00:00:00.000Z"),
+  });
+  // 单日学期：首末同日 → 日期边界是 [当天, 次日)
+  const single = parseAcademicTermConfig("2026-09-01", "2026-09-01");
+  if (!single.ok || !single.config.configured) throw new Error("预期已配置");
+  assert.deepEqual(toDateOnlyBounds(single.config.range), {
+    gte: new Date("2026-09-01T00:00:00.000Z"),
+    lt: new Date("2026-09-02T00:00:00.000Z"),
+  });
+});
+
+test("M3 DATE 列边界：学期区间首末两天都落在边界内", () => {
+  const term = parseAcademicTermConfig("2026-09-01", "2027-01-15");
+  if (!term.ok || !term.config.configured) throw new Error("预期已配置");
+  const bounds = toDateOnlyBounds(term.config.range);
+  assert.equal(bounds.gte.toISOString(), "2026-09-01T00:00:00.000Z");
+  // 结束日含全天 → 排他上界是结束日的次日
+  assert.equal(bounds.lt.toISOString(), "2027-01-16T00:00:00.000Z");
+  // 区间两端固定相差 8 小时（DATE 边界 = UTC 区间 + 偏移），两种语义下都不变
+  assert.equal(
+    bounds.gte.getTime() - term.config.range.startInclusive.getTime(),
+    bounds.lt.getTime() - term.config.range.endExclusive.getTime(),
+  );
 });
 
 // ---------------------------------------------------------------------------

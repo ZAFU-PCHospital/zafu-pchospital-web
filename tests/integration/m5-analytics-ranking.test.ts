@@ -296,36 +296,96 @@ dbTest("M5 只有 APPROVED 且未软删除的记录进入统计与排行", async
   assert.equal(me?.approvedCount, 1, "排行与个人摘要必须使用同一有效记录集合");
 });
 
-dbTest("M5 上海自然月边界准确：上月最后一天不计入本月，本月首末两天计入", async () => {
-  const a = await createMember("月边界");
-  const { current, previous, now } = monthKeys();
-  // 上月的最后一天（用下月 1 日往前推一天，避免手工算月末）
-  const firstOfCurrent = new Date(`${current}-01T00:00:00.000Z`);
-  const lastOfPrevious = new Date(firstOfCurrent.getTime() - 86_400_000).toISOString().slice(0, 10);
+/** 上海自然月的首日、末日，以及上月的末日（用下月 1 日往前推，避免手算月末）。 */
+function monthBoundaryDays(): { first: string; last: string; lastOfPrevious: string } {
+  const { current } = monthKeys();
+  const year = Number(current.slice(0, 4));
+  const month = Number(current.slice(5, 7));
+  return {
+    first: `${current}-01`,
+    last: new Date(Date.UTC(year, month, 1) - 86_400_000).toISOString().slice(0, 10),
+    lastOfPrevious: new Date(Date.UTC(year, month - 1, 1) - 86_400_000).toISOString().slice(0, 10),
+  };
+}
 
-  await seedRepair(a.memberProfileId, { date: lastOfPrevious });
-  await seedRepair(a.memberProfileId, { date: `${current}-01` });
-  const lastDay = new Date(
-    new Date(`${current}-01T00:00:00.000Z`).setUTCMonth(
-      new Date(`${current}-01T00:00:00.000Z`).getUTCMonth() + 1,
-    ) - 86_400_000,
-  )
-    .toISOString()
-    .slice(0, 10);
-  await seedRepair(a.memberProfileId, { date: lastDay });
+/* issue #75：月/学期区间的两端都是「某日 00:00（上海）」的 UTC 时刻，
+   而 `repair_date` 是 DATE 列。区间被整体挪一天时，「上月末」与「本月末」
+   两条记录会**互换**：只断言「本月 = 2 条」的写法看不见这个 bug
+   （原来的用例正是这样漏掉的）。所以下面两个边界用例一律**逐成员**区分。 */
 
-  const analytics = await analyticsService.getMemberAnalytics(a.actor);
-  assert.equal(analytics.summary.totalApprovedCount.value, 3, "总榜含上月与本月共 3 条");
-  assert.equal(analytics.summary.monthApprovedCount.value, 2, "本月只含本月首末两天");
+dbTest("M5 月边界：上月末不计入本月，本月首末两天都计入（issue #75）", async () => {
+  const { first, last, lastOfPrevious } = monthBoundaryDays();
+  const prev = await createMember("上月末");
+  const firstDay = await createMember("本月首");
+  const lastDay = await createMember("本月末");
 
+  await seedRepair(prev.memberProfileId, { date: lastOfPrevious });
+  await seedRepair(firstDay.memberProfileId, { date: first });
+  await seedRepair(lastDay.memberProfileId, { date: last });
+
+  const monthCounts = await Promise.all(
+    [prev, firstDay, lastDay].map(
+      async (m) =>
+        (await analyticsService.getMemberAnalytics(m.actor)).summary.monthApprovedCount.value,
+    ),
+  );
+  assert.deepEqual(
+    monthCounts,
+    [0, 1, 1],
+    `上月末 ${lastOfPrevious} 不得计入本月；${first} 与 ${last} 必须计入`,
+  );
+
+  // M3 工作台与 M5 摘要共用同一条摘要路径，必须给出同一答案。
+  const dashboard = await memberDashboardService.getDashboard(lastDay.actor);
+  assert.equal(
+    dashboard.repairSummary.monthApprovedCount.value,
+    1,
+    "M3 工作台与 M5 摘要口径必须一致",
+  );
+
+  // 榜单走原生 SQL（不经查询构造器），也必须一致：同一份数据不能有两个答案。
   const monthRanking = await rankingService.getRankings(
     { scope: "MONTH", metric: "REPAIR_COUNT", page: 1, pageSize: 20 },
-    a.actor,
+    lastDay.actor,
   );
   assert.equal(monthRanking.status, "AVAILABLE");
-  assert.equal(monthRanking.items[0]?.approvedCount, 2);
-  assert.ok(previous < current);
-  void now;
+  assert.equal(monthRanking.currentMember?.approvedCount, 1, "榜单与摘要必须使用同一有效记录集合");
+});
+
+dbTest("M5 学期边界：学期前一天不计入，学期首末两天都计入（issue #75）", async () => {
+  useControlledTerm();
+  try {
+    const before = await createMember("学期前");
+    const firstDay = await createMember("学期首");
+    const lastDay = await createMember("学期末");
+    await seedRepair(before.memberProfileId, { date: "2019-12-31" });
+    await seedRepair(firstDay.memberProfileId, { date: CONTROLLED_TERM_START });
+    await seedRepair(lastDay.memberProfileId, { date: CONTROLLED_TERM_END });
+
+    const termCounts = await Promise.all(
+      [before, firstDay, lastDay].map(async (m) => {
+        const analytics = await analyticsService.getMemberAnalytics(m.actor);
+        assert.equal(analytics.summary.termApprovedCount.status, "AVAILABLE");
+        return analytics.summary.termApprovedCount.value;
+      }),
+    );
+    assert.deepEqual(
+      termCounts,
+      [0, 1, 1],
+      `学期窗口 ${CONTROLLED_TERM_START}~${CONTROLLED_TERM_END}：前一天 2019-12-31 不得计入，首末两天必须计入`,
+    );
+
+    const dashboard = await memberDashboardService.getDashboard(lastDay.actor);
+    assert.equal(
+      dashboard.repairSummary.termApprovedCount.value,
+      1,
+      "M3 工作台与 M5 摘要口径必须一致",
+    );
+  } finally {
+    delete process.env.ACADEMIC_TERM_START;
+    delete process.env.ACADEMIC_TERM_END;
+    resetAcademicTermConfigForTests();
+  }
 });
 
 dbTest("M5 学期未配置返回 UNCONFIGURED，配置后按学期区间统计", async () => {

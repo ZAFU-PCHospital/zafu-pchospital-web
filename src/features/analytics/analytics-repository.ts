@@ -13,15 +13,21 @@
  *
  * 关于 `repair_date` 的类型（实测结论，勿凭直觉改）：
  * 它是 `DATE`（纯日历日，存的已是 `Asia/Shanghai` 自然日），不是时刻。
- * M3 的 `[startInclusive, endExclusive)` UTC 区间在它上面的比较语义已被实测确认
- * 恰好等价于「上海自然月的首日到末日」——因此月度分桶直接用
- * `DATE_FORMAT(repair_date, '%Y-%m')`，**不加 8 小时偏移**。
+ *
+ * - **原生 SQL**（本文件的榜单与趋势）：参数按完整时刻比较，M3 的
+ *   `[startInclusive, endExclusive)` UTC 区间可以直接用，已被实测确认恰好等价于
+ *   「上海自然月的首日到末日」；月度分桶因此直接取 `DATE_FORMAT(repair_date, '%Y-%m')`，
+ *   **不加 8 小时偏移**。
+ * - **Prisma 查询构造器**（`where` 里的 `repairDate`）：过滤值会被按 **UTC 日历日截断**，
+ *   而区间两端是「上海某日 00:00」（UTC 上前一天 16:00）→ 整个区间被向前挪一天：
+ *   上月末算进本月、本月末被漏掉（issue #75）。走查询构造器的地方必须先用
+ *   `toDateOnlyBounds()` 换成日期边界，否则摘要与榜单会给出两个不同的答案。
  */
 
 import { Prisma } from "@/generated/prisma/client";
 import { AppError } from "@/lib/api/errors";
 import { getDb } from "@/lib/db/client";
-import type { UtcRange } from "@/lib/academic-term";
+import { toDateOnlyBounds, type UtcRange } from "@/lib/academic-term";
 import { approvedRepairWhere, listMemberRepairSummary } from "@/features/repairs/repair-query-service";
 import type { RankingMetric } from "@/types/contracts";
 import { RANKABLE_MEMBER_STATUS } from "./analytics-policy";
@@ -125,7 +131,8 @@ export async function aggregateCategoryDistribution(
     by: ["categoryId"],
     where: approvedRepairWhere({
       memberProfileId,
-      repairDate: range ? { gte: range.startInclusive, lt: range.endExclusive } : undefined,
+      // 同 `listMemberRepairSummary`：`repair_date` 是 DATE 列，区间要先换成日期边界。
+      repairDate: range ? toDateOnlyBounds(range) : undefined,
     }),
     _count: { _all: true },
     _sum: { durationMinutes: true },
