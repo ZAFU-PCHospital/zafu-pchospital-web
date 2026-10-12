@@ -1,105 +1,79 @@
 # 浙江农林大学电脑医院 · 社团综合服务平台
 
-浙江农林大学电脑医院社团的官方网站。对外展示社团与服务范围，同时也是后续
-「清灰预约、活动维修、维修备案、志愿时长」等业务功能的载体。
+电脑医院社团的官方网站与内部服务平台，用于介绍社团、招募新成员、组织维修活动和管理维修记录。
 
-当前进入 **Phase 2**：M0 已建立 GreatSQL 与公共契约，M1 已接入 QQ + 密码认证、数据库
-Session、成员身份和真实报名链路；完整管理界面、维修、评论、统计和通知仍由后续模块负责。
+目前已实现：
 
----
+- **公开网站**：社团介绍、新社员登记、维修活动查询与报名、技术文档。
+- **成员区**：QQ 号与密码登录、邀请码注册、个人资料、维修记录与照片、活动接待与签到、案例库、评论与收藏、通知、个人统计与排行榜。
+- **管理后台**：成员与角色管理、招募审核、维修审核、活动管理、故障分类与技能标签、邀请码、评论管理、数据导出、审计日志和公开展示设置。
 
-## 快速开始
+页面支持浅色与深色模式，并适配桌面和手机。
 
-需要符合 `package.json` 约束的 Node.js 与 pnpm（本机没启用过先执行一次 `corepack enable`）。
+## 技术栈
+
+Next.js 15（App Router）· React 19 · TypeScript · Tailwind CSS v4 · GreatSQL 8.0.32-27 · Prisma 7.10.0（MariaDB adapter）。使用 pnpm 管理依赖。
+
+## 本地运行
+
+准备 Node.js（`^20.19 || ^22.12 || >=24.0`）、pnpm 和 Docker。pnpm 版本由 `package.json` 固定；未启用 Corepack 时先运行 `corepack enable`。
+
+在项目根目录执行：
 
 ```bash
-pnpm install
 cp .env.example .env
-docker compose -f compose.greatsql.yml up -d
+pnpm install
+```
+
+编辑 `.env`，将 `AUTH_SECRET`、`INVITE_CODE_PEPPER`、`PII_AUDIT_PEPPER` 的占位值替换为各自独立的随机密钥。数据库默认配置与仓库提供的 Docker Compose 一致，仅用于本地开发。
+
+```bash
+docker compose -f compose.greatsql.yml up -d --wait
 pnpm db:migrate:deploy
 pnpm db:seed
 pnpm db:health
-pnpm dev        # 打开 http://localhost:3000
+pnpm dev
 ```
 
-数据库凭据、Migration 和故障处理见 [`docs/database.md`](docs/database.md)。
+打开 <http://localhost:3000>。已有 GreatSQL 实例时，配置 `DATABASE_URL` 后可跳过 Docker 启动步骤。
 
----
+Seed 会初始化角色、故障分类和技能标签，不会创建默认账号。成员账号由管理员发放或通过邀请码注册；全新数据库的首个管理员需由维护者初始化。数据库配置与排错见 [数据库指南](docs/database.md)。
 
-## 页面
+## 主要入口
 
-| 路由                       | 页面         | 状态                                                       |
-| -------------------------- | ------------ | ---------------------------------------------------------- |
-| `/`                        | 首页         | 已完整实现（设计基准的六个区块）                           |
-| `/about`                   | 关于我们     | 内容骨架（社团介绍 / 服务范围 / 联系方式），细节待社团补充 |
-| `/join`                    | 加入我们     | 新社员登记表已接入真实报名 API                             |
-| `/docs`                    | 技术文档入口 | 指向站内 `/handbook/`，正文来自独立文档仓库                |
-| `/login`                   | 成员登录     | QQ + 密码；同壳可切 `?mode=register` 邀请码注册            |
-| `/login?mode=register`     | 邀请码注册   | 与登录同壳（深链 / 页内切换）                              |
-| `/register/member`         | 兼容重定向   | 重定向至 `/login?mode=register`                            |
-| `/account/change-password` | 修改密码     | 首次登录强制改密与日常改密                                 |
-| `/member`                  | 成员落地页   | M1 最小受保护页面，完整工作台留给 M3                       |
-
----
+| 路径                  | 用途                                                       |
+| --------------------- | ---------------------------------------------------------- |
+| `/`、`/about`         | 首页与社团介绍                                             |
+| `/repair-activities`  | 维修活动查询与报名                                         |
+| `/join`               | 新社员登记                                                 |
+| `/docs`、`/handbook/` | 技术文档目录与正文                                         |
+| `/login`              | 成员登录，可切换邀请码注册                                 |
+| `/member`             | 成员工作台，包含维修、活动、案例、通知、统计与个人资料入口 |
 
 ## 常用命令
 
-| 命令                     | 做什么                                             |
-| ------------------------ | -------------------------------------------------- |
-| `pnpm dev`               | 启动开发服务器                                     |
-| `pnpm lint`              | 代码规范检查 + 主题调色板校验（必须 0 error）      |
-| `pnpm test`              | 单元与 Contract 测试；真实数据库用例默认跳过       |
-| `pnpm test:db`           | 对本地专用 GreatSQL 执行数据库集成测试             |
-| `pnpm build`             | 生产构建（含站内技术文档，需要 mdBook）            |
-| `pnpm build:site`        | 只编译官网，跳过文档构建（快速自检用，不用于部署） |
-| `pnpm db:migrate:deploy` | 执行版本化 Migration                               |
-| `pnpm db:seed`           | 幂等写入 MEMBER / ADMIN 基础角色                   |
-| `pnpm db:health`         | 检查 GreatSQL 连接、UTC、字符集与排序规则          |
-| `pnpm format`            | Prettier 格式化                                    |
+| 命令              | 用途                                                       |
+| ----------------- | ---------------------------------------------------------- |
+| `pnpm dev`        | 本地开发                                                   |
+| `pnpm lint`       | ESLint 与主题调色板校验                                    |
+| `pnpm test`       | 单元与契约测试                                             |
+| `pnpm test:db`    | GreatSQL 集成测试，必须连接库名以 `_test` 结尾的独立测试库 |
+| `pnpm build`      | 完整生产构建，包含技术文档                                 |
+| `pnpm start`      | 启动已构建的生产服务                                       |
+| `pnpm docs:build` | 单独构建技术文档                                           |
+| `pnpm build:site` | 跳过文档构建，仅用于官网快速自检                           |
 
-> `pnpm build` 的 mdBook 前置条件、环境变量与常见报错见 [`AGENTS.md`](AGENTS.md) 第 7 节。
-> Phase 2 完整生产形态必须运行 Next.js 服务端，浏览器不得直连 GreatSQL。
+技术文档来自独立的 [ZAFU-PCHospital-Doc](https://github.com/ZAFU-PCHospital/ZAFU-PCHospital-Doc) 仓库，由 mdBook 生成。完整构建需要安装 mdBook，缺少文档源码时会自动克隆到 `.docs-source/`。只运行 `pnpm dev` 不会生成文档正文；本地查看 `/handbook/` 前需执行 `pnpm docs:build`。配置细节见 [工程手册第 7 节](AGENTS.md#7-站内文档构建 handbook)。
 
----
-
-## 目录结构（顶层）
-
-```text
-prisma/                Schema、版本化 Migration 与幂等 Seed
-src/app/               页面与 /api/v1 Route Handler
-src/components/        layout 骨架、ui 原语与页面专属区块
-src/config/            站点配置与页面文案
-src/features/          领域 Service / Repository
-src/lib/               DB、API、权限、审计、安全与通用逻辑
-src/types/             公共 Enum / Contract 唯一事实来源
-tests/                 单元、Contract 与 GreatSQL 集成测试
-docs/                  设计、架构、数据库、契约与协作文档
-```
-
-各层详细职责见 [`docs/architecture.md`](docs/architecture.md) 第 2～3 节。
-
----
-
-## 文档在哪
-
-| 你想知道                                   | 看这个                                                     |
-| ------------------------------------------ | ---------------------------------------------------------- |
-| 界面规则：颜色 / 字号 / 间距 / 圆角        | [`docs/design-system.md`](docs/design-system.md)           |
-| 代码放置、层次与数据流                     | [`docs/architecture.md`](docs/architecture.md)             |
-| GreatSQL、Migration、Seed、检查与发布      | [`docs/database.md`](docs/database.md)                     |
-| 公共数据 / API 契约及不变量                | [`docs/contracts/`](docs/contracts/)                       |
-| Phase 2 模块状态、依赖和协作规则           | [`docs/phase2-development.md`](docs/phase2-development.md) |
-| Phase 2 业务需求                           | [`docs/第二期需求分析文档.md`](docs/第二期需求分析文档.md) |
-| 分支、commit 与 PR 流程                    | [`docs/git-workflow.md`](docs/git-workflow.md)             |
-| 工程细节与硬性约束（主要给 AI / Agent 看） | [`AGENTS.md`](AGENTS.md)                                   |
-
----
+部署使用 `pnpm build` 和 `pnpm start`，需要 Node.js 服务端与 GreatSQL；上传照片的存储目录需要持久化。
 
 ## 参与开发
 
-1. 先读 [`AGENTS.md`](AGENTS.md) 与当前模块任务书；页面改动还需读设计系统，服务端改动还需读数据库与 Contract 文档
-2. 从最新 `main` 建分支：`git switch -c feat/xxx`
-3. 运行 `pnpm lint && pnpm test && pnpm build`；数据库改动还要运行 Migration 和 `pnpm test:db`
-4. 发起 Pull Request（禁止直接 push `main`）
+从最新 `main` 创建工作分支，通过 Pull Request 提交改动。提交前运行 `pnpm lint`、`pnpm test` 和 `pnpm build`；涉及数据库时还需验证迁移并在独立测试库运行集成测试
 
-完整流程与提交规范见 [`docs/git-workflow.md`](docs/git-workflow.md)。
+- [设计系统](docs/design-system.md)：页面样式与公共组件
+- [项目架构](docs/architecture.md)：目录职责与代码组织
+- [数据库指南](docs/database.md)与[数据 / API 契约](docs/contracts/)：数据开发与运行规范
+- [第二期需求](docs/第二期需求分析文档.md)与[模块开发计划](docs/phase2-development.md)：业务范围和模块划分
+- [协作流程](docs/git-workflow.md)：分支、提交与 PR 规范
+- [工程手册](AGENTS.md)：环境、验证、文档构建与 CI 的详细说明，也是 AI Agent 的项目规则
