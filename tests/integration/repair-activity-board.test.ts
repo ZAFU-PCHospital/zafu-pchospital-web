@@ -6,6 +6,7 @@ import { POST as POST_CHECK_IN } from "../../src/app/api/v1/member/repair-activi
 import { POST as POST_ATTENDANCE } from "../../src/app/api/v1/member/repair-activities/[id]/attendance/route";
 import { POST as POST_SERVE } from "../../src/app/api/v1/member/repair-activities/[id]/serve/route";
 import { POST as POST_WITHDRAW } from "../../src/app/api/v1/member/repair-activities/[id]/withdraw/route";
+import { GET as GET_PHONE } from "../../src/app/api/v1/member/repair-activities/[id]/registrations/[registrationId]/phone/route";
 import { POST as POST_REGISTRATION } from "../../src/app/api/v1/repair-activities/[id]/registrations/route";
 import { repairActivityStaffService } from "../../src/features/repair-activities/repair-activity-staff-service";
 import { resetRateLimitsForTests } from "../../src/lib/api/rate-limit";
@@ -281,7 +282,7 @@ before(async () => {
   // 主接待员先标记出勤（幂等）；「未出勤 403」用例用另一位接待员。
   await repairActivityStaffService.markAttendance(ACTIVITY_ID, staffActor);
   staffCookie = await sessionCookie(STAFF_USER_ID, "ADMIN");
-  absentCookie = await sessionCookie(ABSENT_STAFF_USER_ID, "ADMIN");
+  absentCookie = await sessionCookie(ABSENT_STAFF_USER_ID, "MEMBER");
 });
 
 after(async () => {
@@ -311,6 +312,112 @@ async function checkInFixture(
     },
   });
 }
+
+dbTest("电话按需读取：普通成员未出勤可查看，默认看板脱敏，明文不进审计", async () => {
+  const db = getDb();
+  for (const status of ["REGISTERED", "CHECKED_IN", "SERVED"]) {
+    const row = await checkInFixture({ status });
+    const requestId = `req_phone_${status}`;
+    const response = await GET_PHONE(
+      new Request(
+        `http://localhost/api/v1/member/repair-activities/${ACTIVITY_ID}/registrations/${row.id}/phone`,
+        {
+          headers: { cookie: absentCookie, "x-request-id": requestId },
+        },
+      ),
+      { params: Promise.resolve({ id: ACTIVITY_ID, registrationId: row.id }) },
+    );
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("cache-control"), "private, no-store");
+    const json = await response.json();
+    assert.deepEqual(json.data, { phone: row.phone });
+    assert.equal(json.meta.requestId, requestId);
+    const audit = await db.auditLog.findFirstOrThrow({
+      where: { requestId, action: "repair_activity.registration_phone.viewed", targetId: row.id },
+    });
+    assert.equal(audit.actorUserId, ABSENT_STAFF_USER_ID);
+    assert.deepEqual(audit.afterSummary, { activityId: ACTIVITY_ID });
+    assert.equal(JSON.stringify(audit).includes(row.phone), false);
+    const board = await repairActivityStaffService.getBoard(ACTIVITY_ID, staffActor);
+    const visible = [...board.eligible, ...board.queue, ...board.served].find(
+      (item) => item.id === row.id,
+    );
+    assert.ok(visible);
+    assert.ok(visible.phoneMasked.includes("****"));
+    assert.equal(JSON.stringify(board).includes(row.phone), false);
+    assert.equal("phone" in visible, false);
+  }
+});
+
+dbTest("电话读取拒绝未登录、无权限、无有效成员及跨活动 / 无效报名，不留成功审计", async () => {
+  const db = getDb();
+  const own = await checkInFixture();
+  const phoneRoute = (registrationId: string, cookie = absentCookie, id = ACTIVITY_ID) =>
+    callRoute(
+      GET_PHONE,
+      `http://localhost/api/v1/member/repair-activities/${id}/registrations/${registrationId}/phone`,
+      {
+        params: { id, registrationId },
+        headers: { cookie },
+      },
+    );
+  const unauthenticated = await phoneRoute(own.id, "");
+  assert.equal(unauthenticated.status, 401);
+  assert.equal(errorCodeOf(unauthenticated.json), "UNAUTHENTICATED");
+  await assert.rejects(
+    repairActivityStaffService.getRegistrationPhone(ACTIVITY_ID, own.id, {
+      ...staffActor,
+      permissions: [],
+    }),
+    { code: "FORBIDDEN" },
+  );
+  await assert.rejects(
+    repairActivityStaffService.getRegistrationPhone(ACTIVITY_ID, own.id, {
+      ...staffActor,
+      userStatus: "DISABLED",
+    }),
+    { code: "FORBIDDEN" },
+  );
+  await db.memberProfile.update({
+    where: { id: ABSENT_STAFF_PROFILE_ID },
+    data: { deletedAt: new Date() },
+  });
+  try {
+    const noMember = await phoneRoute(own.id);
+    assert.equal(noMember.status, 403);
+  } finally {
+    await db.memberProfile.update({
+      where: { id: ABSENT_STAFF_PROFILE_ID },
+      data: { deletedAt: null },
+    });
+  }
+  const unavailable = [
+    await checkInFixture({ activityId: OTHER_ACTIVITY_ID }),
+    await checkInFixture({ deletedAt: new Date() }),
+    await checkInFixture({ status: "CANCELLED" }),
+  ];
+  for (const registrationId of [randomUUID(), ...unavailable.map((row) => row.id)]) {
+    const result = await phoneRoute(registrationId);
+    assert.equal(result.status, 404);
+    assert.equal(errorCodeOf(result.json), "ACTIVITY_REGISTRATION_NOT_FOUND");
+  }
+  const noActivity = await phoneRoute(own.id, absentCookie, randomUUID());
+  assert.equal(noActivity.status, 404);
+  assert.equal(errorCodeOf(noActivity.json), "ACTIVITY_NOT_FOUND");
+  assert.equal(
+    await db.auditLog.count({
+      where: {
+        action: "repair_activity.registration_phone.viewed",
+        targetId: { in: [own.id, ...unavailable.map((row) => row.id)] },
+      },
+    }),
+    0,
+  );
+  // 无效状态夹具不留给后续「报满」用例，避免它们被计入该用例的容量。
+  await db.repairActivityRegistration.deleteMany({
+    where: { id: { in: unavailable.map((row) => row.id) } },
+  });
+});
 
 dbTest("核对后批量签到：新类型与标签、成员审计、撤回保留类型、接待分类贯通", async () => {
   const db = getDb();

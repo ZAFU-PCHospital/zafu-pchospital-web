@@ -5,6 +5,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 
 import { AdminToast, type AdminToastMessage } from "@/components/admin/AdminToast";
 import { formatShanghaiDateTime } from "@/components/repair-activities/activity-format";
+import { RegistrationPhone } from "@/components/repair-activities/RegistrationPhone";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -392,23 +393,35 @@ export function MemberRepairActivityBoard({ activityId }: Props) {
             <ul className="activity-board__list">
               {board.eligible.map((row) => (
                 <li key={row.id} className="activity-board__row">
-                  <label className="activity-board__check">
+                  <div className="activity-board__check">
                     <input
                       type="checkbox"
+                      id={`registration-${row.id}`}
                       checked={selected.has(row.id)}
                       disabled={opsDisabled}
+                      aria-label={`${copy.name} ${row.name}`}
                       onChange={() => toggle(row.id)}
                     />
                     <span>
-                      <strong>{row.name}</strong>
+                      <label htmlFor={`registration-${row.id}`}>
+                        <strong>{row.name}</strong>
+                      </label>
                       <span className="muted">
                         {" "}
-                        · {row.phoneMasked} · {row.issueTypeLabel}
+                        ·{" "}
+                        <RegistrationPhone
+                          key={`${activityId}:${row.id}:${row.phoneMasked}`}
+                          activityId={activityId}
+                          registrationId={row.id}
+                          phoneMasked={row.phoneMasked}
+                          onError={setMessage}
+                        />{" "}
+                        · {row.issueTypeLabel}
                         {/* 机型选填：没填就不占位（issue #68）。 */}
                         {row.deviceModel ? ` · ${copy.deviceModel} ${row.deviceModel}` : null}
                       </span>
                     </span>
-                  </label>
+                  </div>
                 </li>
               ))}
             </ul>
@@ -505,7 +518,14 @@ export function MemberRepairActivityBoard({ activityId }: Props) {
                         <span className="admin-tag">{repairStatusLabels[row.recordStatus]}</span>
                       ) : null}
                       <div className="muted">
-                        {copy.phone} {row.phoneMasked}
+                        {copy.phone}{" "}
+                        <RegistrationPhone
+                          key={`${activityId}:${row.id}:${row.phoneMasked}`}
+                          activityId={activityId}
+                          registrationId={row.id}
+                          phoneMasked={row.phoneMasked}
+                          onError={setMessage}
+                        />
                       </div>
                     </div>
                   </div>

@@ -504,6 +504,25 @@ DELETE /api/v1/member/notifications/:id
 （设备 / 草稿集成测试）与旧请求（看板集成测试）保持兼容。公开查询、后台报名、board 与 serve
 共用保存后的报名 issueType；不新增 Schema、Migration、公共枚举或权限。
 
+### 接待台按需查看客户电话（issue #112）
+
+`GET /api/v1/member/repair-activities/:id/registrations/:registrationId/phone`
+返回标准信封 `{ phone: string }`，响应为 `Cache-Control: private, no-store`。
+
+- 沿用 board 的有效 Session、ACTIVE 成员档案与 `activity:staff` 权限（MEMBER / ADMIN）；
+  查看不要求本场出勤或报名截止，不影响签到 / 接待的操作闸门。
+- 只读取本场未软删除的有效报名（REGISTERED / CHECKED_IN / SERVED）；活动不存在或已软删除
+  返回 `ACTIVITY_NOT_FOUND`，报名不存在、跨活动、已软删除或无效状态返回
+  `ACTIVITY_REGISTRATION_NOT_FOUND`。不新增权限、错误码、Schema 或 Migration。
+- 明文响应前同事务写 `repair_activity.registration_phone.viewed` 审计，记录成员、报名、
+  活动与 requestId，不记录完整号码；审计失败不返回明文。
+- board、check-in、withdraw、serve 与公开报名回执继续只返回 `phoneMasked`。待签到 / 已接待
+  共用按需读取组件，初始只展示脱敏值，隐藏即丢弃明文，下次查看重新鉴权并留痕；
+  加载与失败保留脱敏值，错误进入常驻反馈区，显隐不影响布局或待签到勾选。
+
+影响范围：成员看板两个列表 → 单条 phone Route → Staff Service → 查看审计与集成测试；
+原 `StaffRegistrationView`、维修单 `ownerPhone` 权限与其余调用方保持兼容。
+
 ### 接待落草稿与机主字段（issue #79 第 6 项）
 
 **serve 行为变更**：

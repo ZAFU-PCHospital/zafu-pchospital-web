@@ -242,6 +242,39 @@ function toListItem(
 }
 
 export const repairActivityStaffService = {
+  async getRegistrationPhone(
+    activityId: string,
+    registrationId: string,
+    actor: AuthorizedActor,
+  ): Promise<{ phone: string }> {
+    await requireStaffMember(actor);
+    return inSerializableTransaction(async (tx) => {
+      const activity = await tx.repairActivity.findFirst({
+        where: { id: activityId, deletedAt: null },
+        select: { id: true },
+      });
+      if (!activity) throw new AppError("ACTIVITY_NOT_FOUND", "活动不存在");
+      const registration = await tx.repairActivityRegistration.findFirst({
+        where: { id: registrationId, activityId, ...effectiveStatusFilter },
+        select: { id: true, phone: true },
+      });
+      if (!registration) {
+        throw new AppError("ACTIVITY_REGISTRATION_NOT_FOUND", "报名不存在");
+      }
+      await appendAuditLog(tx, {
+        actor,
+        actorType: "USER",
+        actorUserId: actor.userId,
+        action: "repair_activity.registration_phone.viewed",
+        targetType: "RepairActivityRegistration",
+        targetId: registration.id,
+        result: "SUCCESS",
+        after: { activityId },
+      });
+      return { phone: registration.phone };
+    });
+  },
+
   async listForStaff(actor: AuthorizedActor): Promise<StaffActivityListItem[]> {
     const member = await requireStaffMember(actor);
     const now = new Date();

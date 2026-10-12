@@ -7624,6 +7624,25 @@ html[data-theme="black-yellow"] {
   justify-content: space-between;
   gap: var(--s-3);
 }
+/* 电话与按钮常驻定宽，脱敏 / 明文 / 请求中均不改变行高与换行位置。 */
+.activity-board__phone {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+  white-space: nowrap;
+  gap: var(--s-1);
+}
+.activity-board__phone-number {
+  inline-size: 11ch;
+  font-variant-numeric: tabular-nums;
+}
+.activity-board__phone-toggle.btn {
+  inline-size: 46px;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: 0;
+  gap: 0;
+}
 .activity-board__actions > p {
   margin: 0;
 }
