@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { AdminToast, type AdminToastMessage } from "@/components/admin/AdminToast";
 import { formatShanghaiDateTime } from "@/components/repair-activities/activity-format";
@@ -41,47 +41,116 @@ export function MemberRepairActivityBoard({ activityId }: Props) {
   const [checkInError, setCheckInError] = useState("");
   const checkInPending = useRef(false);
   const hasBoard = useRef(false);
+  const boardElement = useRef<HTMLDivElement>(null);
+  const scrollPosition = useRef<{ x: number; y: number } | null>(null);
+  const request = useRef<{ background: boolean } | null>(null);
   /** 全局接单拦截弹层（issue #79 第 6 项）：点击「接待」命中未完成草稿时出现，不发请求。 */
   const [pendingNotice, setPendingNotice] = useState<StaffServeDraft | null>(null);
+  const paused =
+    busy !== null || checkInConfirmOpen || withdrawTarget !== null || pendingNotice !== null;
+  const pausedRef = useRef(paused);
+  pausedRef.current = paused;
 
-  const load = useCallback(async (): Promise<StaffBoardView | null> => {
-    setMessage("");
-    try {
-      const response = await fetch(`/api/v1/member/repair-activities/${activityId}/board`, {
-        cache: "no-store",
-      });
-      const json = (await response.json()) as {
-        success: boolean;
-        data?: StaffBoardView;
-        error?: { message?: string };
-      };
-      if (!json.success || !json.data) {
-        throw new Error(json.error?.message ?? copy.loadFailed);
+  const load = useCallback(
+    async (background = false): Promise<StaffBoardView | null> => {
+      if (background && (pausedRef.current || request.current)) return null;
+      // 用请求身份丢弃过期响应；清理 effect 时不主动 abort，避免开发模式报取消异常。
+      const active = { background };
+      request.current = active;
+      if (!background) setMessage("");
+      try {
+        const response = await fetch(`/api/v1/member/repair-activities/${activityId}/board`, {
+          cache: "no-store",
+        });
+        const json = (await response.json()) as {
+          success: boolean;
+          data?: StaffBoardView;
+          error?: { message?: string };
+        };
+        if (request.current !== active) return null;
+        if (background && (pausedRef.current || document.visibilityState !== "visible"))
+          return null;
+        if (!response.ok || !json.success || !json.data) {
+          throw new Error(json.error?.message ?? copy.loadFailed);
+        }
+        if (hasBoard.current && boardElement.current) {
+          scrollPosition.current = { x: window.scrollX, y: window.scrollY };
+          // 列表缩短时保留原高度，避免浏览器先把滚动位置夹回页首。
+          if (window.scrollY > 0) {
+            boardElement.current.style.minHeight = `${boardElement.current.getBoundingClientRect().height}px`;
+          }
+        }
+        setBoard(json.data);
+        hasBoard.current = true;
+        const eligibleIds = new Set(json.data.eligible.map((row) => row.id));
+        setSelected((current) => new Set([...current].filter((id) => eligibleIds.has(id))));
+        setState("ready");
+        return json.data;
+      } catch (error) {
+        if (request.current !== active) return null;
+        // 自动同步失败保留数据与操作反馈，下一轮继续重试。
+        if (background && hasBoard.current) return null;
+        if (hasBoard.current) {
+          setMessage(copy.refreshFailed);
+        } else {
+          setState("error");
+          setMessage(error instanceof Error ? error.message : copy.loadFailed);
+        }
+        return null;
+      } finally {
+        if (request.current === active) request.current = null;
       }
-      setBoard(json.data);
-      hasBoard.current = true;
-      setSelected(new Set());
-      setState("ready");
-      return json.data;
-    } catch (error) {
-      if (hasBoard.current) {
-        setMessage(copy.refreshFailed);
-      } else {
-        setState("error");
-        setMessage(error instanceof Error ? error.message : copy.loadFailed);
-      }
-      return null;
-    }
-  }, [activityId, copy.loadFailed, copy.refreshFailed]);
+    },
+    [activityId, copy.loadFailed, copy.refreshFailed],
+  );
 
   useEffect(() => {
     void load();
+    const onResize = () => {
+      if (boardElement.current) boardElement.current.style.minHeight = "";
+    };
+    window.addEventListener("resize", onResize);
+    return () => {
+      request.current = null;
+      window.removeEventListener("resize", onResize);
+    };
   }, [load]);
+
+  useEffect(() => {
+    if (paused) {
+      if (request.current?.background) {
+        request.current = null;
+      }
+      return;
+    }
+    const refresh = () => {
+      if (document.visibilityState === "visible") void load(true);
+    };
+    refresh();
+    const timer = window.setInterval(refresh, 5_000);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [load, paused]);
+
+  useLayoutEffect(() => {
+    const position = scrollPosition.current;
+    scrollPosition.current = null;
+    if (position && (window.scrollX !== position.x || window.scrollY !== position.y)) {
+      window.scrollTo({ left: position.x, top: position.y, behavior: "instant" });
+    }
+  }, [board]);
 
   async function postJson<T>(
     path: string,
     body: Record<string, unknown>,
   ): Promise<{ ok: true; data: T } | { ok: false; message: string; code?: string }> {
+    // 写请求开始时使旧的读取失效，不能让提交前的快照覆盖操作结果。
+    request.current = null;
     try {
       const response = await fetch(path, {
         method: "POST",
@@ -282,7 +351,7 @@ export function MemberRepairActivityBoard({ activityId }: Props) {
   const checkInBusy = busy === "check-in";
 
   return (
-    <div className="activity-board">
+    <div ref={boardElement} className="activity-board content-start">
       <div className="activity-board__toolbar">
         <Button href="/member/repair-activities" variant="ghost">
           {copy.back}

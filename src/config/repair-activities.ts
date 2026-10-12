@@ -110,8 +110,8 @@ export const memberRepairActivitiesCopy = {
     checkingIn: "签到中…",
     checkInSuccess: "已签到入队。",
     checkInUpdatedSuccess: "故障类型已更新，客户已签到入队。",
-    checkInRefreshFailed: "客户已签到入队，但工作台刷新失败，请刷新页面查看最新列表。",
-    refreshFailed: "工作台刷新失败，仍显示上次数据，请稍后刷新页面。",
+    checkInRefreshFailed: "客户已签到入队，但工作台刷新失败，将自动重试。",
+    refreshFailed: "工作台刷新失败，仍显示上次数据，将自动重试。",
     checkInStaffReminder: "普通成员无需进行客户签到，签到工作请交给现场管理员。",
     checkInConfirmTitle: "确认签到入队？",
     checkInConfirmHint:
