@@ -93,6 +93,14 @@ export const repairTableSpec: TableViewSpec<RepairView, RepairTableContext> = {
       render: (record) => record.category?.name ?? UNCATEGORIZED_LABEL,
     },
     {
+      key: "deviceModel",
+      label: copy.table.deviceModel,
+      kind: "text",
+      sortable: false,
+      cellClassName: "repair-table__model",
+      render: (record) => <span>{record.deviceModel || adminShared.none}</span>,
+    },
+    {
       key: "result",
       label: copy.table.result,
       kind: "select",

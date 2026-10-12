@@ -494,6 +494,7 @@ export const adminCopy = {
       member: "成员",
       ownerName: "机主姓名",
       ownerPhone: "机主电话",
+      deviceModel: "机型",
       category: "故障分类",
       result: "维修结果",
       duration: "维修时长",

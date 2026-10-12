@@ -557,7 +557,7 @@ function renderRepairs(
   );
 }
 
-test("维修表：表头 8 列（首列空表头）且不输出 colgroup", async () => {
+test("维修表：表头 9 列（首列空表头）且不输出 colgroup", async () => {
   modulesRef = await load();
   const copy = modulesRef.admin.adminCopy.repairs;
   const html = renderRepairs([repair()]);
@@ -567,6 +567,7 @@ test("维修表：表头 8 列（首列空表头）且不输出 colgroup", async
     copy.table.repairDate,
     copy.table.member,
     copy.table.category,
+    copy.table.deviceModel,
     copy.table.result,
     copy.table.duration,
     copy.table.status,
@@ -602,7 +603,7 @@ test("维修表：成员 / 分类按名字排——排序用的是 sortKey（mem
   const buttons = [
     ...html.matchAll(/<button type="button" class="admin-th__sort[^"]*">(.*?)<\/button>/g),
   ];
-  // 可排：维修日期 / 成员 / 分类 / 结果 / 时长 / 状态；不可排：选择列与操作列。
+  // 可排：维修日期 / 成员 / 分类 / 结果 / 时长 / 状态；不可排：选择列、机型列与操作列。
   assert.deepEqual(
     buttons.map((match) => match[1]),
     [
@@ -624,11 +625,17 @@ test("维修表：成员 / 分类按名字排——排序用的是 sortKey（mem
 test("维修表：单元格内容与占位（未分类 / 空结果 / 空时长 / 标记标签）", async () => {
   modulesRef = await load();
   const { formatDurationMinutes, formatShanghaiDate } = modulesRef.memberConfig;
-  const item = repair();
+  const item = repair({ deviceModel: "ThinkPad X1 Carbon" });
   const html = renderRepairs([item]);
   assert.ok(html.includes(formatShanghaiDate(item.repairDate)), "维修日期应当格式化");
   assert.ok(html.includes(">张三<"), "成员名应当显示");
   assert.ok(html.includes(">系统重装<"), "分类名应当显示");
+  assert.ok(
+    html.includes(
+      'data-label="机型" class="repair-table__model"><span>ThinkPad X1 Carbon</span></td>',
+    ),
+    "机型单元格应显示完整名称并带手机端标签与换行样式",
+  );
   assert.ok(html.includes(formatDurationMinutes(99)), "时长应当格式化");
   assert.ok(html.includes("repair-tag--approved"), "状态标签按状态分色");
   assert.ok(html.includes(">典型<"), "典型案例标记应当显示");
@@ -639,10 +646,14 @@ test("维修表：单元格内容与占位（未分类 / 空结果 / 空时长 /
     repair({ category: null, result: null, durationMinutes: null, isTypical: false }),
   ]);
   assert.ok(empty.includes(">未分类<"), "空分类显示「未分类」");
+  assert.ok(
+    empty.includes('data-label="机型" class="repair-table__model"><span>—</span></td>'),
+    "空机型显示占位符",
+  );
   assert.ok(empty.includes(modulesRef.admin.adminShared.none), "空结果与空时长显示占位符");
 });
 
-test("维修表：成员列是内容列（grow），操作列是详情入口，空态占 8 列", async () => {
+test("维修表：成员列是内容列（grow），操作列是详情入口，空态占 9 列", async () => {
   modulesRef = await load();
   const copy = modulesRef.admin.adminCopy.repairs;
   const html = renderRepairs([repair()]);
@@ -655,8 +666,8 @@ test("维修表：成员列是内容列（grow），操作列是详情入口，�
   const emptyHtml = renderRepairs([]);
   assert.ok(
     emptyHtml.includes(
-      `<td class="admin-table__empty" colSpan="8">${modulesRef.admin.adminShared.empty}</td>`,
+      `<td class="admin-table__empty" colSpan="9">${modulesRef.admin.adminShared.empty}</td>`,
     ),
-    "空态必须占满 8 列",
+    "空态必须占满 9 列",
   );
 });

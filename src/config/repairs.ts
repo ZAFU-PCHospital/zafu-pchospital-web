@@ -36,6 +36,7 @@ export const repairCopy = {
     columns: {
       date: "日期",
       category: "分类",
+      deviceModel: "机型",
       content: "备注",
       member: "维修成员",
       result: "结果",
@@ -48,6 +49,7 @@ export const repairCopy = {
     uncategorized: "未分类",
     missingContent: "尚未填写备注",
     missingDate: "日期待填",
+    missingDeviceModel: "—",
     missingResult: "结果待填",
     difficult: "疑难",
     typical: "典型",

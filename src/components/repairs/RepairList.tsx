@@ -374,6 +374,7 @@ export function RepairList({ statusLabels, resultLabels }: Props) {
               <tr>
                 <th>{copy.columns.date}</th>
                 <th>{copy.columns.category}</th>
+                <th>{copy.columns.deviceModel}</th>
                 <th>{copy.columns.content}</th>
                 <th>{copy.columns.member}</th>
                 <th>{copy.columns.result}</th>
@@ -439,6 +440,9 @@ function RepairRow({
         {formatRepairDate(item.repairDate, copy.missingDate)}
       </td>
       <td data-label={copy.columns.category}>{item.category?.name ?? copy.uncategorized}</td>
+      <td data-label={copy.columns.deviceModel} className="repair-table__model">
+        {item.deviceModel || copy.missingDeviceModel}
+      </td>
       <td data-label={copy.columns.content} className="repair-table__content">
         {/* 摘要取值链（issue #79 第 6 项）：备注优先，老记录的维修内容回退。 */}
         <Link href={`/member/repairs/${item.id}`}>
