@@ -5,32 +5,40 @@
 
 ## 1. 固定基线
 
-| 项目              | 固定值                                                     |
-| ----------------- | ---------------------------------------------------------- |
-| 数据库            | GreatSQL `8.0.32-27`（镜像 `greatsql/greatsql:8.0.32-27`） |
-| 存储引擎          | InnoDB                                                     |
-| 字符集 / 排序规则 | `utf8mb4` / `utf8mb4_unicode_ci`                           |
-| 时区 / 时间精度   | 服务与应用会话均为 UTC；`DATETIME(3)`                      |
-| ORM               | Prisma `7.10.0` + MariaDB driver adapter `7.10.0`          |
-| 核心 ID           | 应用层 UUID，数据库 `CHAR(36)`                             |
+| 项目              | 固定值                                                                                          |
+| ----------------- | ----------------------------------------------------------------------------------------------- |
+| 数据库            | GreatSQL `8.0.32-27`（国内镜像 `registry.cn-beijing.aliyuncs.com/greatsql/greatsql:8.0.32-27`） |
+| 存储引擎          | InnoDB                                                                                          |
+| 字符集 / 排序规则 | `utf8mb4` / `utf8mb4_unicode_ci`                                                                |
+| 时区 / 时间精度   | 服务与应用会话均为 UTC；`DATETIME(3)`                                                           |
+| ORM               | Prisma `7.10.0` + MariaDB driver adapter `7.10.0`                                               |
+| 核心 ID           | 应用层 UUID，数据库 `CHAR(36)`                                                                  |
 
 不得擅自更换数据库、ORM、字符集或时区。QQ、手机号、学号不是 User 本体或业务主键；
 统一账户主键是 `users.id`。
 
 ## 2. 本地启动
 
-Prisma 7.10.0 要求 Node.js `^20.19 || ^22.12 || >=24.0`。安装依赖后，在 PowerShell 执行：
+Windows 推荐在 WSL 中运行 Docker Engine，使用独立的 `compose.greatsql.wsl.yml`；
+配置脚本、首次安装和注意事项见 [Windows 数据库环境配置](database-windows.md)。
+`compose.greatsql.yml` 保持既有部署内容，本地 WSL 脚本不使用它。
+以下命令保留给使用原文件的环境；Prisma 7.10.0 要求 Node.js `^20.19 || ^22.12 || >=24.0`。
+
+已有旧容器若挂载到 `/var/lib/mysql`，先按 [旧挂载处理](database-windows.md#6-旧环境的数据挂载处理)
+备份与迁移，再执行下面的 `up`；直接重建可能丢失容器可写层中的数据。
 
 ```powershell
 Copy-Item .env.example .env
-docker compose -f compose.greatsql.yml up -d
+docker compose -f compose.greatsql.yml up -d --wait
 pnpm db:migrate:deploy
 pnpm db:seed
 pnpm db:health
 ```
 
-Compose 默认把容器 3306 映射到本机 3307，并创建持久卷 `greatsql-data`。示例凭据只允许
-本地使用；`.env` 不得提交。查看状态：
+原 Compose 保留端口 `3307:3306` 和卷挂载 `/var/lib/mysql`，WSL 专用文件则绑定
+`127.0.0.1:3307` 并挂载镜像实际的数据目录 `/data/GreatSQL`。服务器若需调整挂载，
+必须另行核对现有数据目录、备份与恢复，不随本地环境配置一起修改。
+示例凭据只允许本地使用；`.env` 不得提交。查看状态：
 
 ```powershell
 docker compose -f compose.greatsql.yml ps
@@ -147,9 +155,11 @@ pnpm lint
 pnpm build
 ```
 
-`pnpm test` 默认运行单元与 Contract 测试并跳过真实数据库用例；`pnpm test:db` 必须连接
-专用测试 GreatSQL，覆盖 Seed 幂等、招募去重、账号发放幂等、邀请码并发限次和管理员更新
-边界。也可在 PowerShell 用 `$env:RUN_DB_TESTS='1'; pnpm test` 一次运行全部测试。
+`pnpm test` 默认运行单元与 Contract 测试并跳过真实数据库用例；`pnpm test:db` 必须先将
+`DATABASE_URL` 指向库名以 `_test` 结尾的专用测试 GreatSQL，覆盖 Seed 幂等、招募去重、
+账号发放幂等、邀请码并发限次和管理员更新边界。上面的 `pnpm test:db` 不能直接沿用
+`.env` 中的开发库；Windows 的切库与恢复命令见 [独立测试库](database-windows.md#4-独立测试库)。
+也可在指定测试库后用 `$env:RUN_DB_TESTS='1'; pnpm test` 一次运行全部测试。不要并发运行多轮集成测试。
 
 `pnpm db:health` 应确认数据库可达、**产品确为 GreatSQL**、版本严格属于 `8.0.32-27` 基线、InnoDB、
 UTC、`utf8mb4` 和排序规则。脚本同时校验 `@@version` 与 `@@version_comment`：GreatSQL 的

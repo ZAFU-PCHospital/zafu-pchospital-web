@@ -16,26 +16,22 @@ Next.js 15（App Router）· React 19 · TypeScript · Tailwind CSS v4 · GreatS
 
 ## 本地运行
 
-准备 Node.js（`^20.19 || ^22.12 || >=24.0`）、pnpm 和 Docker。pnpm 版本由 `package.json` 固定；未启用 Corepack 时先运行 `corepack enable`。
+准备 Node.js（`^20.19 || ^22.12 || >=24.0`）和 pnpm。pnpm 版本由 `package.json` 固定；未启用 Corepack 时先运行 `corepack enable`。
 
-在项目根目录执行：
+Windows 开发环境采用 **WSL 中的 Docker Engine + GreatSQL 容器**（支持 WSL 3.x，发行版使用 WSL 2 架构），应用与 pnpm 在 Windows 运行。先按 [Windows 数据库环境配置](docs/database-windows.md) 安装 WSL 与 Docker、配置国内下载源，再在项目根目录执行：
 
-```bash
-cp .env.example .env
+```powershell
+.\tools\setup-greatsql-wsl.ps1
 pnpm install
-```
-
-编辑 `.env`，将 `AUTH_SECRET`、`INVITE_CODE_PEPPER`、`PII_AUDIT_PEPPER` 的占位值替换为各自独立的随机密钥。数据库默认配置与仓库提供的 Docker Compose 一致，仅用于本地开发。
-
-```bash
-docker compose -f compose.greatsql.yml up -d --wait
 pnpm db:migrate:deploy
 pnpm db:seed
 pnpm db:health
 pnpm dev
 ```
 
-打开 <http://localhost:3000>。已有 GreatSQL 实例时，配置 `DATABASE_URL` 后可跳过 Docker 启动步骤。
+脚本使用独立的 `compose.greatsql.wsl.yml` 启动数据库、创建独立测试库，并在缺失时生成 `.env`（含随机密钥）和 `.env.test.local`；已有文件会保留。服务器使用的 `compose.greatsql.yml` 保持原样。重启 Windows 后运行 `.\tools\start-greatsql-wsl.ps1`。安装、测试库使用与排错见 [详细配置文档](docs/database-windows.md)。
+
+打开 <http://localhost:3000>。已有 GreatSQL 实例或在 Linux 开发时，按 [数据库指南](docs/database.md) 配置 `DATABASE_URL`、密钥和数据库即可。
 
 Seed 会初始化角色、故障分类和技能标签，不会创建默认账号。成员账号由管理员发放或通过邀请码注册；全新数据库的首个管理员需由维护者初始化。数据库配置与排错见 [数据库指南](docs/database.md)。
 

@@ -1,3 +1,5 @@
+import "dotenv/config";
+
 import { disconnectDb, getDb } from "../src/lib/db/client";
 import { checkDatabaseBaseline, type DatabaseSessionInfo } from "../src/lib/db/health-check";
 
