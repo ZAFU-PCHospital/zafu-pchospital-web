@@ -190,6 +190,9 @@ try {
 
 脚本输出保活进程 PID。正常开发时保留该进程；仅 systemd 服务不会维持 WSL 存活，
 参见 [Microsoft 的 systemd 说明](https://devblogs.microsoft.com/commandline/systemd-support-is-now-available-in-wsl/)。
+隐藏启动时，不含空格的发行版名称不额外加引号：本机 WSL 3.x 中 `-d "Debian"`
+曾导致保活进程报 `WSL_E_DISTRO_NOT_FOUND` 后立即退出，而数据库只在启动检查期间短暂可用。
+脚本现在会检查新进程是否立即退出，并在报告连接成功前确认保活进程仍然存在。
 需要结束开发时，先停容器，再按脚本输出的 PID 结束保活进程：
 
 ```powershell
@@ -210,6 +213,7 @@ wsl -d Debian -u root --cd "$PWD" --exec docker compose -p zafu-pchospital-wsl -
 | Docker 服务启动失败                        | 在 Debian 检查 `sudo service docker status` 与服务日志；支持 systemd 的环境也可用 `sudo systemctl start docker` |
 | 拉取镜像失败                               | 检查 WSL 到官方阿里云仓库的网络访问；必要时换官方腾讯云仓库，保留固定版本                                       |
 | 容器健康但 Windows 无法连接                | 检查 Windows 3307 是否被占用、WSL localhost 转发及防火墙；用 `Test-NetConnection 127.0.0.1 -Port 3307` 检查     |
+| 登录约 10 秒后返回 500 / `pool timeout`    | 先跑 `pnpm db:health`；若底层报 `ECONNREFUSED`，检查 WSL 保活进程并重跑启动脚本                                 |
 | `mysqld got signal 8`                      | 保留 Compose 的 `cap_add: [SYS_NICE]`，避免原生 WSL 的 NUMA 初始化问题                                          |
 | RSA 公钥 / 连接池超时错误                  | 本地非 TLS 连接按第 3 节追加 `allowPublicKeyRetrieval=true`；确认实际读取的是哪个环境变量                       |
 | 旧数据挂载提示                             | 先按第 6 节备份，不能直接重建容器                                                                               |

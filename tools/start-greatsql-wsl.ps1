@@ -34,24 +34,36 @@ if ($containerId) {
 }
 
 # A systemd service alone does not keep WSL alive. Reuse one hidden helper.
-$helperArguments = '-d "{0}" --exec sleep infinity' -f $Distribution
+# WSL can treat unnecessary quotes as part of the distribution name when
+# launched by Start-Process. Quote only names that actually contain whitespace.
+$helperDistribution = $Distribution
+if ($Distribution -match '\s') { $helperDistribution = '"{0}"' -f $Distribution }
+$helperArguments = '-d {0} --exec sleep infinity' -f $helperDistribution
 $helperPattern = '(?:^|\s)-d\s+"?' + [regex]::Escape($Distribution) + '"?\s+--exec\s+sleep\s+infinity\s*$'
 $keepalive = Get-CimInstance Win32_Process -Filter "Name = 'wsl.exe'" |
   Where-Object { $_.CommandLine -match $helperPattern } |
   Select-Object -First 1
 $startedHelper = $null
-if (-not $keepalive) {
-  $startedHelper = Start-Process -FilePath wsl.exe -ArgumentList $helperArguments -WindowStyle Hidden -PassThru
-  Write-Host "Started WSL keepalive (PID $($startedHelper.Id))."
-}
-
 try {
+  if (-not $keepalive) {
+    $startedHelper = Start-Process -FilePath wsl.exe -ArgumentList $helperArguments -WindowStyle Hidden -PassThru
+    if ($startedHelper.WaitForExit(1000)) {
+      throw "WSL keepalive exited (code $($startedHelper.ExitCode)). Check distribution '$Distribution'; see docs/database-windows.md."
+    }
+    Write-Host "Started WSL keepalive (PID $($startedHelper.Id))."
+  }
   Invoke-WslDocker compose -p zafu-pchospital-wsl -f compose.greatsql.wsl.yml up -d --wait --wait-timeout 180
   for ($attempt = 0; $attempt -lt 30; $attempt++) {
     $client = [System.Net.Sockets.TcpClient]::new()
     try {
       $connection = $client.ConnectAsync("127.0.0.1", 3307)
       if ($connection.Wait(1000) -and $client.Connected) {
+        $helperProcess = if ($startedHelper) { $startedHelper } else {
+          Get-Process -Id $keepalive.ProcessId -ErrorAction SilentlyContinue
+        }
+        if (-not $helperProcess -or $helperProcess.HasExited) {
+          throw "WSL keepalive is no longer running. See docs/database-windows.md."
+        }
         Write-Host "GreatSQL is healthy and reachable at 127.0.0.1:3307."
         return
       }
