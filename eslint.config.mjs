@@ -18,6 +18,9 @@ const eslintConfig = [
       "build/**",
       // mdBook 构建产物：由外部工具生成，不参与官网源码检查
       "public/handbook/**",
+      // 独立文档仓库含 Mermaid 等第三方压缩脚本，不属于官网源码。
+      // 主题一致性仍由 tools/check-theme-palette.mjs 单独校验。
+      ".docs-source/**",
       // tools/inspect.mjs 的本地 Chrome 配置与扩展缓存
       ".chrome-profile/**",
       // 本地 Agent 工具的临时工作区（Chromium 用户数据、截图脚本等）。

@@ -272,6 +272,10 @@ DATABASE_URL="mysql://app_user:change-me@127.0.0.1:3307/zafu_pchospital_test" pn
 `pnpm lint` 需有含主题的文档源码；路径选择与构建相同，`DOCS_SOURCE_DIR` 优先，
 其次 `.docs-source/`
 
+`.docs-source/` 是独立文档仓库的检出，可能包含 Mermaid 等第三方压缩脚本；
+官网 ESLint 排除该目录，主题一致性仍由 `tools/check-theme-palette.mjs` 单独校验。
+`.gitignore` 不会自动影响 ESLint 的扫描范围，新增外部检出目录时需同步确认 lint 边界。
+
 ---
 
 ## 8. 本地验证与截图
