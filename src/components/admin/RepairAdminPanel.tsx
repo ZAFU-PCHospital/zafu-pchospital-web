@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 
 import { AdminTable } from "@/components/admin/AdminTable";
 import { repairTableSpec, type RepairTableContext } from "@/components/admin/repair-table-spec";
+import { useColumnResize, type ColumnSpec } from "@/components/admin/useColumnResize";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { adminCopy, adminShared } from "@/config/admin";
@@ -40,6 +41,13 @@ const EMPTY_FILTERS: Filters = {
   repairDateTo: "",
 };
 
+const COLUMNS: ColumnSpec[] = repairTableSpec.fields.map((field) => ({
+  id: field.key,
+  width: field.width ?? 0,
+  label: field.label || field.headLabel || "",
+}));
+const COLUMN_STORAGE_KEY = "zafu-pchospital:admin-columns:repairs:v1";
+
 /**
  * 维修审核（M6 §64）。
  *
@@ -58,6 +66,7 @@ export function RepairAdminPanel() {
   const [activeId, setActiveId] = useState<string | null>(null);
   /** 表头排序（三态循环由内核算好；空数组 = 服务端默认顺序：维修日期倒序）。 */
   const [sortRules, setSortRules] = useState<SortRule[]>([]);
+  const resize = useColumnResize({ storageKey: COLUMN_STORAGE_KEY, columns: COLUMNS });
   const [rejectNote, setRejectNote] = useState("");
   /** 批量退回的原因填在弹层里（顶栏只放动作按钮）。 */
   const [rejecting, setRejecting] = useState(false);
@@ -331,9 +340,7 @@ export function RepairAdminPanel() {
               }
             />
           </AdminListToolbar>
-          {/* 表格本体由内核渲染（`AdminTable`）：表头与单元格内容都来自 `repairTableSpec`。
-              这张表**不声明列宽**，所以内核不输出 `<colgroup>`，列宽仍由浏览器按内容分配。
-              排序：`sortKey` 与后端 `REPAIR_SORTABLE` 一一对应（成员 / 分类按**名字**排）。 */}
+          {/* 列宽与渲染来自同一份 spec；复用成员表的竖线拖动、键盘调整与本地偏好。 */}
           <AdminTable
             spec={repairTableSpec}
             items={items}
@@ -341,10 +348,26 @@ export function RepairAdminPanel() {
             sort={sortRules}
             onSortChange={setSortRules}
             emptyText={adminShared.empty}
+            widths={resize.widths}
+            colRefs={resize.colRefs}
+            tableRef={resize.tableRef}
+            wrapClassName="admin-table-wrap admin-table-wrap--resizable"
+            className="admin-table admin-table--resizable admin-table--repairs"
             rowProps={(record) => ({
               // 悬停即预取记录详情（窗口里的照片与评论都要靠它）。
               onMouseEnter: () => prefetchAdmin(`/api/v1/repairs/${record.id}`),
             })}
+            overlay={
+              <div className="admin-colgrid">
+                {resize.boundaries.map((boundary) => (
+                  <span
+                    key={boundary.id}
+                    style={{ insetInlineStart: `${boundary.x}px` }}
+                    {...resize.lineProps(boundary.id, boundary.label)}
+                  />
+                ))}
+              </div>
+            }
           />
           <AdminListEnd
             pagination={pagination}

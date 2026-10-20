@@ -7378,7 +7378,7 @@ html[data-theme="black-yellow"] {
   }
   /* ------------------------------------------- 可调列宽的表格（第七轮） */
   /* `table-layout: fixed` 是列宽拖拽的前提：auto 布局会按内容重新分配宽度，
-     用户拖出来的数字下一帧就被浏览器改掉。只有成员表用它，其余列表保持 auto。
+     用户拖出来的数字下一帧就被浏览器改掉。成员表与维修审核表复用它，其余列表保持 auto。
      列宽拖拽的模型（相邻两列对冲、总宽恒等于容器宽）写在
      `components/admin/useColumnResize.ts` 顶部的注释里 —— 那里面记着
      「拖了线不动、列却变形」这个坑的完整实测数据。 */
@@ -7556,6 +7556,32 @@ html[data-theme="black-yellow"] {
     .admin-table td.repair-table__model > span {
       display: block;
       max-inline-size: 14rem;
+    }
+    /* 维修审核按用户列宽显示单行；长值可悬停查看，避免多人姓名与机型撑高行。 */
+    .admin-table--repairs td {
+      text-overflow: ellipsis;
+    }
+    .admin-table--repairs td.repair-table__model > span {
+      max-inline-size: none;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .admin-table--repairs .repair-tag {
+      line-height: 1.5;
+    }
+  }
+
+  @media (max-width: 1099px) {
+    /* 卡片没有可调列宽，完整展示长值与标记，触屏无需依赖悬停。 */
+    .admin-table.admin-table--repairs td {
+      min-inline-size: 0;
+      overflow-wrap: anywhere;
+      white-space: normal;
+    }
+    .admin-table--repairs .admin-tags {
+      min-inline-size: 0;
+      flex-wrap: wrap;
     }
   }
 

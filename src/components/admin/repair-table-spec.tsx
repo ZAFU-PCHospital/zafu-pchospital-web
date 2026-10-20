@@ -1,35 +1,19 @@
 import { Button } from "@/components/ui/Button";
 import { adminCopy, adminShared } from "@/config/admin";
 import { formatDurationMinutes, formatShanghaiDate } from "@/config/member";
-import { formatRepairParticipants, repairResultLabels, repairStatusLabels } from "@/config/repairs";
+import {
+  formatRepairParticipants,
+  repairCopy,
+  repairResultLabels,
+  repairStatusLabels,
+} from "@/config/repairs";
 import { UNCATEGORIZED_LABEL } from "@/types/contracts";
 import type { RepairView } from "@/types/contracts";
 import type { TableViewSpec } from "@/types/table";
 
 /**
- * 维修记录表的视图定义（后台表格内核的第三个落地页，也是列最多、最需要排序的一张）。
- *
- * 与成员表不同的是：**首列是独立的选择列**（表头空、没有字段名），
- * 选择逻辑也留在面板里（这张表没走 `useRowSelect`，是自己维护的 `selected`）。
- * 迁移只把渲染搬过来，交互照旧。
- *
- * 四处逐字照抄、不要顺手「优化」：
- *
- * 1. **不声明列宽**：这张表也没接 `useColumnResize`，列宽由浏览器按内容分配；
- * 2. **选择列没有字段名**：表头写空串 `label: ""`。迁移前这段手写标记里还写了一个
- *    `data-label=""`，内核统一成「没有字段名就不写这个属性」—— 卡片模式里
- *    `attr(data-label)` 取不到属性与取到空串渲染完全相同（`content` 都是空串，
- *    那个 5.5rem 的标签格照样占位），因此像素不动；技能 / 分类两张表的手柄列
- *    原本就没有这个属性，统一之后三张表逐字等价；
- * 3. **「成员」列是内容列**（`admin-table__grow`）：表头与单元格都带，吸收剩余宽度并允许换行；
- * 4. **日期与时长列不开右对齐**：内核按类型默认会加 `admin-table__num`，这里显式关掉。
- *
- * 排序：白名单与后端 `REPAIR_SORTABLE` 一一对应（`sortKey`）。列 id 与 API 字段不同的
- * 两列单独标了 `sortKey` —— `member` → `memberName`、`category` → `categoryName`，
- * 后端按**名字**排（按 UUID 排对使用者没有意义）。
- *
- * 「疑难」「典型」两个标签目前是硬编码中文（面板里原本就是写死的），这里原样保留；
- * 搬进 `src/config/` 属于文案清理，与本轮迁移分开做，免得 diff 里混进文案改动。
+ * 维修审核表：默认列宽由此声明，面板复用 `useColumnResize` 调整并保存偏好。
+ * 保留独立选择列、原有排序字段与左对齐；长值的完整内容留在 title 与详情中。
  */
 
 /** 页面上会被 `render` 用到的运行时值（`<AdminTable renderContext>` 传入）。 */
@@ -53,7 +37,9 @@ export const repairTableSpec: TableViewSpec<RepairView, RepairTableContext> = {
       key: "select",
       // 选择列没有字段名：表头为空，内核因此不写 `data-label`。
       label: "",
+      headLabel: copy.table.selectOne,
       kind: "readonly",
+      width: 48,
       sortable: false,
       render: (record, _index, { selected, onToggleSelected }) => (
         <input
@@ -72,6 +58,7 @@ export const repairTableSpec: TableViewSpec<RepairView, RepairTableContext> = {
       key: "repairDate",
       label: copy.table.repairDate,
       kind: "date",
+      width: 100,
       numeric: false,
       render: (record) => formatShanghaiDate(record.repairDate),
     },
@@ -81,8 +68,8 @@ export const repairTableSpec: TableViewSpec<RepairView, RepairTableContext> = {
       sortKey: "memberName",
       label: copy.table.member,
       kind: "text",
-      headClassName: "admin-table__grow",
-      cellClassName: "admin-table__grow",
+      width: 150,
+      title: (record) => formatRepairParticipants(record),
       render: (record) => formatRepairParticipants(record),
     },
     {
@@ -90,20 +77,26 @@ export const repairTableSpec: TableViewSpec<RepairView, RepairTableContext> = {
       sortKey: "categoryName",
       label: copy.table.category,
       kind: "select",
+      width: 110,
+      title: (record) => record.category?.name ?? UNCATEGORIZED_LABEL,
       render: (record) => record.category?.name ?? UNCATEGORIZED_LABEL,
     },
     {
       key: "deviceModel",
       label: copy.table.deviceModel,
       kind: "text",
+      width: 180,
       sortable: false,
       cellClassName: "repair-table__model",
+      title: (record) => record.deviceModel || adminShared.none,
       render: (record) => <span>{record.deviceModel || adminShared.none}</span>,
     },
     {
       key: "result",
       label: copy.table.result,
       kind: "select",
+      width: 84,
+      title: (record) => (record.result ? repairResultLabels[record.result] : adminShared.none),
       render: (record) => (record.result ? repairResultLabels[record.result] : adminShared.none),
     },
     {
@@ -111,6 +104,7 @@ export const repairTableSpec: TableViewSpec<RepairView, RepairTableContext> = {
       sortKey: "durationMinutes",
       label: copy.table.duration,
       kind: "number",
+      width: 100,
       numeric: false,
       render: (record) =>
         record.durationMinutes === null
@@ -121,20 +115,34 @@ export const repairTableSpec: TableViewSpec<RepairView, RepairTableContext> = {
       key: "status",
       label: copy.table.status,
       kind: "select",
+      width: 156,
+      title: (record) =>
+        [
+          repairStatusLabels[record.status],
+          record.isDifficult ? repairCopy.list.difficult : "",
+          record.isTypical ? repairCopy.list.typical : "",
+        ]
+          .filter(Boolean)
+          .join("、"),
       render: (record) => (
-        <>
+        <span className="admin-tags">
           <span className={`repair-tag repair-tag--${record.status.toLowerCase()}`}>
             {repairStatusLabels[record.status]}
           </span>
-          {record.isDifficult ? <span className="admin-tag">疑难</span> : null}
-          {record.isTypical ? <span className="admin-tag admin-tag--accent">典型</span> : null}
-        </>
+          {record.isDifficult ? (
+            <span className="admin-tag">{repairCopy.list.difficult}</span>
+          ) : null}
+          {record.isTypical ? (
+            <span className="admin-tag admin-tag--accent">{repairCopy.list.typical}</span>
+          ) : null}
+        </span>
       ),
     },
     {
       key: "actions",
       label: copy.table.actions,
       kind: "readonly",
+      width: 150,
       sortable: false,
       render: (record, _index, { onDetail }) => (
         <span className="admin-actions">

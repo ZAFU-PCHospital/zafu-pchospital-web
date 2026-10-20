@@ -562,13 +562,13 @@ function renderRepairs(
   );
 }
 
-test("维修表：表头 9 列（首列空表头）且不输出 colgroup", async () => {
+test("维修表：表头 9 列，选择列有读屏名称，每列声明默认宽度", async () => {
   modulesRef = await load();
   const copy = modulesRef.admin.adminCopy.repairs;
   const html = renderRepairs([repair()]);
   const headers = [...html.matchAll(/<th scope="col"[^>]*>(.*?)<\/th>/g)].map((match) => match[1]);
   assert.deepEqual(headers, [
-    "",
+    `<span class="sr-only">${copy.table.selectOne}</span>`,
     copy.table.repairDate,
     copy.table.member,
     copy.table.category,
@@ -578,7 +578,10 @@ test("维修表：表头 9 列（首列空表头）且不输出 colgroup", async
     copy.table.status,
     copy.table.actions,
   ]);
-  assert.equal(html.includes("<colgroup>"), false, "维修表没有声明列宽，不该有 colgroup");
+  const widths = [...html.matchAll(/<col style="width:(\d+)px"\/>/g)].map((match) =>
+    Number(match[1]),
+  );
+  assert.deepEqual(widths, [48, 100, 150, 110, 180, 84, 100, 156, 150]);
 });
 
 test("维修表：选择列是独立的复选框列（没有字段名），勾选状态跟着 selected 走", async () => {
@@ -650,7 +653,7 @@ test("维修表：单元格内容与占位（未分类 / 空结果 / 空时长 /
   assert.ok(html.includes(">系统重装<"), "分类名应当显示");
   assert.ok(
     html.includes(
-      'data-label="机型" class="repair-table__model"><span>ThinkPad X1 Carbon</span></td>',
+      'data-label="机型" class="repair-table__model" title="ThinkPad X1 Carbon"><span>ThinkPad X1 Carbon</span></td>',
     ),
     "机型单元格应显示完整名称并带手机端标签与换行样式",
   );
@@ -665,21 +668,24 @@ test("维修表：单元格内容与占位（未分类 / 空结果 / 空时长 /
   ]);
   assert.ok(empty.includes(">未分类<"), "空分类显示「未分类」");
   assert.ok(
-    empty.includes('data-label="机型" class="repair-table__model"><span>—</span></td>'),
+    empty.includes('data-label="机型" class="repair-table__model" title="—"><span>—</span></td>'),
     "空机型显示占位符",
   );
   assert.ok(empty.includes(modulesRef.admin.adminShared.none), "空结果与空时长显示占位符");
 });
 
-test("维修表：成员列是内容列（grow），操作列是详情入口，空态占 9 列", async () => {
+test("维修表：长值保留完整 title，成员不再吸收整表宽度，详情与空态保留", async () => {
   modulesRef = await load();
   const copy = modulesRef.admin.adminCopy.repairs;
   const html = renderRepairs([repair()]);
   assert.equal(
     [...html.matchAll(/admin-table__grow/g)].length,
-    2,
-    "成员列的表头与单元格都该带 admin-table__grow",
+    0,
+    "列宽由用户调整，成员列不再强制占满整表",
   );
+  assert.ok(cellOf(html, copy.table.member).includes('title="张三"'));
+  assert.ok(cellOf(html, copy.table.category).includes('title="系统重装"'));
+  assert.ok(cellOf(html, copy.table.status).includes('title="已通过、典型"'));
   assert.ok(html.includes(copy.action.detail), "操作列应当是详情入口");
   const emptyHtml = renderRepairs([]);
   assert.ok(

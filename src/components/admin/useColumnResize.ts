@@ -139,6 +139,8 @@ export function useColumnResize({
     }
     const sync = () => {
       if (drag.current) return;
+      // 卡片布局没有可见列：不能用手机容器的宽度覆盖桌面列宽。
+      if (table.tHead && window.getComputedStyle(table.tHead).display === "none") return;
       const container = Math.round(wrap.clientWidth);
       if (container <= 0) return;
       setWidths((current) => fill(current, container));
