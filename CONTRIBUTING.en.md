@@ -119,3 +119,7 @@ Include in the PR description:
 - Representative screenshots and context for interface changes.
 
 Wait for review and required CI. A maintainer merges according to repository permissions. Push review fixes to the same branch and rerun affected checks. Contributing a PR does not authorize a production deployment.
+
+## 7. License
+
+By submitting a pull request, you agree to license your contribution under the project's license ([AGPL-3.0-or-later](LICENSE)) and confirm that you have the right to submit it.

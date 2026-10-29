@@ -134,3 +134,15 @@ See the deployment handbook for options, gates, and recovery; see [deployment no
 ## Questions and suggestions
 
 Search [existing issues](https://github.com/ZAFU-PCHospital/zafu-pchospital-web/issues) first. When reporting a problem, include reproduction steps, expected behavior, and actual behavior. Remove credentials and personal information from screenshots and logs.
+
+## License
+
+Copyright © 浙江农林大学电脑医院 (ZAFU PC Hospital)
+
+The project code is licensed under the GNU Affero General Public License, version 3.0 or any later version ([AGPL-3.0-or-later](LICENSE)).
+
+If you modify this project and provide a service over a network, you must offer users who interact with that version remotely a way to obtain its complete Corresponding Source, as required by the license.
+
+The club name, Logo, university name and emblems, and other identifying marks are outside the scope of this license and may not be used for other purposes without permission. Fonts, images, and other non-code assets are also excluded from the project code license and remain subject to their own licensing terms. Third-party dependencies retain their respective licenses.
+
+`.env` files, database contents, repair photos, and member information are operational data and are not made public as part of this repository.
