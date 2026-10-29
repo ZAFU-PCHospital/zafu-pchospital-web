@@ -10,11 +10,11 @@
 
 <p align="center">
   <a href="https://github.com/ZAFU-PCHospital/zafu-pchospital-web/actions/workflows/ci.yml"><img src="https://github.com/ZAFU-PCHospital/zafu-pchospital-web/actions/workflows/ci.yml/badge.svg" alt="CI checks and build" /></a>
-  <a href="https://nextjs.org/"><img src="https://img.shields.io/badge/Next.js-15-171717?logo=nextdotjs&amp;logoColor=white" alt="Next.js 15" /></a>
+  <a href="https://nextjs.org/"><img src="https://img.shields.io/badge/Next.js-15.5.28-171717?logo=nextdotjs&amp;logoColor=white" alt="Next.js 15.5.28" /></a>
   <a href="https://react.dev/"><img src="https://img.shields.io/badge/React-19-149eca?logo=react&amp;logoColor=white" alt="React 19" /></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-strict-3178c6?logo=typescript&amp;logoColor=white" alt="TypeScript strict" /></a>
   <a href="https://tailwindcss.com/"><img src="https://img.shields.io/badge/Tailwind_CSS-4-0f7490?logo=tailwindcss&amp;logoColor=white" alt="Tailwind CSS 4" /></a>
-  <a href="https://www.prisma.io/"><img src="https://img.shields.io/badge/Prisma-7.10-2d3748?logo=prisma&amp;logoColor=white" alt="Prisma 7.10" /></a>
+  <a href="https://www.prisma.io/"><img src="https://img.shields.io/badge/Prisma-7.10.1-2d3748?logo=prisma&amp;logoColor=white" alt="Prisma 7.10.1" /></a>
   <a href="https://greatsql.cn/"><img src="https://img.shields.io/badge/GreatSQL-8.0.32--27-276b60" alt="GreatSQL 8.0.32-27" /></a>
   <a href="https://pnpm.io/"><img src="https://img.shields.io/badge/pnpm-12.4.1-f69220?logo=pnpm&amp;logoColor=white" alt="pnpm 12.4.1" /></a>
 </p>
@@ -91,6 +91,7 @@ If GreatSQL is already configured, or you use Linux / macOS, configure the datab
 | `pnpm dev`        | Local development                                                                                                                                      |
 | `pnpm test`       | Unit and contract tests; database integration tests are skipped by default                                                                             |
 | `pnpm lint`       | ESLint and website / handbook palette consistency checks                                                                                               |
+| `pnpm audit`      | Check locked dependencies for known vulnerabilities; see [AGENTS.md section 11](AGENTS.md#11-ci-与部署) for how to address findings                    |
 | `pnpm build`      | Full build, including the mdBook handbook                                                                                                              |
 | `pnpm docs:build` | Build the handbook separately                                                                                                                          |
 | `pnpm build:site` | Website-only check; not for deployment                                                                                                                 |
@@ -123,6 +124,8 @@ The engineering documents below are currently in Chinese; the English contributi
 | Computer repair reference material                             | [Online handbook](https://pczafu.cn/docs) · [Handbook repository](https://github.com/ZAFU-PCHospital/ZAFU-PCHospital-Doc) |
 
 ## Deployment and maintenance
+
+Declared dependencies and resolved versions are recorded in [package.json](package.json) and [pnpm-lock.yaml](pnpm-lock.yaml). See [AGENTS.md section 11](AGENTS.md#11-ci-与部署) for security updates and transitive dependency overrides.
 
 Only authorized maintainers deploy: the [deploy skill](.agents/skills/zafu-pchospital-deploy/SKILL.md) is the operating handbook and [`tools/deploy/deploy-prod.sh`](tools/deploy/deploy-prod.sh) is the single entry point, covering local build, backup, upload, atomic artifact switch, and smoke checks. Production requires a Node.js server, GreatSQL, and persistent photo storage.
 

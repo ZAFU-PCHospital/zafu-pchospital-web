@@ -5,14 +5,15 @@
 
 ## 1. 固定基线
 
-| 项目              | 固定值                                                                                          |
-| ----------------- | ----------------------------------------------------------------------------------------------- |
-| 数据库            | GreatSQL `8.0.32-27`（国内镜像 `registry.cn-beijing.aliyuncs.com/greatsql/greatsql:8.0.32-27`） |
-| 存储引擎          | InnoDB                                                                                          |
-| 字符集 / 排序规则 | `utf8mb4` / `utf8mb4_unicode_ci`                                                                |
-| 时区 / 时间精度   | 服务与应用会话均为 UTC；`DATETIME(3)`                                                           |
-| ORM               | Prisma `7.10.0` + MariaDB driver adapter `7.10.0`                                               |
-| 核心 ID           | 应用层 UUID，数据库 `CHAR(36)`                                                                  |
+| 项目               | 固定值                                                                                          |
+| ------------------ | ----------------------------------------------------------------------------------------------- |
+| 数据库             | GreatSQL `8.0.32-27`（国内镜像 `registry.cn-beijing.aliyuncs.com/greatsql/greatsql:8.0.32-27`） |
+| 存储引擎           | InnoDB                                                                                          |
+| 字符集 / 排序规则  | `utf8mb4` / `utf8mb4_unicode_ci`                                                                |
+| 时区 / 时间精度    | 服务与应用会话均为 UTC；`DATETIME(3)`                                                           |
+| ORM                | Prisma `7.10.1` + MariaDB driver adapter `7.10.1`                                               |
+| Node.js 数据库驱动 | MariaDB Connector/Node.js `3.5.4`（项目直接依赖与 adapter 使用同一版本）                        |
+| 核心 ID            | 应用层 UUID，数据库 `CHAR(36)`                                                                  |
 
 不得擅自更换数据库、ORM、字符集或时区。QQ、手机号、学号不是 User 本体或业务主键；
 统一账户主键是 `users.id`。
@@ -22,7 +23,7 @@
 Windows 推荐在 WSL 中运行 Docker Engine，使用独立的 `compose.greatsql.wsl.yml`；
 配置脚本、首次安装和注意事项见 [Windows 数据库环境配置](database-windows.md)。
 `compose.greatsql.yml` 保持既有部署内容，本地 WSL 脚本不使用它。
-以下命令保留给使用原文件的环境；Prisma 7.10.0 要求 Node.js `^20.19 || ^22.12 || >=24.0`。
+以下命令保留给使用原文件的环境；Prisma 7.10.1 要求 Node.js `^20.19 || ^22.12 || >=24.0`。
 
 已有旧容器若挂载到 `/var/lib/mysql`，先按 [旧挂载处理](database-windows.md#6-旧环境的数据挂载处理)
 备份与迁移，再执行下面的 `up`；直接重建可能丢失容器可写层中的数据。

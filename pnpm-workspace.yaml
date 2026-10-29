@@ -1,7 +1,13 @@
 minimumReleaseAge: 0
 
+overrides:
+  # Next 15 pins PostCSS; remove when its dependency includes the source-map fixes.
+  next>postcss: 8.5.23
+  # ExcelJS only calls v4(); 11.1.1 preserves its CommonJS API and fixes buffer bounds.
+  exceljs>uuid: 11.1.1
+
 allowBuilds:
-  '@prisma/engines': true
+  "@prisma/engines": true
   esbuild: true
   prisma: true
   unrs-resolver: true

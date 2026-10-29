@@ -10,11 +10,11 @@
 
 <p align="center">
   <a href="https://github.com/ZAFU-PCHospital/zafu-pchospital-web/actions/workflows/ci.yml"><img src="https://github.com/ZAFU-PCHospital/zafu-pchospital-web/actions/workflows/ci.yml/badge.svg" alt="CI 校验与构建" /></a>
-  <a href="https://nextjs.org/"><img src="https://img.shields.io/badge/Next.js-15-171717?logo=nextdotjs&amp;logoColor=white" alt="Next.js 15" /></a>
+  <a href="https://nextjs.org/"><img src="https://img.shields.io/badge/Next.js-15.5.28-171717?logo=nextdotjs&amp;logoColor=white" alt="Next.js 15.5.28" /></a>
   <a href="https://react.dev/"><img src="https://img.shields.io/badge/React-19-149eca?logo=react&amp;logoColor=white" alt="React 19" /></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-strict-3178c6?logo=typescript&amp;logoColor=white" alt="TypeScript strict" /></a>
   <a href="https://tailwindcss.com/"><img src="https://img.shields.io/badge/Tailwind_CSS-4-0f7490?logo=tailwindcss&amp;logoColor=white" alt="Tailwind CSS 4" /></a>
-  <a href="https://www.prisma.io/"><img src="https://img.shields.io/badge/Prisma-7.10-2d3748?logo=prisma&amp;logoColor=white" alt="Prisma 7.10" /></a>
+  <a href="https://www.prisma.io/"><img src="https://img.shields.io/badge/Prisma-7.10.1-2d3748?logo=prisma&amp;logoColor=white" alt="Prisma 7.10.1" /></a>
   <a href="https://greatsql.cn/"><img src="https://img.shields.io/badge/GreatSQL-8.0.32--27-276b60" alt="GreatSQL 8.0.32-27" /></a>
   <a href="https://pnpm.io/"><img src="https://img.shields.io/badge/pnpm-12.4.1-f69220?logo=pnpm&amp;logoColor=white" alt="pnpm 12.4.1" /></a>
 </p>
@@ -91,6 +91,7 @@ pnpm dev
 | `pnpm dev`        | 本地开发                                                                                         |
 | `pnpm test`       | 单元与契约测试；默认跳过数据库集成测试                                                           |
 | `pnpm lint`       | ESLint 与官网 / 文档站调色板一致性检查                                                           |
+| `pnpm audit`      | 检查锁文件中的已知依赖漏洞；处理方式见 [AGENTS.md 第 11 节](AGENTS.md#11-ci-与部署)              |
 | `pnpm build`      | 完整构建，包含 mdBook 技术文档                                                                   |
 | `pnpm docs:build` | 单独生成技术文档                                                                                 |
 | `pnpm build:site` | 只编译官网，用于快速自检；不用于部署                                                             |
@@ -123,6 +124,8 @@ pnpm dev
 ## 部署与维护
 
 CI 只做校验、构建与冒烟，不执行部署；CI 通过不代表已发布。
+
+依赖声明与实际解析版本分别以 [package.json](package.json) 和 [pnpm-lock.yaml](pnpm-lock.yaml) 为准；安全升级与传递依赖覆盖的维护约定见 [AGENTS.md 第 11 节](AGENTS.md#11-ci-与部署)。
 
 发布只能由获授权的维护者执行：以 [deploy skill](.agents/skills/zafu-pchospital-deploy/SKILL.md) 为操作手册、[`tools/deploy/deploy-prod.sh`](tools/deploy/deploy-prod.sh) 为唯一入口，完成本地构建、备份、上传、原子切换与冒烟验证。生产运行需要 Node.js 服务端、GreatSQL 与可持久化的照片存储目录。
 

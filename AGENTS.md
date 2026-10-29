@@ -33,11 +33,11 @@
 
 | 项目     | 当前选择                                       |
 | -------- | ---------------------------------------------- |
-| 框架     | Next.js 15（App Router）                       |
+| 框架     | Next.js 15.5.28（App Router）                  |
 | 语言     | TypeScript（strict）                           |
 | 样式     | Tailwind CSS v4 + `src/app/globals.css` 组件层 |
 | 数据库   | **GreatSQL 8.0.32-27**（InnoDB / UTC）         |
-| 数据访问 | **Prisma 7.10.0** + MariaDB driver adapter     |
+| 数据访问 | **Prisma 7.10.1** + MariaDB driver adapter     |
 | 包管理器 | **pnpm**（锁文件 `pnpm-lock.yaml`）            |
 | 测试规范 | Node test runner（tsx）+ ESLint + Prettier     |
 
@@ -403,6 +403,15 @@ git switch -c feat/xxx  # 确认不在 main 上直接开发
 `::warning::` 注解）。它给出的是一份**待办清单**，不是「构建失败」—— 看到注解就按 GHSA
 链接评估、单独提升级 PR，不要在同一个 PR 里顺手升级依赖。依赖自动更新（Dependabot）
 **暂不启用**，依赖升级由人按审计结果手工做。
+
+安全升级时同步 `package.json`、`pnpm-lock.yaml` 与相关版本文档；Prisma Client、CLI 和
+adapter 保持同版，并确认项目直接依赖与 adapter 下的 MariaDB 都已升级。验证按第 10 节
+选择，升级后复跑 `pnpm audit`，交回剩余告警与未覆盖的回归范围。
+
+传递依赖覆盖集中在 `pnpm-workspace.yaml`，优先限定父包并记录兼容性与移除条件。
+当前 `next>postcss` 覆盖固定的旧版 PostCSS，待 Next 的依赖包含 source-map 修复后移除；
+`exceljs>uuid` 使用仍支持 CommonJS 的 `11.1.1`，兼容 ExcelJS 的 `v4()` 调用，待其上游
+依赖包含缓冲区边界修复后移除。调整覆盖时验证完整构建与实际 Excel 导出路径。
 
 **仓库侧设置（代码里做不到，只能上 GitHub 改）：**
 

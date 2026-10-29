@@ -9,11 +9,11 @@
 
 | 项目       | 选择                                 | 说明                                                |
 | ---------- | ------------------------------------ | --------------------------------------------------- |
-| 框架       | **Next.js 15**（App Router）         | 页面、Route Handler 与生产服务端                    |
+| 框架       | **Next.js 15.5.28**（App Router）    | 页面、Route Handler 与生产服务端                    |
 | 语言       | **TypeScript**（strict）             | 全量类型检查，不允许 `any` 兜底                     |
 | 样式       | **Tailwind CSS v4**                  | 工具类 + `globals.css` 中的组件层                   |
 | 数据库     | **GreatSQL 8.0.32-27**               | InnoDB、`utf8mb4_unicode_ci`、UTC                   |
-| 数据访问   | **Prisma 7.10.0** + MariaDB adapter  | 版本化 Migration；应用层连接池                      |
+| 数据访问   | **Prisma 7.10.1** + MariaDB adapter  | 版本化 Migration；应用层连接池                      |
 | 包管理     | **pnpm 12.4.1**                      | 锁文件为 `pnpm-lock.yaml`                           |
 | 测试与规范 | Node test runner + ESLint + Prettier | `pnpm test` / `pnpm lint` / `pnpm format`           |
 | 部署形态   | 静态公开页 + Node.js 服务端          | Phase 2 完整形态必须运行 `next build && next start` |
