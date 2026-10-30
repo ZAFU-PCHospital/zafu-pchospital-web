@@ -3107,8 +3107,12 @@ html[data-theme="black-yellow"] {
   .repair-page .shell {
     max-width: 72rem;
   }
-  .repair-page .page-head {
-    padding-block: clamp(1.5rem, 3vw, 2.5rem) var(--s-5);
+  /* 移动端顶栏固定在顶部；紧凑页头只在宽屏（顶栏隐藏）生效，
+     窄屏沿用全局 .page-head 的顶部留白，避免标题被顶栏覆盖。 */
+  @media (min-width: 1100px) {
+    .repair-page .page-head {
+      padding-block: clamp(1.5rem, 3vw, 2.5rem) var(--s-5);
+    }
   }
   .repair-page .page-head .sec-title {
     font-size: clamp(1.75rem, 3vw, 3rem);
