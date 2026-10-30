@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 
 import { Button } from "@/components/ui/Button";
 import { adminShared } from "@/config/admin";
+import { cn } from "@/lib/utils";
 
 /**
  * AdminModal —— 后台详情窗口（M6）。
@@ -35,11 +36,13 @@ export function AdminModal({
   subtitle,
   onClose,
   children,
+  size = "default",
 }: {
   title: string;
   subtitle?: string;
   onClose: () => void;
   children: ReactNode;
+  size?: "default" | "compact";
 }) {
   const titleId = useId();
   const windowRef = useRef<HTMLDivElement>(null);
@@ -78,7 +81,7 @@ export function AdminModal({
 
       <div
         ref={windowRef}
-        className="admin-modal__window"
+        className={cn("admin-modal__window", size === "compact" && "admin-modal__window--compact")}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}

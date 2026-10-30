@@ -5749,21 +5749,169 @@ html[data-theme="black-yellow"] {
     border-color: var(--accent);
   }
 
-  /* 条件编辑区：一条条件一行，窄屏堆成四层。 */
-  .admin-query__fields {
+  /* 查询工具栏：不套卡片，状态页签、搜索、更多筛选与高级共用一行，
+     让列表回到首屏；已应用条件与排序摘要单独一行，收起入口后仍然可见。 */
+  .admin-query {
+    display: grid;
+    gap: var(--s-2);
+    padding-block-end: var(--s-3);
+    border-block-end: 1px solid var(--line-soft);
+  }
+  .admin-query__form,
+  .admin-query__fieldset {
+    display: grid;
+    gap: var(--s-2);
+  }
+  .admin-query__fieldset {
     border: 0;
     padding: 0;
     margin: 0;
     min-inline-size: 0;
   }
+  .admin-query__toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--s-2);
+  }
+  .admin-query__tabs {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .admin-query__tab {
+    min-block-size: 2.75rem;
+    padding: var(--s-1) var(--s-3);
+    border: 0;
+    border-block-end: 2px solid transparent;
+    background: none;
+    color: var(--ink-2);
+    font-size: var(--t-sm);
+    cursor: pointer;
+  }
+  .admin-query__tab:hover,
+  .admin-query__tab:focus-visible {
+    background: var(--surface-2);
+    color: var(--ink);
+  }
+  .admin-query__tab[aria-pressed="true"] {
+    border-block-end-color: var(--accent);
+    color: var(--accent-deep);
+  }
+  .admin-query__status {
+    display: none;
+  }
+  .admin-query__actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--s-2);
+  }
+  .admin-query__search {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: end;
+    gap: var(--s-2);
+  }
+  .admin-query__search[hidden] {
+    display: none;
+  }
+  .admin-query__search > .field {
+    flex: 1 1 18rem;
+    min-inline-size: 0;
+  }
   .admin-query__chips {
     display: flex;
     flex-wrap: wrap;
+    align-items: center;
     gap: var(--s-2);
   }
   .admin-query__chips:empty {
     display: none;
   }
+  .admin-query__chip {
+    display: inline-flex;
+    min-inline-size: 0;
+    max-inline-size: 100%;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: var(--r-base);
+    background: var(--surface-1);
+  }
+  .admin-query__chip > button {
+    min-block-size: 2.75rem;
+    padding: var(--s-1) var(--s-3);
+    border: 0;
+    background: none;
+    color: var(--ink-2);
+    font-size: var(--t-xs);
+    cursor: pointer;
+  }
+  .admin-query__chip > button:hover,
+  .admin-query__chip > button:focus-visible {
+    background: var(--surface-2);
+    color: var(--ink);
+  }
+  .admin-query__chip-value {
+    min-inline-size: 0;
+    max-inline-size: 16rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: start;
+  }
+  .admin-query__chip > .admin-query__chip-remove {
+    display: grid;
+    place-items: center;
+    min-inline-size: 2.75rem;
+    border-inline-start: 1px solid var(--line);
+  }
+  .admin-query__clearfilters {
+    margin-inline-start: auto;
+  }
+  .admin-query__meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--s-2);
+    color: var(--ink-3);
+    font-size: var(--t-xs);
+  }
+  .admin-query__reset {
+    margin-inline-start: auto;
+  }
+  .admin-query__editor {
+    display: grid;
+    gap: var(--s-3);
+  }
+  .admin-query__condition {
+    margin: 0;
+    overflow-wrap: anywhere;
+    font-size: var(--t-sm);
+  }
+  @media (min-width: 760px) {
+    .admin-query__tab,
+    .admin-query__chip > button {
+      min-block-size: 1.75rem;
+      padding-block: 0.15rem;
+    }
+    .admin-query__chip > .admin-query__chip-remove {
+      min-inline-size: 1.75rem;
+    }
+  }
+  @media (max-width: 759px) {
+    .admin-query__tabs {
+      display: none;
+    }
+    .admin-query__status {
+      display: grid;
+      flex: 1 1 100%;
+    }
+    .admin-query__chip-value {
+      max-inline-size: 12rem;
+    }
+  }
+  /* 条件编辑区：一条条件一行，窄屏堆成四层。 */
   .admin-query__section {
     display: grid;
     gap: var(--s-3);
@@ -6046,6 +6194,9 @@ html[data-theme="black-yellow"] {
     background: var(--surface-1);
     overflow: hidden;
     animation: admin-modal-in var(--d-mid) var(--ease-quart) both;
+  }
+  .admin-modal__window--compact {
+    inline-size: min(30rem, 100%);
   }
   .admin-modal__head {
     display: grid;
