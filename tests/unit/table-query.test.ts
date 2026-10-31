@@ -185,3 +185,44 @@ test("维修状态页签：桌面页签与窄屏选择器同源，条件可逐�
   assert.ok(html.includes("查看完整条件"));
   assert.ok(html.includes("移除 审核状态：待审核"));
 });
+
+test("深链带回非页签状态值时，仍显示当前状态入口", async () => {
+  (globalThis as unknown as { React: typeof React }).React = React;
+  const { AdminTableQuery } = await import("../../src/components/admin/AdminTableQuery");
+  const html = renderToStaticMarkup(
+    React.createElement(AdminTableQuery, {
+      value: emptyTableQuery({ query: "", status: "DRAFT", categoryId: "" }),
+      options: tableQueryOptions("repairs"),
+      quick: [
+        { key: "query", label: "机主姓名 / 内容 / 备注 / 成员" },
+        {
+          key: "status",
+          label: "审核状态",
+          options: [
+            { value: "DRAFT", label: "草稿" },
+            { value: "PENDING", label: "待审核" },
+            { value: "APPROVED", label: "已通过" },
+            { value: "REJECTED", label: "已退回" },
+          ],
+        },
+        { key: "categoryId", label: "故障分类" },
+      ],
+      statusTabs: {
+        key: "status",
+        label: "审核状态",
+        options: [
+          { value: "PENDING", label: "待审核" },
+          { value: "APPROVED", label: "已通过" },
+          { value: "REJECTED", label: "已退回" },
+        ],
+      },
+      refreshing: false,
+      onChange() {},
+      onClear() {},
+    }),
+  );
+
+  assert.match(html, /aria-pressed="true"[^>]*>草稿</);
+  assert.match(html, /<option value="DRAFT"[^>]*>草稿<\/option>/, "窄屏选择器要能显示当前深链值");
+  assert.ok(html.includes("审核状态：草稿"), "条件摘要仍显示草稿");
+});

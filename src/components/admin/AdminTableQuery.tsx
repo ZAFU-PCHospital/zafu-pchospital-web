@@ -129,6 +129,21 @@ export function AdminTableQuery<F extends Record<string, string>>({
   const visibleConditions = showAllConditions ? conditions : conditions.slice(0, 3);
   const hasMeta = conditions.length > 0 || value.sort.length > 0 || Boolean(value.groupBy);
 
+  const statusValue = statusTabs ? (value.fixed[statusTabs.key] ?? "") : "";
+  // 深链可能带回已退役的状态值（如草稿）：临时补出当前值，避免页签/窄屏选择器显示空白。
+  const legacyStatus =
+    statusTabs && statusValue && !statusTabs.options.some((option) => option.value === statusValue)
+      ? {
+          value: statusValue,
+          label: tableField(options.id, statusTabs.key).labels?.[statusValue] ?? statusValue,
+        }
+      : null;
+  const statusOptions = statusTabs
+    ? legacyStatus
+      ? [...statusTabs.options, legacyStatus]
+      : statusTabs.options
+    : [];
+
   function closeSearch() {
     setSearchOpen(false);
     searchToggle.current?.focus();
@@ -169,12 +184,12 @@ export function AdminTableQuery<F extends Record<string, string>>({
             {statusTabs ? (
               <>
                 <div className="admin-query__tabs" role="group" aria-label={statusTabs.label}>
-                  {[{ value: "", label: tableCopy.all }, ...statusTabs.options].map((tab) => (
+                  {[{ value: "", label: tableCopy.all }, ...statusOptions].map((tab) => (
                     <button
                       key={tab.value || "all"}
                       type="button"
                       className="admin-query__tab"
-                      aria-pressed={(value.fixed[statusTabs.key] ?? "") === tab.value}
+                      aria-pressed={statusValue === tab.value}
                       onClick={() => onChange(withFixedValue(value, statusTabs.key, tab.value))}
                     >
                       {tab.label}
@@ -185,13 +200,13 @@ export function AdminTableQuery<F extends Record<string, string>>({
                   <span className="field__label">{statusTabs.label}</span>
                   <select
                     className="field__input"
-                    value={value.fixed[statusTabs.key] ?? ""}
+                    value={statusValue}
                     onChange={(event) =>
                       onChange(withFixedValue(value, statusTabs.key, event.target.value))
                     }
                   >
                     <option value="">{tableCopy.all}</option>
-                    {statusTabs.options.map((option) => (
+                    {statusOptions.map((option) => (
                       <option key={option.value} value={option.value}>
                         {option.label}
                       </option>
