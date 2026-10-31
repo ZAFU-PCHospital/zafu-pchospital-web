@@ -3107,11 +3107,19 @@ html[data-theme="black-yellow"] {
   .repair-page .shell {
     max-width: 72rem;
   }
-  .repair-page .page-head {
-    padding-block: clamp(1.5rem, 3vw, 2.5rem) var(--s-5);
+  /* 移动端顶栏固定在顶部；紧凑页头只在宽屏（顶栏隐藏）生效，
+     窄屏沿用全局 .page-head 的顶部留白，避免标题被顶栏覆盖。 */
+  @media (min-width: 1100px) {
+    .repair-page .page-head {
+      padding-block: clamp(1.5rem, 3vw, 2.5rem) var(--s-5);
+    }
   }
   .repair-page .page-head .sec-title {
-    font-size: clamp(2rem, 3vw, 3rem);
+    font-size: clamp(1.75rem, 3vw, 3rem);
+  }
+  /* 维修页 H1 使用紧凑档位；辅助区标题保持在其下，避免区块标题压过页面标题。 */
+  .repair-page .repair-preparation .sec-title {
+    font-size: clamp(1.5rem, 2.4vw, 2rem);
   }
   .repair-page .band {
     padding-block: var(--s-6) var(--s-8);
@@ -6232,6 +6240,105 @@ html[data-theme="black-yellow"] {
     overflow-y: auto;
     overscroll-behavior-y: contain;
   }
+  /* 退出失败只承载一项操作，不沿用详情窗口的宽度、整屏高度与紧凑按钮。 */
+  .admin-modal:has(.logout-warning) {
+    padding: var(--s-4);
+  }
+  .admin-modal__window:has(.logout-warning) {
+    inline-size: min(32rem, 100%);
+    block-size: auto;
+    max-block-size: calc(100dvh - var(--s-6));
+  }
+  .admin-modal__window:has(.logout-warning):focus {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .admin-modal__window:has(.logout-warning) .admin-modal__head {
+    align-items: center;
+    gap: var(--s-3);
+    padding: var(--s-4) var(--s-5);
+  }
+  .admin-modal__window:has(.logout-warning) .admin-modal__title {
+    font-size: var(--t-lg);
+    line-height: 1.4;
+  }
+  .admin-modal__window:has(.logout-warning) .admin-modal__body {
+    gap: var(--s-5);
+    padding: var(--s-5);
+  }
+  .admin-modal__window:has(.logout-warning) .signup__actions {
+    justify-content: flex-end;
+    gap: var(--s-3);
+    padding-block-start: var(--s-4);
+  }
+  .admin-modal__window:has(.logout-warning) .btn {
+    min-block-size: 2.75rem;
+    padding: var(--s-2) var(--s-4);
+    font-size: var(--t-sm);
+    letter-spacing: 0;
+  }
+  .admin-modal__window:has(.logout-warning) .btn--ghost::after {
+    inset-inline: var(--s-4);
+    inset-block-end: var(--s-2);
+  }
+  .logout-warning {
+    display: grid;
+    gap: var(--s-5);
+  }
+  .logout-warning__status {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--s-3);
+  }
+  .logout-warning__icon {
+    display: grid;
+    flex: 0 0 auto;
+    place-items: center;
+    inline-size: var(--s-7);
+    block-size: var(--s-7);
+    border: 1px solid var(--accent-line);
+    border-radius: var(--r-mid);
+    background: var(--accent-wash);
+    color: var(--accent-deep);
+  }
+  .logout-warning__lead {
+    margin: 0;
+    color: var(--ink);
+    font-size: var(--t-base);
+    font-weight: 700;
+    line-height: 1.6;
+  }
+  .logout-warning__icon svg {
+    inline-size: 1.5rem;
+    block-size: 1.5rem;
+  }
+  .logout-warning__hint {
+    margin: var(--s-1) 0 0;
+    color: var(--ink-2);
+    font-size: var(--t-sm);
+    line-height: 1.7;
+  }
+  .logout-warning__help {
+    display: grid;
+    gap: var(--s-2);
+    padding: var(--s-4);
+    border: 1px solid var(--line-soft);
+    border-radius: var(--r-mid);
+    background: var(--bg);
+    font-size: var(--t-sm);
+    line-height: 1.8;
+  }
+  .logout-warning__help h3 {
+    margin: 0;
+    color: var(--ink);
+    font-size: inherit;
+    font-weight: 700;
+  }
+  .logout-warning__help p {
+    margin: 0;
+    color: var(--ink-2);
+  }
+
   /* 字段表 + 紧跟其后的说明文字：它们是一组，间距要明显小于段落之间。 */
   .admin-modal__facts {
     display: grid;
@@ -8029,6 +8136,169 @@ html[data-theme="black-yellow"] {
 }
 .activity-list--paged .activity-card {
   overflow-wrap: anywhere;
+}
+/* 票根卡在窄屏下由 grid 列约束宽度，链接层不能按内容撑开。 */
+.activity-list--paged .activity-card__link,
+.activity-list--paged .activity-card__ended-wrap {
+  min-width: 0;
+}
+/* #302：公开列表日期票根（方向 D）。
+   只挂在 .activity-list--paged 的修饰类上，不改 .activity-card 基础规则；
+   排序与分页由组件负责，这里只处理外观。 */
+.activity-list--paged .activity-card--stub {
+  --spine: var(--line-strong);
+  position: relative;
+  display: grid;
+  grid-template-columns: 78px minmax(0, 1fr);
+  gap: 0;
+  min-height: 176px;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--r-base);
+  background: var(--surface-1);
+  transition:
+    border-color 200ms ease,
+    transform 200ms ease;
+}
+.activity-list--paged .activity-card--stub.activity-card--open {
+  --spine: var(--status-success);
+}
+.activity-list--paged .activity-card--stub.activity-card--full {
+  --spine: var(--status-warning);
+}
+.activity-list--paged .activity-card--stub.activity-card--ended {
+  --spine: var(--ink-4);
+}
+.activity-list--paged .activity-card__link:hover .activity-card--stub {
+  border-color: var(--accent-line);
+  outline: none;
+  transform: translateY(-1px);
+}
+.activity-list--paged .activity-card__link:focus-visible .activity-card--stub {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.activity-list--paged .activity-card--stub.activity-card--ended:hover {
+  border-color: var(--line);
+  transform: none;
+}
+.activity-list--paged .activity-card--stub .activity-card__spine {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline: 0;
+  block-size: 2px;
+  background: var(--spine);
+}
+.activity-list--paged .activity-card--stub .activity-card__stub {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 14px 4px;
+  border-inline-end: 1px dashed var(--line);
+  background: color-mix(in oklab, var(--surface-1) 82%, var(--spine) 18%);
+  transition: background-color 200ms ease;
+}
+.activity-list--paged .activity-card__link:hover .activity-card--stub .activity-card__stub {
+  background: color-mix(in oklab, var(--surface-1) 62%, var(--spine) 38%);
+}
+.activity-list--paged .activity-card--stub .activity-card__stub-month {
+  font-size: 11px;
+  color: var(--ink-3);
+}
+.activity-list--paged .activity-card--stub .activity-card__stub-day {
+  font-size: 24px;
+  font-weight: 500;
+  line-height: 1;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.activity-list--paged .activity-card--stub .activity-card__stub-weekday {
+  font-size: 11px;
+  color: var(--ink-4);
+}
+.activity-list--paged .activity-card--stub .activity-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 16px;
+}
+/* 徽章移出标题行，标题独占整行，四列时不再被挤成 6 个字一行。 */
+.activity-list--paged .activity-card--stub .activity-card__head {
+  margin-bottom: 0;
+}
+/* 四列卡宽约 246px：标题 1rem 配合平衡换行，加高的卡身容纳两行标题。 */
+.activity-list--paged .activity-card--stub .activity-card__title {
+  font-size: 1rem;
+  text-wrap: balance;
+}
+.activity-list--paged .activity-card--stub .activity-card__meta {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  font-size: var(--t-sm);
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+.activity-list--paged .activity-card--stub .activity-card__meta p {
+  margin: 0;
+}
+.activity-list--paged .activity-card--stub .activity-card__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 8px;
+}
+.activity-list--paged .activity-card--stub .activity-card__footer .muted {
+  margin: 0;
+  font-size: 11px;
+}
+/* 必须写在基础规则之后：同权重时后写的覆盖 78px。 */
+@media (min-width: 1100px) {
+  .activity-list--paged .activity-card--stub {
+    grid-template-columns: 64px minmax(0, 1fr);
+  }
+}
+@media (max-width: 759px) {
+  .activity-list--paged .activity-card--stub {
+    grid-template-columns: 68px minmax(0, 1fr);
+  }
+}
+@keyframes activity-card-rise {
+  from {
+    opacity: 0;
+    transform: translateY(7px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.activity-list--paged > li {
+  animation: activity-card-rise 500ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+.activity-list--paged > li:nth-child(2) {
+  animation-delay: 36ms;
+}
+.activity-list--paged > li:nth-child(3) {
+  animation-delay: 72ms;
+}
+.activity-list--paged > li:nth-child(4) {
+  animation-delay: 108ms;
+}
+@media (prefers-reduced-motion: reduce) {
+  .activity-list--paged > li {
+    animation: none;
+  }
+  .activity-list--paged .activity-card--stub,
+  .activity-list--paged .activity-card--stub .activity-card__stub {
+    transition: none;
+  }
 }
 .activity-card__link,
 .activity-card__ended-wrap {

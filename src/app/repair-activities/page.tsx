@@ -1,8 +1,11 @@
 import type { Metadata } from "next";
 
 import { RepairActivityList } from "@/components/repair-activities/RepairActivityList";
+import { RepairActivityPreparation } from "@/components/repair-activities/RepairActivityPreparation";
 import { PageHead } from "@/components/layout/PageHead";
 import { Section } from "@/components/ui/Section";
+import { SectionHead } from "@/components/ui/SectionHead";
+import { SectionTitle } from "@/components/ui/SectionTitle";
 import { repairActivitiesPage } from "@/config/repair-activities";
 
 export const metadata: Metadata = {
@@ -22,6 +25,23 @@ export default function RepairActivitiesPage() {
       />
       <Section labelledBy="repair-activities-page-title">
         <RepairActivityList />
+      </Section>
+      <Section
+        id="preparation"
+        className="repair-preparation"
+        labelledBy="repair-preparation-title"
+      >
+        <SectionHead
+          index={repairActivitiesPage.preparationSection.index}
+          label={repairActivitiesPage.preparationSection.label}
+        />
+        <div className="sec-titlebar">
+          <SectionTitle id="repair-preparation-title">
+            {repairActivitiesPage.detail.precautionsTitle}
+          </SectionTitle>
+        </div>
+        <RepairActivityPreparation layout="grid" />
+        <p className="sec-note">{repairActivitiesPage.detail.serviceHint}</p>
       </Section>
     </div>
   );

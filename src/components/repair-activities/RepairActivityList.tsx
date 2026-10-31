@@ -3,7 +3,10 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { formatShanghaiDateTime } from "@/components/repair-activities/activity-format";
+import {
+  formatShanghaiDateParts,
+  formatShanghaiTime,
+} from "@/components/repair-activities/activity-format";
 import { repairActivityStatusBadgeClass } from "@/components/repair-activities/activity-status-badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -159,31 +162,36 @@ export function RepairActivityList() {
       <ul ref={listRef} className="activity-list activity-list--paged" aria-busy={busy}>
         {items.map((item) => {
           const ended = item.status === "ENDED";
+          const dateParts = formatShanghaiDateParts(item.activityAt);
           const body = (
-            <Card className={`activity-card repair-panel ${ended ? "activity-card--ended" : ""}`}>
-              <div className="activity-card__head">
-                <h2 className="activity-card__title">{item.title}</h2>
-                <span className={repairActivityStatusBadgeClass(item.status)}>
-                  {repairActivityStatusLabels[item.status as RepairActivityStatus]}
-                </span>
+            <Card
+              className={`activity-card activity-card--stub activity-card--${item.status.toLowerCase()} repair-panel`}
+            >
+              <span className="activity-card__spine" aria-hidden="true" />
+              <div className="activity-card__stub">
+                <span className="activity-card__stub-month">{dateParts.month}</span>
+                <span className="activity-card__stub-day">{dateParts.day}</span>
+                <span className="activity-card__stub-weekday">{dateParts.weekday}</span>
               </div>
-              <dl className="activity-card__meta">
-                <div>
-                  <dt>{repairActivitiesPage.activityAt}</dt>
-                  <dd>{formatShanghaiDateTime(item.activityAt)}</dd>
+              <div className="activity-card__body">
+                <div className="activity-card__head">
+                  <h2 className="activity-card__title">{item.title}</h2>
                 </div>
-                <div>
-                  <dt>名额</dt>
-                  <dd>{formatCapacityLine(item, ended)}</dd>
+                <div className="activity-card__meta">
+                  <p>
+                    {repairActivitiesPage.activityAt} · {formatShanghaiTime(item.activityAt)}
+                  </p>
+                  <p>{formatCapacityLine(item, ended)}</p>
                 </div>
-              </dl>
-              <div className="activity-card__footer">
-                <p
-                  className={`muted ${ended ? "" : "activity-card__footer-slot"}`}
-                  aria-hidden={ended ? undefined : true}
-                >
-                  {ended ? repairActivitiesPage.endedHint : "\u00a0"}
-                </p>
+                <div className="activity-card__footer">
+                  {ended ? (
+                    <p className="muted">{repairActivitiesPage.endedHint}</p>
+                  ) : (
+                    <span className={repairActivityStatusBadgeClass(item.status)}>
+                      {repairActivityStatusLabels[item.status as RepairActivityStatus]}
+                    </span>
+                  )}
+                </div>
               </div>
             </Card>
           );

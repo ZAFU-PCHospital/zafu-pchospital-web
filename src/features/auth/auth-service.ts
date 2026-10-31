@@ -294,7 +294,11 @@ export class AuthService {
     });
     if (!session || session.revokedAt) return;
     await inSerializableTransaction(async (tx) => {
-      await tx.authSession.update({ where: { id: session.id }, data: { revokedAt: new Date() } });
+      const revoked = await tx.authSession.updateMany({
+        where: { id: session.id, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      if (revoked.count !== 1) return;
       await appendAuditLog(tx, {
         actor: context,
         actorType: "USER",

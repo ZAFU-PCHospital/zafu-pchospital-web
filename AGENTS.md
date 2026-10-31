@@ -172,10 +172,15 @@
 ## 6. 环境与命令
 
 需要符合 `package.json` `engines` 的 Node.js（Prisma 7 要求 `^20.19 || ^22.12 || >=24.0`）与 **pnpm**。
-本机未启用 Corepack 时先执行一次：
+当前 `packageManager` 固定 pnpm `12.4.1`，Corepack 至少需要 `0.34.5`。
+先检查版本，再启用入口；旧版升级与 `pnpm.cjs` 错误处理见
+[Windows 环境指南](docs/database-windows.md#31-corepack-兼容要求)。`corepack enable` 不会升级 Corepack 本身。
 
 ```bash
-corepack enable   # 之后 pnpm 会自动使用 packageManager 里固定的版本
+corepack --version        # 至少 0.34.5
+corepack enable pnpm
+corepack pnpm --version   # 当前应为 12.4.1
+pnpm --version           # 应与上一条一致；不一致时先按环境指南排错
 ```
 
 | 命令                         | 说明                                                                                                          |

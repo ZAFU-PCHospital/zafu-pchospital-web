@@ -54,7 +54,7 @@
 ### 环境要求
 
 - **Node.js**：`^20.19 || ^22.12 || >=24.0`，以 [package.json](package.json) 的 `engines` 为准。
-- **pnpm**：使用 `packageManager` 固定的版本；Corepack 的安装与启用见[环境配置](docs/database-windows.md)。
+- **pnpm**：使用 `packageManager` 固定的版本（当前 `12.4.1`）；Corepack 至少为 `0.34.5`，版本检查与升级见[环境配置](docs/database-windows.md#31-corepack-兼容要求)。
 - **GreatSQL 8.0.32-27**：Windows 推荐 WSL 中的 Docker Engine；其他环境见[数据库指南](docs/database.md)。
 
 ### Windows 本地运行
@@ -64,7 +64,10 @@
 ```powershell
 git clone https://github.com/ZAFU-PCHospital/zafu-pchospital-web.git
 cd zafu-pchospital-web
-corepack enable
+corepack --version   # 至少 0.34.5；低于此版本时先按环境指南升级
+corepack enable pnpm
+corepack pnpm --version   # 当前应为 12.4.1
+pnpm --version           # 应与上一条一致；不一致时先按下方排错
 .\tools\setup-greatsql-wsl.ps1
 pnpm install
 pnpm db:migrate:deploy
@@ -74,6 +77,8 @@ pnpm dev
 ```
 
 打开 <http://localhost:3000>。配置脚本只在文件缺失时生成本地 `.env` 与独立测试库配置，已有文件一律保留；执行任何数据库命令前，先确认当前 `DATABASE_URL` 指向本地目标库。
+
+若提示找不到 `pnpm.cjs`，或 `pnpm` 与 `corepack pnpm` 的版本不同，先按 [Corepack 排错](docs/database-windows.md#33-corepack-排错)处理版本、旧缓存与 PATH，不要改锁文件。
 
 已有可用的 GreatSQL 实例，或在 Linux / macOS 上开发时，先按[数据库指南](docs/database.md)准备数据库与 `.env`，再从 `pnpm install` 开始执行。
 

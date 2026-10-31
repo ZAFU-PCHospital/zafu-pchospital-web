@@ -76,7 +76,17 @@
   `VALIDATION_FAILED`。登录页默认不勾选「保持登录状态」。响应带 `accountAccess` 与
   `destination`（服务端统一落点编排，见下方「统一账号门禁」）；可选 `returnTo` 只作候选目标，
   服务端按白名单与**当次角色**复查，非法或无权目标回落到默认页。
-- `POST /api/v1/auth/logout`：撤销当前 Session 并清除 Cookie。
+- `POST /api/v1/auth/logout`：同源校验后撤销当前 Session；撤销与 `auth.logout` /
+  `auth.session.revoked` 审计在同一事务内提交，成功返回 **200**、
+  `{ success: true, data: { loggedOut: true }, meta: { requestId } }` 并清除 Session Cookie。
+  无 Cookie、Session 不存在或已撤销时同样返回成功并清 Cookie；顺序或并发重复退出均不重复写撤销审计。
+  受限 Session（待改密 / 待验证邮箱）也可退出，不经过业务门禁。
+  来源校验或服务端处理失败返回失败信封，**保留 Cookie**；事务失败回滚撤销和审计，
+  允许使用原 Cookie 重试。客户端只有同时确认 HTTP 成功、`success === true` 与
+  `data.loggedOut === true` 才跳转登录页；网络异常、非成功 HTTP、失败信封及无法解析 / 不合
+  契约的响应均保持当前页，持续提示“无法确认是否退出”并恢复重试入口，不把跳转或清 Cookie
+  当成撤销确认。共享设备提示恢复连接后重试；仍失败时清除该站点浏览器数据，并在安全设备
+  修改密码以撤销其他 Session。
 - `POST /api/v1/auth/password/change`：验证当前密码、修改密码、撤销其他 Session 并轮换当前 Session。
   管理员签发的临时密码完成恢复也走这条入口（当前密码填临时密码，见下方「管理员手动重置与
   临时密码恢复」）。响应带 `destination`：由服务端统一落点编排给出（见下方「统一账号门禁」），

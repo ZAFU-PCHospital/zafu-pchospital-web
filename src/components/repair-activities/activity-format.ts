@@ -21,6 +21,27 @@ export function formatShanghaiTime(iso: string): string {
   }).format(new Date(iso));
 }
 
+/** 公开列表日期票根：月份、两位日、星期，统一按 Asia/Shanghai 取。 */
+export function formatShanghaiDateParts(iso: string): {
+  month: string;
+  day: string;
+  weekday: string;
+} {
+  const parts = new Intl.DateTimeFormat("zh-CN", {
+    timeZone: "Asia/Shanghai",
+    month: "numeric",
+    day: "2-digit",
+    weekday: "short",
+  }).formatToParts(new Date(iso));
+  const value = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value ?? "";
+  return {
+    month: `${value("month")}月`,
+    day: value("day"),
+    weekday: value("weekday"),
+  };
+}
+
 /**
  * 报名开始倒计时：拆成天/时/分/秒，供抢票式数字块渲染。
  *

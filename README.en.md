@@ -54,7 +54,7 @@ These archived homepage screenshots illustrate the site; the live interface may 
 ### Requirements
 
 - **Node.js**: `^20.19 || ^22.12 || >=24.0`; see `engines` in [package.json](package.json).
-- **pnpm**: use the version pinned in `packageManager`. Corepack setup is covered in the [environment guide](docs/database-windows.md) (Chinese).
+- **pnpm**: use the version pinned in `packageManager` (currently `12.4.1`). Corepack must be at least `0.34.5`; see the [version checks and upgrade steps](docs/database-windows.md#31-corepack-兼容要求) (Chinese).
 - **GreatSQL 8.0.32-27**: on Windows, use Docker Engine inside WSL. See the [database guide](docs/database.md) for other environments.
 
 ### Run on Windows
@@ -64,7 +64,10 @@ Prepare WSL and Docker using the [Windows guide](docs/database-windows.md), then
 ```powershell
 git clone https://github.com/ZAFU-PCHospital/zafu-pchospital-web.git
 cd zafu-pchospital-web
-corepack enable
+corepack --version   # At least 0.34.5; upgrade first using the environment guide if older
+corepack enable pnpm
+corepack pnpm --version   # Currently expected: 12.4.1
+pnpm --version           # Must match the previous command; otherwise troubleshoot first
 .\tools\setup-greatsql-wsl.ps1
 pnpm install
 pnpm db:migrate:deploy
@@ -74,6 +77,8 @@ pnpm dev
 ```
 
 Open <http://localhost:3000>. The setup script creates local `.env` and isolated test database configuration when missing, preserving existing files. Before database commands, verify that the effective `DATABASE_URL` points to your intended local database.
+
+If `pnpm.cjs` cannot be found, or `pnpm` and `corepack pnpm` report different versions, follow [Corepack troubleshooting](docs/database-windows.md#33-corepack-排错) for version, stale-cache, and PATH checks rather than changing the lockfile (Chinese).
 
 If GreatSQL is already configured, or you use Linux / macOS, configure the database and `.env` following the [database guide](docs/database.md), then start with `pnpm install` above.
 

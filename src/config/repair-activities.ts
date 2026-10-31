@@ -29,6 +29,8 @@ export const repairActivitiesPage = {
   previousPage: "上一页",
   nextPage: "下一页",
   paginationLabel: "分页",
+  /** 列表页辅助区：标题与条目复用 detail 的到场准备文案，不重复维护。 */
+  preparationSection: { index: "03", label: "Preparation" },
   detail: {
     backToList: "维修活动",
     breadcrumb: "活动详情",

@@ -90,4 +90,12 @@ export const accountMenuCopy = {
   switchToAdmin: "切换至管理后台",
   logout: "退出登录",
   loggingOut: "退出中…",
+  logoutUnconfirmed: "无法确认是否退出",
+  retryLogout: "重试退出",
+  closeLogoutWarning: "关闭提示",
+  logoutSessionWarning: "登录状态可能仍然有效",
+  logoutRetryHint: "请检查网络连接后重试，直至确认退出",
+  logoutSharedDeviceTitle: "正在使用共享设备？",
+  logoutSharedDeviceHint:
+    "恢复连接后请重试退出；仍无法退出时，请清除该站点的浏览器数据，并在安全设备上修改密码以撤销其他登录状态",
 } as const;
