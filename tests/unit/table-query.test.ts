@@ -95,7 +95,7 @@ test("复合成员列明确区分创建人排序与任一参与人筛选", async
   assert.match(html, /参与成员姓名/);
 });
 
-test("共用查询界面：清除和高级入口常驻，排序/条件可独立移除，不含成功结论", async () => {
+test("共用查询界面：搜索默认收起，条件与排序摘要来自已提交查询", async () => {
   (globalThis as unknown as { React: typeof React }).React = React;
   const { AdminTableQuery } = await import("../../src/components/admin/AdminTableQuery");
   const html = renderToStaticMarkup(
@@ -115,9 +115,114 @@ test("共用查询界面：清除和高级入口常驻，排序/条件可独立�
   );
   assert.match(html, /method="post"/);
   assert.match(html, /<fieldset[^>]*disabled/);
-  assert.match(html, /重置/);
-  assert.match(html, /高级筛选与统计/);
+  assert.match(html, /重置查询/);
+  assert.match(html, /高级/);
+  assert.match(html, /搜索/);
+  assert.match(html, /hidden=""/);
   assert.match(html, /通过时间/);
   assert.match(html, /面试通过/);
+  assert.match(html, /清除筛选/);
+  // 筛选卡片不再出现；工具栏不把条件包回 `.admin-filters` 大卡片。
+  assert.doesNotMatch(html, /admin-filters/);
   assert.doesNotMatch(html, /链接保留排序|仅保留在当前页面/);
+});
+
+test("维修状态页签：桌面页签与窄屏选择器同源，条件可逐项查看和移除", async () => {
+  (globalThis as unknown as { React: typeof React }).React = React;
+  const { AdminTableQuery } = await import("../../src/components/admin/AdminTableQuery");
+  const html = renderToStaticMarkup(
+    React.createElement(AdminTableQuery, {
+      value: {
+        ...emptyTableQuery({ query: "", status: "PENDING", categoryId: "cat-1" }),
+      },
+      options: tableQueryOptions("repairs"),
+      quick: [
+        { key: "query", label: "机主姓名 / 内容 / 备注 / 成员", placeholder: "搜索维修记录" },
+        {
+          key: "status",
+          label: "审核状态",
+          options: [
+            { value: "DRAFT", label: "草稿" },
+            { value: "PENDING", label: "待审核" },
+            { value: "APPROVED", label: "已通过" },
+            { value: "REJECTED", label: "已退回" },
+          ],
+        },
+        {
+          key: "categoryId",
+          label: "故障分类",
+          options: [{ value: "cat-1", label: "软件问题" }],
+        },
+      ],
+      statusTabs: {
+        key: "status",
+        label: "审核状态",
+        options: [
+          { value: "PENDING", label: "待审核" },
+          { value: "APPROVED", label: "已通过" },
+          { value: "REJECTED", label: "已退回" },
+        ],
+      },
+      refreshing: false,
+      onChange() {},
+      onClear() {},
+    }),
+  );
+
+  assert.match(html, /role="group" aria-label="审核状态"/);
+  for (const label of ["全部", "待审核", "已通过", "已退回"]) {
+    assert.ok(html.includes(`>${label}<`), `状态页签缺少「${label}」`);
+  }
+  assert.match(html, /aria-pressed="true"[^>]*>待审核</);
+  // 草稿已退役，不再作为一级页签或窄屏选项出现；显式筛选仍可走高级条件。
+  assert.doesNotMatch(html, />草稿</);
+  assert.doesNotMatch(html, /value="DRAFT"/);
+  assert.match(html, /class="field__label">机主姓名 \/ 内容 \/ 备注 \/ 成员</);
+  // 页签字段不再重复出现在「更多筛选」里，按钮只保留非状态字段。
+  assert.equal((html.match(/>更多筛选</g) ?? []).length, 1);
+  assert.ok(html.includes("审核状态：待审核"));
+  assert.ok(html.includes("故障分类：软件问题"));
+  assert.ok(html.includes("查看完整条件"));
+  assert.ok(html.includes("移除 审核状态：待审核"));
+});
+
+test("深链带回非页签状态值时，仍显示当前状态入口", async () => {
+  (globalThis as unknown as { React: typeof React }).React = React;
+  const { AdminTableQuery } = await import("../../src/components/admin/AdminTableQuery");
+  const html = renderToStaticMarkup(
+    React.createElement(AdminTableQuery, {
+      value: emptyTableQuery({ query: "", status: "DRAFT", categoryId: "" }),
+      options: tableQueryOptions("repairs"),
+      quick: [
+        { key: "query", label: "机主姓名 / 内容 / 备注 / 成员" },
+        {
+          key: "status",
+          label: "审核状态",
+          options: [
+            { value: "DRAFT", label: "草稿" },
+            { value: "PENDING", label: "待审核" },
+            { value: "APPROVED", label: "已通过" },
+            { value: "REJECTED", label: "已退回" },
+          ],
+        },
+        { key: "categoryId", label: "故障分类" },
+      ],
+      statusTabs: {
+        key: "status",
+        label: "审核状态",
+        options: [
+          { value: "PENDING", label: "待审核" },
+          { value: "APPROVED", label: "已通过" },
+          { value: "REJECTED", label: "已退回" },
+        ],
+      },
+      refreshing: false,
+      onChange() {},
+      onClear() {},
+    }),
+  );
+
+  assert.match(html, /aria-pressed="true"[^>]*>草稿</);
+  assert.match(html, /<option value="DRAFT"[^>]*>草稿<\/option>/, "窄屏选择器要能显示当前深链值");
+  assert.ok(html.includes("审核状态：草稿"), "条件摘要仍显示草稿");
 });

@@ -211,6 +211,15 @@ export function RepairAdminPanel() {
             options: categories.map((item) => ({ value: item.id, label: item.name })),
           },
         ]}
+        statusTabs={{
+          key: "status",
+          label: copy.filter.status,
+          // 草稿已退役，不再作为一级页签；需要时仍可在高级筛选里按状态查看。
+          options: (["PENDING", "APPROVED", "REJECTED"] as const).map((value) => ({
+            value,
+            label: repairStatusLabels[value],
+          })),
+        }}
         onChange={query.setValue}
         onClear={query.reset}
         summary={list.summary}

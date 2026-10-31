@@ -496,7 +496,10 @@ M6 管理后台（`/admin/**`）稳定视觉模式。后台是**密集型数据�
 | `.admin-workspace` / `__content` / `__header` / `__title` / `__lead`   | 后台页头与内容栅格（与 `.repair-workspace` / `.member-workspace` 同一形态）                                                            |
 | `.admin-nav` / `__link`                                                | 后台内部导航；当前项由 `aria-current="page"` 高亮（与 Header 公开索引栏同一约定）。**不并入 `mainNav`**                                |
 | `.nav-settings__item`                                                  | 侧栏足部「设置」菜单的条目（复用 `.account-menu` 那组类）：编号 + 名称同一行。成员端与后台共用同一个组件，低频入口收在这里，不占分组位 |
-| `.admin-filters` / `__row`                                             | 筛选面板；行内用 `.field` + `.field__input`，≥1100px 单行多列                                                                          |
+| `.admin-query` / `__toolbar` / `__tabs` / `__tab` / `__status`         | 列表查询工具栏：桌面状态页签与窄屏状态选择器同源；≥760px 页签/条件按钮 24px、展开的搜索框 ≤20rem，窄屏保持 44px 触控面积               |
+| `.admin-query` / `__actions` / `__search` / `__chips` / `__chip`       | 按需搜索、更多筛选、条件 chip（最多 3 条，其余折叠）与排序/分组摘要；清除筛选保留排序，重置查询使用完整 reset                          |
+| `.admin-query__editor` / `__condition` / `__condition-actions`         | 更多筛选与完整条件弹窗的编辑区；完整条件可就地移除                                                                                     |
+| `.admin-filters` / `__row`                                             | 导出面板与维修批量动作使用的辅助筛选/操作面板；列表主筛选已迁移到 `.admin-query`                                                       |
 | `.admin-batchbar`                                                      | 批量操作条（选中计数 + 动作），用 `--accent-wash` 表明处于批量态                                                                       |
 | `.admin-actions`                                                       | 行内动作组                                                                                                                             |
 | `.admin-tags` / `.admin-tag` / `--accent` / `--muted`                  | 角色等**短标签**；文字 + 描边双通道，不只用颜色区分                                                                                    |
