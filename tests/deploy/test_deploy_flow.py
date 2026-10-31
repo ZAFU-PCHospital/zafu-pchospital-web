@@ -289,6 +289,20 @@ class DeploySandbox:
             f'source "{(self.repo / "tools/deploy/deploy-prod.sh").as_posix()}" "$@"\n',
         )
 
+    def make_target_script_change(self):
+        """Commit a target-only deploy script change, then check out the old clean tree."""
+        script = self.repo / "tools/deploy/deploy-prod.sh"
+        script.write_text(
+            script.read_text(encoding="utf-8") + "\n# target-only deploy script change\n",
+            encoding="utf-8",
+        )
+        self.git("add", "tools/deploy/deploy-prod.sh")
+        self.git("commit", "-m", "target deploy script change")
+        self.target = self.git("rev-parse", "HEAD").stdout.strip()
+        self.git("push", "origin", "main")
+        self.git("checkout", "--detach", self.old)
+        return self.target
+
     def run_deploy(self, fail_path="", extra_args=(), db_plan_fail=False):
         env = os.environ.copy()
         env.pop("WHALE_NOTIFY_CONFIG", None)
@@ -520,6 +534,45 @@ class DeployFlowTests(unittest.TestCase):
         self.assertEqual(completed.returncode, 0, log)
         self.assertIn("服务器 fetch 成功", log)
         self.assertNotIn("改用本地 bundle", log)
+        self.assertEqual(sandbox.server_head(), sandbox.target)
+        self.assertEqual(sandbox.notification()["status"], "success")
+
+    def test_local_script_mismatch_aborts_before_server_contact(self):
+        sandbox = self.sandbox("pure", name="script_dirty")
+        script = sandbox.repo / "tools/deploy/deploy-prod.sh"
+        script.write_text(
+            script.read_text(encoding="utf-8") + "\n# local uncommitted patch\n",
+            encoding="utf-8",
+        )
+        completed, log = sandbox.run_deploy()
+        self.assertNotEqual(completed.returncode, 0, log)
+        self.assertIn("当前运行的 deploy-prod.sh 与目标提交", log)
+        self.assertIn("--allow-local-script", log)
+        self.assertEqual(sandbox.server_head(), sandbox.old)
+        self.assertEqual(sandbox.service_state(), "active")
+        self.assertEqual(sandbox.service_stops(), [])
+        self.assertEqual(sandbox.notification()["status"], "failed")
+
+    def test_old_script_in_clean_worktree_aborts(self):
+        sandbox = self.sandbox("pure", name="script_old")
+        sandbox.make_target_script_change()
+        self.assertEqual(sandbox.git("status", "--porcelain").stdout.strip(), "")
+        completed, log = sandbox.run_deploy()
+        self.assertNotEqual(completed.returncode, 0, log)
+        self.assertIn("当前运行的 deploy-prod.sh 与目标提交", log)
+        self.assertEqual(sandbox.server_head(), sandbox.old)
+        self.assertEqual(sandbox.service_stops(), [])
+
+    def test_allow_local_script_warns_and_proceeds(self):
+        sandbox = self.sandbox("pure", name="script_allowed")
+        script = sandbox.repo / "tools/deploy/deploy-prod.sh"
+        script.write_text(
+            script.read_text(encoding="utf-8") + "\n# local uncommitted patch\n",
+            encoding="utf-8",
+        )
+        completed, log = sandbox.run_deploy(extra_args=("--allow-local-script",))
+        self.assertEqual(completed.returncode, 0, log)
+        self.assertIn("--allow-local-script 显式放行", log)
         self.assertEqual(sandbox.server_head(), sandbox.target)
         self.assertEqual(sandbox.notification()["status"], "success")
 

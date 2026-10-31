@@ -7,7 +7,7 @@
 # 没有压死风险，停机窗口只有「停服务 → 换目录 → 起服务」的秒级。
 #
 # 流程（每一步都有闸门，失败即停并打印恢复指引，绝不自动回滚）：
-#   P0  参数与本地环境预检（pnpm / mdbook / node / ssh / 目标提交是否已合并）
+#   P0  参数与本地环境预检（pnpm / mdbook / node / ssh / 目标提交是否已合并 / 脚本与目标提交一致）
 #   P1  服务器侦察（只读：HEAD、工作区、服务、内存、磁盘）
 #   P2  变更评估（提交列表 / 迁移风险扫描 / 数据库变更计划 / .env.example）+ 人工确认
 #       数据库计划在停机前只读核对 _prisma_migrations：待应用迁移、schema、seed
@@ -48,6 +48,7 @@
 #   --allow-env-change       确认服务器 .env 已随 .env.example 更新再放行
 #   --allow-schema-without-migration
 #       已人工确认 schema 变化与数据库一致（或该变化不涉及数据库）时放行
+#   --allow-local-script    当前运行的脚本与目标提交不一致时仍继续（默认拒绝，日志留痕）
 #   DEPLOY_SMOKE_QQ / DEPLOY_SMOKE_PASSWORD  可选：冒烟时做登录态验证
 #   DEPLOY_FETCH_TIMEOUT / DEPLOY_FETCH_ATTEMPTS
 #       服务器主仓库 fetch 的单次超时与尝试次数（缺省 30 秒 × 1 次，失败即走 bundle）
@@ -157,6 +158,7 @@ ALLOW_RISKY_MIGRATION="${ALLOW_RISKY_MIGRATION:-0}"
 ALLOW_ENV_CHANGE="${ALLOW_ENV_CHANGE:-0}"
 ALLOW_SCHEMA_WITHOUT_MIGRATION="${ALLOW_SCHEMA_WITHOUT_MIGRATION:-0}"
 ALLOW_STALE_DOCS="${ALLOW_STALE_DOCS:-0}"
+ALLOW_LOCAL_SCRIPT="${ALLOW_LOCAL_SCRIPT:-0}"
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -175,6 +177,7 @@ while [ $# -gt 0 ]; do
     --allow-env-change) ALLOW_ENV_CHANGE=1; shift ;;
     --allow-schema-without-migration) ALLOW_SCHEMA_WITHOUT_MIGRATION=1; shift ;;
     --allow-stale-docs) ALLOW_STALE_DOCS=1; shift ;;
+    --allow-local-script) ALLOW_LOCAL_SCRIPT=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) usage; die "未知参数：$1" ;;
   esac
@@ -634,6 +637,16 @@ if ! git -C "$REPO_ROOT" for-each-ref --format='%(refname)' --contains "$TARGET_
   die "提交 $TARGET_SHA 不在任何远端 main 上（未合并）。按规矩不部署未合并的提交；等 PR 合并且 fetch 后再来。"
 fi
 ok "目标提交：$(git -C "$REPO_ROOT" log --oneline -1 "$TARGET_SHA")（来自 $TARGET_DESC）"
+
+# 部署脚本硬校验：当前运行的脚本必须与目标提交一致。主工作区的旧脚本或未提交 patch
+# 不能用来部署新目标；默认在 P0 中止，确需例外时用 --allow-local-script 显式放行。
+if ! git -C "$REPO_ROOT" diff --quiet "$TARGET_SHA" -- tools/deploy/deploy-prod.sh; then
+  if [ "$ALLOW_LOCAL_SCRIPT" = "1" ]; then
+    warn "当前运行的 deploy-prod.sh 与目标提交 $TARGET_SHA 不一致；已用 --allow-local-script 显式放行（日志留痕）"
+  else
+    die "当前运行的 deploy-prod.sh 与目标提交 $TARGET_SHA 不一致；请在该提交的干净 worktree 运行；确需例外时用 --allow-local-script 显式放行"
+  fi
+fi
 
 BUILD_DIR="${BUILD_DIR_OPT:-$(dirname "$REPO_ROOT")/.zafu-deploy-build}"
 WT="$BUILD_DIR/worktree"

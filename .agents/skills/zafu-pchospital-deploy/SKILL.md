@@ -61,6 +61,13 @@ description: 把 ZAFU-PCHospital/zafu-pchospital-web 部署到生产站点 pczaf
 
 ## 1. 开工前判据（脚本已内置闸门；这里是判据与兜底）
 
+### 1.1 开工前强制预检（issue #311）
+
+- 先 `git fetch` 远端 `main`，确认目标 SHA 已在远端 `main` 且对应 CI「校验与构建」通过。
+- 只使用目标 SHA 的干净 worktree 中的 `tools/deploy/deploy-prod.sh`；不要使用主工作区、旧分支或带未提交改动的脚本。
+- 当前加载的 skill 与仓库 `.agents/skills/zafu-pchospital-deploy/SKILL.md` 最新版不一致时，先读仓库版并说明差异，不凭旧记忆直接执行。
+- 脚本 P0 会再次硬校验 `deploy-prod.sh` 与目标提交一致；不一致默认中止。确需例外时用 `--allow-local-script`，日志会留痕。
+
 1. **不部署未合并的提交**：脚本只接受「已是某个远端 `main` 祖先」的提交，否则直接拒绝。
    先确认目标 PR 已合并、`git fetch` 完成。
 2. **迁移闸门**：新增 migration 的 SQL 出现 `DROP / MODIFY / CHANGE / TRUNCATE / UPDATE`
@@ -86,7 +93,7 @@ description: 把 ZAFU-PCHospital/zafu-pchospital-web 部署到生产站点 pczaf
 
 | 阶段 | 内容 | 服务状态 |
 | --- | --- | --- |
-| P0 | 参数与本地环境预检（pnpm / mdbook / node / ssh / 目标提交已合并） | 正常 |
+| P0 | 参数与本地环境预检（pnpm / mdbook / node / ssh / 目标提交已合并 / 脚本与目标提交一致） | 正常 |
 | P1 | 服务器侦察（只读：HEAD、工作区、服务、内存、磁盘） | 正常 |
 | P2 | 变更评估（提交列表 / 迁移风险扫描 / **数据库变更计划 + 已应用版本核对** / .env.example 变化）+ **人工确认①** | 正常 |
 | P3 | 本地构建与打包（先 fetch/ff-only 文档源码，更新失败默认中止；独立 worktree，仓库同级的 `.zafu-deploy-build/`，不碰当前工作区；同提交**且文档 revision 相同**才复用产物） | 正常 |
@@ -111,6 +118,7 @@ description: 把 ZAFU-PCHospital/zafu-pchospital-web 部署到生产站点 pczaf
 --allow-risky-migration  已人工读过含 DROP/MODIFY/UPDATE 的迁移 SQL 后放行
 --allow-env-change       已确认服务器 .env 随 .env.example 更新后放行
 --allow-schema-without-migration  已人工确认 schema 变化与数据库一致（或不涉及数据库）时放行
+--allow-local-script   已确认当前脚本与目标提交不一致仍继续（默认拒绝，日志留痕）
 --docs-source <dir>  文档源码检出（显式路径也会先 fetch/ff-only；失败默认中止）
 --allow-stale-docs   文档源码无法更新时仍用当前检出构建（可能发布旧文档）
 ```
