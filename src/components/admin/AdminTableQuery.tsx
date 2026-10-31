@@ -66,13 +66,14 @@ export function AdminTableQuery<F extends Record<string, string>>({
   const [moreOpen, setMoreOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [showAllConditions, setShowAllConditions] = useState(false);
-  const [condition, setCondition] = useState<string | null>(null);
+  const [condition, setCondition] = useState<ConditionChip | null>(null);
   const [searchDraft, setSearchDraft] = useState(() =>
     search ? (value.fixed[search.key] ?? "") : "",
   );
   const composing = useRef(false);
   const searchInput = useRef<HTMLInputElement>(null);
   const searchToggle = useRef<HTMLButtonElement>(null);
+  const actionsRef = useRef<HTMLDivElement>(null);
   const searchPanelId = useId();
   const committedSearch = search ? (value.fixed[search.key] ?? "") : "";
   const committedSearchRef = useRef(committedSearch);
@@ -133,6 +134,20 @@ export function AdminTableQuery<F extends Record<string, string>>({
     searchToggle.current?.focus();
   }
 
+  function removeCondition() {
+    if (!condition) return;
+    condition.onRemove();
+    setCondition(null);
+    // 条件 chip 会随移除消失，不能把焦点还给已卸载的触发元素。
+    if (typeof window !== "undefined") {
+      window.requestAnimationFrame(() => {
+        (
+          searchToggle.current ?? actionsRef.current?.querySelector<HTMLButtonElement>("button")
+        )?.focus();
+      });
+    }
+  }
+
   function submitSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!search || composing.current) return;
@@ -186,7 +201,7 @@ export function AdminTableQuery<F extends Record<string, string>>({
               </>
             ) : null}
 
-            <div className="admin-query__actions">
+            <div className="admin-query__actions" ref={actionsRef}>
               {search ? (
                 <button
                   ref={searchToggle}
@@ -213,7 +228,7 @@ export function AdminTableQuery<F extends Record<string, string>>({
           {search ? (
             <div className="admin-query__search" id={searchPanelId} hidden={!searchOpen}>
               <label className="field">
-                <span className="sr-only">{search.label}</span>
+                <span className="field__label">{search.label}</span>
                 <input
                   ref={searchInput}
                   className="field__input"
@@ -256,7 +271,7 @@ export function AdminTableQuery<F extends Record<string, string>>({
                 type="button"
                 className="admin-query__chip-value"
                 aria-label={`${tableCopy.viewCondition} ${chip.text}`}
-                onClick={() => setCondition(chip.text)}
+                onClick={() => setCondition(chip)}
               >
                 {chip.text}
               </button>
@@ -355,7 +370,14 @@ export function AdminTableQuery<F extends Record<string, string>>({
           size="compact"
           onClose={() => setCondition(null)}
         >
-          <p className="admin-query__condition">{condition}</p>
+          <div className="admin-query__editor">
+            <p className="admin-query__condition">{condition.text}</p>
+            <div className="admin-query__condition-actions">
+              <Button variant="ghost" onClick={removeCondition}>
+                {tableCopy.removeCondition}
+              </Button>
+            </div>
+          </div>
         </AdminModal>
       ) : null}
     </div>

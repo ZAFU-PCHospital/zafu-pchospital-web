@@ -5897,14 +5897,21 @@ html[data-theme="black-yellow"] {
     overflow-wrap: anywhere;
     font-size: var(--t-sm);
   }
+  .admin-query__condition-actions {
+    display: flex;
+  }
   @media (min-width: 760px) {
     .admin-query__tab,
     .admin-query__chip > button {
-      min-block-size: 1.75rem;
-      padding-block: 0.15rem;
+      min-block-size: 1.5rem;
+      padding-block: 0.1rem;
+      line-height: 1.25;
     }
     .admin-query__chip > .admin-query__chip-remove {
-      min-inline-size: 1.75rem;
+      min-inline-size: 1.5rem;
+    }
+    .admin-query__search > .field {
+      max-inline-size: 20rem;
     }
   }
   @media (max-width: 759px) {

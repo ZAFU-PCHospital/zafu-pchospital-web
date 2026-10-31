@@ -161,7 +161,6 @@ test("维修状态页签：桌面页签与窄屏选择器同源，条件可逐�
           { value: "PENDING", label: "待审核" },
           { value: "APPROVED", label: "已通过" },
           { value: "REJECTED", label: "已退回" },
-          { value: "DRAFT", label: "草稿" },
         ],
       },
       refreshing: false,
@@ -171,11 +170,14 @@ test("维修状态页签：桌面页签与窄屏选择器同源，条件可逐�
   );
 
   assert.match(html, /role="group" aria-label="审核状态"/);
-  for (const label of ["全部", "待审核", "已通过", "已退回", "草稿"]) {
+  for (const label of ["全部", "待审核", "已通过", "已退回"]) {
     assert.ok(html.includes(`>${label}<`), `状态页签缺少「${label}」`);
   }
   assert.match(html, /aria-pressed="true"[^>]*>待审核</);
-  assert.ok(html.includes('<option value="DRAFT">草稿</option>'), "窄屏选择器要带同一组状态");
+  // 草稿已退役，不再作为一级页签或窄屏选项出现；显式筛选仍可走高级条件。
+  assert.doesNotMatch(html, />草稿</);
+  assert.doesNotMatch(html, /value="DRAFT"/);
+  assert.match(html, /class="field__label">机主姓名 \/ 内容 \/ 备注 \/ 成员</);
   // 页签字段不再重复出现在「更多筛选」里，按钮只保留非状态字段。
   assert.equal((html.match(/>更多筛选</g) ?? []).length, 1);
   assert.ok(html.includes("审核状态：待审核"));

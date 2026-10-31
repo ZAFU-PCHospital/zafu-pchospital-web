@@ -14,6 +14,7 @@ export const tableCopy = {
   activeConditions: "生效条件",
   conditionTitle: "完整条件",
   viewCondition: "查看完整条件",
+  removeCondition: "移除该条件",
   moreConditions: "其余 {count} 项",
   collapseConditions: "收起条件",
   count: "当前筛选共 {count} 条",
