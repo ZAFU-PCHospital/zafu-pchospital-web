@@ -149,14 +149,41 @@ export const repairEditorCopy = {
   attachmentsTitle: "备注与附件",
   /** 照片上限来自服务端（随详情下发），所以文案留占位符而不是写死数字。 */
   photoHint: "支持 JPEG、PNG、WebP；单张不超过 {size}、最多 {count} 张。选填，可稍后补充",
-  /** 新建/接待补单提交即建单，提交前没有记录可挂照片。 */
-  photoUnavailableCreate: "提交后可在维修详情页补充照片，审核通过后不可修改",
+  /** 新建 / 补单在确认页之前选照片，提交时随建单一起上传。 */
+  photoCreateHint: "选填，支持 JPEG、PNG、WebP；单张不超过 {size}、最多 {count} 张，提交时一并上传",
+  photoPendingNote: "照片暂存在当前页面，刷新或离开后需重新选择",
+  photoSelectLabel: "选择照片",
+  photoPreviewAlt: "待上传照片 {index}",
+  photoRemove: "移除",
+  photoRemoveLabel: "移除待上传照片 {index}",
+  photoSelectTooMany: "最多还能再选 {remain} 张",
+  photoLimitReached: "最多上传 {count} 张照片，已达到上限",
+  photoTypeUnsupported: "仅支持 JPEG、PNG、WebP 图片",
+  /** 新建流程的同页两步：填写（含照片）→ 核对确认。 */
+  createStepTitle: "填写维修记录",
+  createStepHint: "填好信息并选好照片后，下一步核对再提交",
+  nextStep: "下一步",
+  confirmTitle: "确认维修记录",
+  confirmIntro: "请核对填写内容与照片，确认后提交审核",
+  confirmSubmit: "确认提交",
+  submitting: "提交中…",
+  backToEdit: "返回修改",
+  retryUpload: "重试上传",
+  goToDetail: "前往记录详情",
+  recordCreatedUploadFailed:
+    "记录已创建，但照片上传失败：{message}。请勿重新提交；可移除有问题的照片后重试，或前往记录详情补充",
+  photosLabel: "照片",
+  photosSubmitNote: "照片将在确认提交后上传；审核通过后不可修改",
+  noPhotos: "未选择照片（选填）",
+  repairDateLabel: "维修日期",
+  categoryLabel: "故障分类",
+  durationLabel: "维修时长（分钟）",
+  resultLabel: "维修结果",
   /** 新建页从 sessionStorage 恢复未提交内容时的提示。 */
   createDraftRestored: "已恢复上次未提交的内容",
   /** 活动接待补单：不落草稿，提交时才创建维修单。 */
   serveStageAndBack: "暂存返回",
   serveSubmitNote: "未提交内容暂存在本机，可从「已接待」继续填写",
-  servePhotoUnavailable: "补单提交后可在维修详情页补充照片，审核通过后不可修改",
   /** 维修结果默认值提示：编辑存量记录可保存草稿；新建 / 接待补单只有提交。 */
   resultDefaultHint: "维修结果默认为「{result}」",
   resultDefaultHintSubmitOnly: "维修结果默认为「{result}」",

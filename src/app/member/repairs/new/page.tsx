@@ -3,6 +3,7 @@ import { MemberPageHead } from "@/components/member/MemberPageHead";
 import { CreateRepairForm } from "@/components/repairs/CreateRepairForm";
 import { Section } from "@/components/ui/Section";
 import { repairCopy } from "@/config/repairs";
+import { uploadLimits } from "@/features/repairs/repair-photo-storage";
 import { requireActiveMemberPage } from "@/lib/auth/member-page";
 export const metadata: Metadata = { title: "新建维修记录" };
 export default async function NewRepairPage({
@@ -30,7 +31,7 @@ export default async function NewRepairPage({
         <h2 className="sr-only" id="new-repair-panel">
           维修记录表单
         </h2>
-        <CreateRepairForm serveContext={serveContext} />
+        <CreateRepairForm serveContext={serveContext} photoLimits={uploadLimits()} />
       </Section>
     </div>
   );
