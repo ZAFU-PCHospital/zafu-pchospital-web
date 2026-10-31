@@ -663,6 +663,25 @@ export const repairActivityService = {
     return pickNonEndedRepairActivitiesForHomePreview(sortable, limit).map(toHomePreviewView);
   },
 
+  /**
+   * 首页没有未结束活动时的兜底（issue #317）：只查已结束活动，按公开列表
+   * 已结束段的顺序取最近 N 场；已结束详情不可用，调用方不应提供详情链接。
+   */
+  async listPublicEndedForHomePreview(
+    limit = 3,
+    now: Date = new Date(),
+  ): Promise<RepairActivityPublicView[]> {
+    const todayStart = startOfShanghaiDay(now);
+    const take = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 3;
+    const rows = await getDb().repairActivity.findMany({
+      where: publicEndedWhere(todayStart),
+      orderBy: PUBLIC_ENDED_ORDER_BY,
+      take,
+    });
+    const counts = await loadCounts(rows.map((row) => row.id));
+    return rows.map((row) => toPublicView(row, counts.get(row.id) ?? 0, now));
+  },
+
   async getPublic(activityId: string): Promise<RepairActivityPublicView> {
     const now = new Date();
     const row = await getDb().repairActivity.findFirst({

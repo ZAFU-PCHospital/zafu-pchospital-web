@@ -8,6 +8,7 @@ test("成员端状态文案接线（issue #239）：列表 / 工作台用成员�
   const memberList = read("src/components/repair-activities/MemberRepairActivityList.tsx");
   const memberBoard = read("src/components/repair-activities/MemberRepairActivityBoard.tsx");
   const publicList = read("src/components/repair-activities/RepairActivityList.tsx");
+  const publicCard = read("src/components/repair-activities/ActivityTicketCard.tsx");
   const publicDetail = read("src/components/repair-activities/RepairActivityDetail.tsx");
 
   for (const source of [memberList, memberBoard]) {
@@ -16,7 +17,10 @@ test("成员端状态文案接线（issue #239）：列表 / 工作台用成员�
   }
   assert.ok(memberList.includes("memberRepairActivityStatusBadgeClass(item.status)"));
   assert.ok(memberBoard.includes("memberRepairActivityStatusBadgeClass(status)"));
-  assert.ok(publicList.includes("repairActivityStatusLabels[item.status as RepairActivityStatus]"));
+  assert.ok(publicList.includes("ActivityTicketCard"));
+  assert.ok(
+    publicCard.includes("repairActivityStatusLabels[activity.status as RepairActivityStatus]"),
+  );
   assert.ok(
     publicDetail.includes("repairActivityStatusLabels[activity.status as RepairActivityStatus]"),
   );
