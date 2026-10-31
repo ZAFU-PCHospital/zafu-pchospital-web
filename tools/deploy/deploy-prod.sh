@@ -638,13 +638,15 @@ if ! git -C "$REPO_ROOT" for-each-ref --format='%(refname)' --contains "$TARGET_
 fi
 ok "目标提交：$(git -C "$REPO_ROOT" log --oneline -1 "$TARGET_SHA")（来自 $TARGET_DESC）"
 
-# 部署脚本硬校验：当前运行的脚本必须与目标提交一致。主工作区的旧脚本或未提交 patch
-# 不能用来部署新目标；默认在 P0 中止，确需例外时用 --allow-local-script 显式放行。
+# 标准路径部署脚本硬校验：$REPO_ROOT/tools/deploy/deploy-prod.sh 必须与目标提交一致。
+# 这里只覆盖仓库标准路径；改名/复制到其他路径的脚本不在校验范围内。
+# 主工作区的旧脚本或未提交 patch 默认在 P0 中止；确需例外时用 --allow-local-script 显式放行。
+# --rollback 在 P0 早退，不经过此校验。
 if ! git -C "$REPO_ROOT" diff --quiet "$TARGET_SHA" -- tools/deploy/deploy-prod.sh; then
   if [ "$ALLOW_LOCAL_SCRIPT" = "1" ]; then
-    warn "当前运行的 deploy-prod.sh 与目标提交 $TARGET_SHA 不一致；已用 --allow-local-script 显式放行（日志留痕）"
+    warn "标准路径的 deploy-prod.sh 与目标提交 $TARGET_SHA 不一致；已用 --allow-local-script 显式放行（日志留痕）"
   else
-    die "当前运行的 deploy-prod.sh 与目标提交 $TARGET_SHA 不一致；请在该提交的干净 worktree 运行；确需例外时用 --allow-local-script 显式放行"
+    die "标准路径的 deploy-prod.sh 与目标提交 $TARGET_SHA 不一致；请在该提交的干净 worktree 运行；确需例外时用 --allow-local-script 显式放行"
   fi
 fi
 

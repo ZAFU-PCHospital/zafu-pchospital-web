@@ -546,20 +546,21 @@ class DeployFlowTests(unittest.TestCase):
         )
         completed, log = sandbox.run_deploy()
         self.assertNotEqual(completed.returncode, 0, log)
-        self.assertIn("当前运行的 deploy-prod.sh 与目标提交", log)
+        self.assertIn("标准路径的 deploy-prod.sh 与目标提交", log)
         self.assertIn("--allow-local-script", log)
         self.assertEqual(sandbox.server_head(), sandbox.old)
         self.assertEqual(sandbox.service_state(), "active")
         self.assertEqual(sandbox.service_stops(), [])
         self.assertEqual(sandbox.notification()["status"], "failed")
 
-    def test_old_script_in_clean_worktree_aborts(self):
+    def test_old_standard_path_script_in_clean_worktree_aborts(self):
+        """Target changes the standard-path script while the clean worktree is at the old commit."""
         sandbox = self.sandbox("pure", name="script_old")
         sandbox.make_target_script_change()
         self.assertEqual(sandbox.git("status", "--porcelain").stdout.strip(), "")
         completed, log = sandbox.run_deploy()
         self.assertNotEqual(completed.returncode, 0, log)
-        self.assertIn("当前运行的 deploy-prod.sh 与目标提交", log)
+        self.assertIn("标准路径的 deploy-prod.sh 与目标提交", log)
         self.assertEqual(sandbox.server_head(), sandbox.old)
         self.assertEqual(sandbox.service_stops(), [])
 

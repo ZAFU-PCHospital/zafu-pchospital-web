@@ -64,9 +64,11 @@ description: 把 ZAFU-PCHospital/zafu-pchospital-web 部署到生产站点 pczaf
 ### 1.1 开工前强制预检（issue #311）
 
 - 先 `git fetch` 远端 `main`，确认目标 SHA 已在远端 `main` 且对应 CI「校验与构建」通过。
-- 只使用目标 SHA 的干净 worktree 中的 `tools/deploy/deploy-prod.sh`；不要使用主工作区、旧分支或带未提交改动的脚本。
-- 当前加载的 skill 与仓库 `.agents/skills/zafu-pchospital-deploy/SKILL.md` 最新版不一致时，先读仓库版并说明差异，不凭旧记忆直接执行。
-- 脚本 P0 会再次硬校验 `deploy-prod.sh` 与目标提交一致；不一致默认中止。确需例外时用 `--allow-local-script`，日志会留痕。
+- 只使用目标 SHA 的干净 worktree 中的标准路径 `tools/deploy/deploy-prod.sh`；不要使用主工作区、旧分支或带未提交改动的脚本。
+- 脚本 P0 只校验这个标准路径；改名/复制到其他路径的脚本不在校验范围内，请勿用其他路径运行部署。
+- `--rollback` 在 P0 早退，不经过此校验；本次只覆盖正常部署路径。
+- 当前加载的 skill 与仓库 `.agents/skills/zafu-pchospital-deploy/SKILL.md` 最新版不一致时，先读仓库版并说明差异，不凭旧记忆直接执行。仓库 skill 更新后，本机加载的副本不会自动更新。
+- 脚本 P0 会再次硬校验标准路径的 `deploy-prod.sh` 与目标提交一致；不一致默认中止。确需例外时用 `--allow-local-script`，日志会留痕。
 
 1. **不部署未合并的提交**：脚本只接受「已是某个远端 `main` 祖先」的提交，否则直接拒绝。
    先确认目标 PR 已合并、`git fetch` 完成。
