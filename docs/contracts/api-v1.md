@@ -623,6 +623,14 @@ DELETE     /api/v1/admin/comments/:id
   `listPublicForHomePreview` 独立查询（只取未结束活动，不再走公开列表）。无 Schema /
   Migration / 权限变更。
 
+### 首页预览的已结束兜底（issue #317）
+
+`listPublicForHomePreview` 仍只返回未结束活动。没有未结束活动时，首页改用
+`listPublicEndedForHomePreview` 取最近 3 场已结束活动：`deleted_at IS NULL`、
+`activity_at < todayStart`，按 `activity_at DESC, created_at ASC, id ASC`（与公开列表
+已结束段一致）。已结束活动详情接口仍返回 `ACTIVITY_ENDED`，因此兜底卡不提供详情链接；
+未结束与已结束都为空时首页区块不渲染。无 Schema / Migration / 权限 / API 形状变更。
+
 ### 活动「已结束」的判定口径（issue #79）
 
 - `ENDED`（已结束）= 活动当天（`activityAt` 所在的 Asia/Shanghai 自然日）**结束之后**，

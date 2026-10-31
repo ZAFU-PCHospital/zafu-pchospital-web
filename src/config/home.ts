@@ -46,9 +46,10 @@ export const heroActions: Record<"repair" | "docs", HeroAction> = {
 };
 
 /**
- * 首页近场活动预览（UX R3 / R7）
+ * 首页近场活动预览（UX R3 / R7，issue #317）
  *
- * 展示 1–3 场未结束活动；无未结束时整块不渲染（口径 C5）。
+ * 优先展示 1–3 场未结束活动；没有未结束活动时展示最近 3 场已结束活动，
+ * 两者都没有时整块不渲染。
  */
 export const homeActivityPreview = {
   index: "01",
@@ -59,6 +60,8 @@ export const homeActivityPreview = {
   capacity: "名额 {registered} / {capacity}",
   remainingShort: "剩余 {count}",
   activityAt: "活动时间",
+  endedHint: "活动已结束",
+  detailCta: "查看详情",
   loadFailedSilent: true,
 } as const;
 

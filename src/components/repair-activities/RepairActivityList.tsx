@@ -1,24 +1,23 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
-  formatShanghaiDateParts,
-  formatShanghaiTime,
-} from "@/components/repair-activities/activity-format";
-import { repairActivityStatusBadgeClass } from "@/components/repair-activities/activity-status-badge";
+  ActivityTicketCard,
+  type ActivityTicketCopy,
+} from "@/components/repair-activities/ActivityTicketCard";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
 import { repairActivitiesPage } from "@/config/repair-activities";
-import {
-  repairActivityStatusLabels,
-  type RepairActivityStatus,
-} from "@/features/repair-activities/repair-activity-validation";
 import type { RepairActivityPublicView } from "@/features/repair-activities/repair-activity-service";
 import type { PaginationMeta } from "@/types/contracts";
 
 const PAGE_SIZE = 4;
+const TICKET_COPY: ActivityTicketCopy = {
+  activityAt: repairActivitiesPage.activityAt,
+  capacity: repairActivitiesPage.capacity,
+  remainingShort: repairActivitiesPage.remainingShort,
+  endedHint: repairActivitiesPage.endedHint,
+};
 
 type PublicActivityListResponse = {
   success: boolean;
@@ -159,61 +158,16 @@ export function RepairActivityList() {
 
   return (
     <div className="activity-list-block">
-      <ul ref={listRef} className="activity-list activity-list--paged" aria-busy={busy}>
-        {items.map((item) => {
-          const ended = item.status === "ENDED";
-          const dateParts = formatShanghaiDateParts(item.activityAt);
-          const body = (
-            <Card
-              className={`activity-card activity-card--stub activity-card--${item.status.toLowerCase()} repair-panel`}
-            >
-              <span className="activity-card__spine" aria-hidden="true" />
-              <div className="activity-card__stub">
-                <span className="activity-card__stub-month">{dateParts.month}</span>
-                <span className="activity-card__stub-day">{dateParts.day}</span>
-                <span className="activity-card__stub-weekday">{dateParts.weekday}</span>
-              </div>
-              <div className="activity-card__body">
-                <div className="activity-card__head">
-                  <h2 className="activity-card__title">{item.title}</h2>
-                </div>
-                <div className="activity-card__meta">
-                  <p>
-                    {repairActivitiesPage.activityAt} · {formatShanghaiTime(item.activityAt)}
-                  </p>
-                  <p>{formatCapacityLine(item, ended)}</p>
-                </div>
-                <div className="activity-card__footer">
-                  {ended ? (
-                    <p className="muted">{repairActivitiesPage.endedHint}</p>
-                  ) : (
-                    <span className={repairActivityStatusBadgeClass(item.status)}>
-                      {repairActivityStatusLabels[item.status as RepairActivityStatus]}
-                    </span>
-                  )}
-                </div>
-              </div>
-            </Card>
-          );
-
-          if (ended) {
-            return (
-              <li key={item.id}>
-                <div aria-disabled="true" className="activity-card__ended-wrap">
-                  {body}
-                </div>
-              </li>
-            );
-          }
-
-          return (
-            <li key={item.id}>
-              <Link href={`/repair-activities/${item.id}`} className="activity-card__link">
-                {body}
-              </Link>
-            </li>
-          );
-        })}
+      <ul
+        ref={listRef}
+        className="activity-list activity-list--paged activity-list--ticket"
+        aria-busy={busy}
+      >
+        {items.map((item) => (
+          <li key={item.id}>
+            <ActivityTicketCard activity={item} copy={TICKET_COPY} />
+          </li>
+        ))}
       </ul>
       {busy ? (
         <p className="muted" role="status" aria-live="polite">
@@ -250,14 +204,4 @@ export function RepairActivityList() {
       ) : null}
     </div>
   );
-}
-
-/** 未结束优先「剩余 N」，可与已报/上限同行压缩；已结束仅已报/上限。 */
-function formatCapacityLine(item: RepairActivityPublicView, ended: boolean): string {
-  const capacity = repairActivitiesPage.capacity
-    .replace("{registered}", String(item.registeredCount))
-    .replace("{capacity}", String(item.capacity));
-  if (ended) return capacity;
-  const remaining = repairActivitiesPage.remainingShort.replace("{count}", String(item.remaining));
-  return `${remaining} · ${capacity}`;
 }

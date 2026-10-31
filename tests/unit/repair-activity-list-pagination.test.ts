@@ -14,7 +14,12 @@ type Props = { children?: ReactNode };
 
 function text(node: ReactNode): string {
   if (Array.isArray(node)) return node.map(text).join("");
-  if (React.isValidElement<Props>(node)) return text(node.props.children);
+  if (React.isValidElement<Props>(node)) {
+    if (typeof node.type === "function") {
+      return text((node.type as (props: Props) => ReactNode)(node.props));
+    }
+    return text(node.props.children);
+  }
   if (typeof node === "string") return node;
   if (typeof node === "number") return String(node);
   return "";

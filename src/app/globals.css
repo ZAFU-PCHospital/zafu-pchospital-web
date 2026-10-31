@@ -8141,18 +8141,18 @@ html[data-theme="black-yellow"] {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
-.activity-list--paged .activity-card {
+.activity-list--ticket .activity-card {
   overflow-wrap: anywhere;
 }
 /* 票根卡在窄屏下由 grid 列约束宽度，链接层不能按内容撑开。 */
-.activity-list--paged .activity-card__link,
-.activity-list--paged .activity-card__ended-wrap {
+.activity-list--ticket .activity-card__link,
+.activity-list--ticket .activity-card__ended-wrap {
   min-width: 0;
 }
-/* #302：公开列表日期票根（方向 D）。
-   只挂在 .activity-list--paged 的修饰类上，不改 .activity-card 基础规则；
-   排序与分页由组件负责，这里只处理外观。 */
-.activity-list--paged .activity-card--stub {
+/* #302 / #317：公开列表与首页预览共用日期票根（方向 D）。
+   票根样式挂在 .activity-list--ticket 上，不改 .activity-card 基础规则；
+   排序、分页与首页空态兜底由组件负责，这里只处理外观。 */
+.activity-list--ticket .activity-card--stub {
   --spine: var(--line-strong);
   position: relative;
   display: grid;
@@ -8168,36 +8168,36 @@ html[data-theme="black-yellow"] {
     border-color 200ms ease,
     transform 200ms ease;
 }
-.activity-list--paged .activity-card--stub.activity-card--open {
+.activity-list--ticket .activity-card--stub.activity-card--open {
   --spine: var(--status-success);
 }
-.activity-list--paged .activity-card--stub.activity-card--full {
+.activity-list--ticket .activity-card--stub.activity-card--full {
   --spine: var(--status-warning);
 }
-.activity-list--paged .activity-card--stub.activity-card--ended {
+.activity-list--ticket .activity-card--stub.activity-card--ended {
   --spine: var(--ink-4);
 }
-.activity-list--paged .activity-card__link:hover .activity-card--stub {
+.activity-list--ticket .activity-card__link:hover .activity-card--stub {
   border-color: var(--accent-line);
   outline: none;
   transform: translateY(-1px);
 }
-.activity-list--paged .activity-card__link:focus-visible .activity-card--stub {
+.activity-list--ticket .activity-card__link:focus-visible .activity-card--stub {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
-.activity-list--paged .activity-card--stub.activity-card--ended:hover {
+.activity-list--ticket .activity-card--stub.activity-card--ended:hover {
   border-color: var(--line);
   transform: none;
 }
-.activity-list--paged .activity-card--stub .activity-card__spine {
+.activity-list--ticket .activity-card--stub .activity-card__spine {
   position: absolute;
   inset-block-start: 0;
   inset-inline: 0;
   block-size: 2px;
   background: var(--spine);
 }
-.activity-list--paged .activity-card--stub .activity-card__stub {
+.activity-list--ticket .activity-card--stub .activity-card__stub {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -8208,25 +8208,25 @@ html[data-theme="black-yellow"] {
   background: color-mix(in oklab, var(--surface-1) 82%, var(--spine) 18%);
   transition: background-color 200ms ease;
 }
-.activity-list--paged .activity-card__link:hover .activity-card--stub .activity-card__stub {
+.activity-list--ticket .activity-card__link:hover .activity-card--stub .activity-card__stub {
   background: color-mix(in oklab, var(--surface-1) 62%, var(--spine) 38%);
 }
-.activity-list--paged .activity-card--stub .activity-card__stub-month {
+.activity-list--ticket .activity-card--stub .activity-card__stub-month {
   font-size: 11px;
   color: var(--ink-3);
 }
-.activity-list--paged .activity-card--stub .activity-card__stub-day {
+.activity-list--ticket .activity-card--stub .activity-card__stub-day {
   font-size: 24px;
   font-weight: 500;
   line-height: 1;
   color: var(--ink);
   font-variant-numeric: tabular-nums;
 }
-.activity-list--paged .activity-card--stub .activity-card__stub-weekday {
+.activity-list--ticket .activity-card--stub .activity-card__stub-weekday {
   font-size: 11px;
   color: var(--ink-4);
 }
-.activity-list--paged .activity-card--stub .activity-card__body {
+.activity-list--ticket .activity-card--stub .activity-card__body {
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -8234,15 +8234,15 @@ html[data-theme="black-yellow"] {
   padding: 16px;
 }
 /* 徽章移出标题行，标题独占整行，四列时不再被挤成 6 个字一行。 */
-.activity-list--paged .activity-card--stub .activity-card__head {
+.activity-list--ticket .activity-card--stub .activity-card__head {
   margin-bottom: 0;
 }
 /* 四列卡宽约 246px：标题 1rem 配合平衡换行，加高的卡身容纳两行标题。 */
-.activity-list--paged .activity-card--stub .activity-card__title {
+.activity-list--ticket .activity-card--stub .activity-card__title {
   font-size: 1rem;
   text-wrap: balance;
 }
-.activity-list--paged .activity-card--stub .activity-card__meta {
+.activity-list--ticket .activity-card--stub .activity-card__meta {
   display: grid;
   gap: 2px;
   margin: 0;
@@ -8250,10 +8250,10 @@ html[data-theme="black-yellow"] {
   color: var(--ink-2);
   font-variant-numeric: tabular-nums;
 }
-.activity-list--paged .activity-card--stub .activity-card__meta p {
+.activity-list--ticket .activity-card--stub .activity-card__meta p {
   margin: 0;
 }
-.activity-list--paged .activity-card--stub .activity-card__footer {
+.activity-list--ticket .activity-card--stub .activity-card__footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -8261,7 +8261,7 @@ html[data-theme="black-yellow"] {
   margin-top: auto;
   padding-top: 8px;
 }
-.activity-list--paged .activity-card--stub .activity-card__footer .muted {
+.activity-list--ticket .activity-card--stub .activity-card__footer .muted {
   margin: 0;
   font-size: 11px;
 }
@@ -8272,7 +8272,7 @@ html[data-theme="black-yellow"] {
   }
 }
 @media (max-width: 759px) {
-  .activity-list--paged .activity-card--stub {
+  .activity-list--ticket .activity-card--stub {
     grid-template-columns: 68px minmax(0, 1fr);
   }
 }
@@ -8302,8 +8302,8 @@ html[data-theme="black-yellow"] {
   .activity-list--paged > li {
     animation: none;
   }
-  .activity-list--paged .activity-card--stub,
-  .activity-list--paged .activity-card--stub .activity-card__stub {
+  .activity-list--ticket .activity-card--stub,
+  .activity-list--ticket .activity-card--stub .activity-card__stub {
     transition: none;
   }
 }
@@ -8491,9 +8491,11 @@ html[data-theme="black-yellow"] {
   margin: var(--s-1) 0 var(--s-2);
 }
 .activity-card__cta {
-  margin: auto 0 0;
-  padding-top: var(--s-3);
-  font-size: 0.875rem;
+  color: var(--accent-deep);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
 }
 .activity-board {
   display: grid;
