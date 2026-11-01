@@ -22,18 +22,17 @@ import type {
 export const PUBLIC_CONTENT_SETTINGS_ID = "public-content";
 
 /**
- * 未配置时的契约默认值：**三个开关全关，展示名取昵称**。
+ * 未配置时的契约默认值：**三个开关全关，展示名取真实姓名**（issue #330）。
  *
- * 保守默认是刻意的 —— 表里没有行时（全新部署、M7 尚未接入）官网不应该展示任何真实统计，
- * 而不是因为「读不到配置」就退化成公开。这与 M3 的 `UNAVAILABLE` 口径一致：
- * 未知不等于开放。展示名默认 `NICKNAME`：即使管理员打开了排行榜，
- * 默认也不会把成员真实姓名推到公网。
+ * 三个开关仍然保守关闭 —— 表里没有行时官网不应该展示任何真实统计；
+ * 管理员明确打开排行榜后，默认展示实名，但保留切换到昵称/隐藏的开关。
+ * 公开实名需社团确认成员同意，不能仅凭默认值当成已授权。
  */
 export const PUBLIC_CONTENT_SETTINGS_DEFAULTS: UpdatePublicContentSettingsInput = {
   publicRepairStatsEnabled: false,
   publicRepairStatsDetailEnabled: false,
   publicRankingsEnabled: false,
-  rankingDisplayName: "NICKNAME",
+  rankingDisplayName: "REAL_NAME",
 };
 
 /**

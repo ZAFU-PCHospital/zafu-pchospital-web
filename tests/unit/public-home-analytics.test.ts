@@ -240,36 +240,75 @@ test("首页 DOM：全关隐藏；学年标识、零值、空榜和启用内容�
   assert.doesNotMatch(enabled, /累计服务设备/);
 });
 
-test("首页公开数据是 Hero 与跑马灯之间的独立第二屏；全关时无空白区块", async (t) => {
+test("首页首屏：Hero 维修读数 + 跑马灯贴底；第二屏收进 home-content", async (t) => {
   const f = fixture(t);
   // Icon 的图形在模块加载时创建，须在测试的 React 全局初始化之后加载 Hero。
   const { Hero } = await import("../../src/components/home/Hero");
+  const { DocsSection } = await import("../../src/components/home/DocsSection");
   const { default: HomePage } = await import("../../src/app/page");
-  const renderOpening = async () => {
+  const loadOpening = async () => {
     const page = await HomePage();
-    return renderToStaticMarkup(
-      React.createElement(
-        React.Fragment,
-        null,
-        ...React.Children.toArray(page.props.children).slice(0, 3),
-      ),
+    const children = React.Children.toArray(page.props.children);
+    const firstScreen = renderToStaticMarkup(
+      React.createElement(React.Fragment, null, children[0]),
     );
+    return { firstScreen, second: children[1] as React.ReactElement<{ id?: string }> };
   };
-  const opening = await renderOpening();
+  const { firstScreen: opening, second } = await loadOpening();
+  assert.match(opening, /class="home-first-screen"/);
   assert.match(opening, /href="#public-statistics"/);
-  assert.match(opening, /<\/section><section[^>]*id="public-statistics"/);
-  assert.match(opening, /<\/section><div id="home-content" class="ticker"/);
-  assert.equal((opening.match(/id="public-statistics"/g) ?? []).length, 1);
-  assert.match(opening, /内置文档仓库/);
+  assert.match(opening, /class="ticker"/);
+  assert.doesNotMatch(opening, /id="home-content"/, "首屏容器里不能再放第二屏锚点");
+  assert.equal(second.props.id, "home-content");
+  assert.match(opening, /维修服务记录/);
+  assert.doesNotMatch(opening, /内置文档仓库/);
+
+  const data: PublicHomeAnalytics = {
+    academicYear: yearDto(),
+    repairStats: {
+      totalApprovedCount: 7,
+      details: { yearApprovedCount: 2, totalApprovedDurationMinutes: 90 },
+    },
+    rankings: null,
+  };
+  const hero = renderToStaticMarkup(React.createElement(Hero, { analytics: data }));
+  const heroText = hero.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ");
+  assert.match(heroText, /维修服务记录/);
+  assert.match(heroText, /7 台/);
+  assert.match(heroText, /2 台/);
+  assert.match(heroText, /1.5 小时/);
+  assert.doesNotMatch(heroText, /内置文档仓库/);
+  const statsOnly = renderToStaticMarkup(
+    React.createElement(Hero, {
+      analytics: {
+        ...data,
+        repairStats: { totalApprovedCount: 7 },
+      },
+    }),
+  );
+  assert.match(statsOnly.replace(/<[^>]*>/g, " ").replace(/\s+/g, " "), /7 台/);
+  assert.doesNotMatch(statsOnly, /累计维修时长/);
+
+  const hiddenHero = renderToStaticMarkup(
+    React.createElement(Hero, {
+      analytics: { ...data, repairStats: null, rankings: null },
+    }),
+  );
+  assert.match(hiddenHero, /hero__body--single/);
+  assert.doesNotMatch(hiddenHero, /维修服务记录/);
+
+  const docs = renderToStaticMarkup(React.createElement(DocsSection));
+  assert.match(docs, /全套维修与排障文档/);
+  assert.doesNotMatch(docs, /仓库状态|目录条目|class="readout"|docpreview|src\/ ·/);
+
   f.policy.publicRepairStatsEnabled = false;
   f.policy.publicRankingsEnabled = false;
-  const hidden = await renderOpening();
-  assert.doesNotMatch(hidden, /id="public-statistics"/);
-  assert.match(hidden, /href="#home-content"/);
-  assert.match(hidden, /<\/section><div id="home-content" class="ticker"/);
-  const hero = renderToStaticMarkup(React.createElement(Hero));
-  assert.doesNotMatch(hero, /public-statistics|hero__inner--public/);
-  assert.match(hero, /内置文档仓库/);
+  const hidden = await loadOpening();
+  assert.doesNotMatch(hidden.firstScreen, /id="public-statistics"/);
+  assert.match(hidden.firstScreen, /href="#home-content"/);
+  assert.match(hidden.firstScreen, /class="home-first-screen"/);
+  assert.match(hidden.firstScreen, /class="ticker"/);
+  assert.equal(hidden.second.props.id, "home-content");
 });
 
 test("第二屏独立开关：详细统计关闭不泄露辅助指标，并列与同名成员不丢行", () => {

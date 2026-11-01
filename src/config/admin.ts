@@ -983,7 +983,7 @@ export const adminCopy = {
     submit: "保存设置",
     saved: "公开统计设置已保存",
     updatedAt: "上次修改：{time} · {name}",
-    never: "尚未修改过，当前为默认值（全部关闭）",
+    never: "尚未修改过，当前为默认值（统计关闭，排行榜展示实名）",
     /* 首页展示预览使用示意数据。 */
     preview: {
       title: "首页预览",

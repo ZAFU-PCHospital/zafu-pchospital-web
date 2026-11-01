@@ -83,6 +83,8 @@ export const homePublicAnalytics = {
   rankingUnit: "次",
   rankingEmpty: "本学年暂无上榜记录。",
   rankLabel: "第 {rank} 名",
+  readoutTitle: "维修服务记录",
+  readoutTag: "REPAIR",
   note: "仅统计已审核通过、未删除的维修记录；每条维修记录按一次计入总量。",
   rankingNote: "按{academicYear}审核通过的维修次数排序。",
 } as const;

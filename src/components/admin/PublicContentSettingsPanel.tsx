@@ -51,8 +51,8 @@ export function PublicContentSettingsPanel() {
     publicRepairStatsEnabled: false,
     publicRepairStatsDetailEnabled: false,
     publicRankingsEnabled: false,
-    // 默认取「仅昵称」而不是数组第一项「真实姓名」：没有配置时不该预设公开实名。
-    rankingDisplayName: "NICKNAME",
+    // issue #330：默认取「真实姓名」，管理员仍可切到昵称或隐藏。
+    rankingDisplayName: "REAL_NAME",
   });
 
   const load = useCallback(async () => {

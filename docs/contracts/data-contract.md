@@ -337,8 +337,11 @@ Repository / Service 的默认读取必须加 `deletedAt: null`。身份采用�
 - **公开内容与展示策略**：`public_content_settings` 是**单行**配置表（主键固定
   `public-content`），字段为 `public_repair_stats_enabled`、
   `public_repair_stats_detail_enabled`、`public_rankings_enabled`、`ranking_display_name`。
-  表里没有行时按契约默认值处理（三个开关全关、展示名 `NICKNAME`）——
-  读不到配置不等于可以公开。不变量：**辅助数据不能脱离主数据存在**，
+  表里没有行时按契约默认值处理（三个开关全关、展示名 `REAL_NAME`，issue #330）——
+  读不到配置不等于可以公开；只有管理员明确打开排行榜后才展示实名。
+  迁移 `20261102000000_public_ranking_real_name_default` 会把旧的默认 `NICKNAME`
+  单行配置升级为 `REAL_NAME`，`HIDDEN` 保持不变；管理员仍可随时切回昵称/隐藏。
+  不变量：**辅助数据不能脱离主数据存在**，
   关闭主开关时 `public_repair_stats_detail_enabled` 一并归零（而不是报错，
   否则「关掉首页统计」要分两次操作才能达成）。每次写入写审计
   `settings.public_content.updated`，并记录 `updated_by_user_id`。

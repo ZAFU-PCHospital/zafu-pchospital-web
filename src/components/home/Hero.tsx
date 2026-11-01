@@ -1,10 +1,12 @@
-import { DocReadout } from "@/components/docs/DocReadout";
 import { Container } from "@/components/layout/Container";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { Reveal } from "@/components/ui/Reveal";
 import { heroActions, heroContent } from "@/config/home";
 import { revealIndex } from "@/lib/utils";
+import type { PublicHomeAnalytics } from "@/types/contracts";
+
+import { RepairReadout } from "./RepairReadout";
 
 /**
  * Hero —— 首页首屏
@@ -14,11 +16,14 @@ import { revealIndex } from "@/lib/utils";
  */
 
 export function Hero({
+  analytics,
   scrollTarget = "#home-content",
 }: {
+  analytics: PublicHomeAnalytics;
   scrollTarget?: "#public-statistics" | "#home-content";
-} = {}) {
+}) {
   const { repair, docs } = heroActions;
+  const hasRepairReadout = Boolean(analytics.repairStats);
 
   return (
     <section className="hero" id="hero" aria-labelledby="hero-title">
@@ -51,7 +56,7 @@ export function Hero({
           </p>
         </div>
 
-        <div className="hero__body">
+        <div className={hasRepairReadout ? "hero__body" : "hero__body hero__body--single"}>
           <div>
             <Reveal as="p" className="hero__lead" index={1}>
               {heroContent.lead}
@@ -77,12 +82,7 @@ export function Hero({
             </a>
           </div>
 
-          <DocReadout
-            title="内置文档仓库"
-            tag="DOCS"
-            index={3}
-            footnote="数值读取自站点内置的文档仓库清单，随仓库重新生成而更新。"
-          />
+          {hasRepairReadout ? <RepairReadout data={analytics} index={3} /> : null}
         </div>
       </Container>
     </section>
