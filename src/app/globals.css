@@ -1487,6 +1487,20 @@ html[data-theme="black-yellow"] {
   }
 
   /* -------------------------------------------------------------- HERO */
+  /* 首屏包含跑马灯：桌面贴视口底边，窄屏跟在 Hero 内容之后。 */
+  .home-first-screen {
+    display: flex;
+    flex-direction: column;
+    min-height: 100svh;
+  }
+  .home-first-screen .hero {
+    flex: 1 0 auto;
+    min-height: 0;
+  }
+  .home-first-screen .ticker {
+    flex: none;
+  }
+
   .hero {
     position: relative;
     display: grid;
@@ -1702,6 +1716,12 @@ html[data-theme="black-yellow"] {
   }
   .readout__row b.is-accent {
     color: var(--accent);
+  }
+  .readout__row small {
+    font-size: 0.55em;
+    font-weight: 400;
+    letter-spacing: 0;
+    color: var(--ink-3);
   }
   .readout__foot {
     padding-top: var(--s-3);
@@ -4540,16 +4560,6 @@ html[data-theme="black-yellow"] {
   }
 
   /* -------------------------------------------------------------- 文档 */
-  .docs__grid {
-    display: grid;
-    gap: clamp(2rem, 5vw, 4rem);
-    align-items: start;
-    margin-bottom: var(--s-8);
-  }
-  .docs__grid .lead {
-    margin: 0 0 var(--s-6);
-  }
-
   .docpreview,
   .card {
     border: 1px solid var(--line);
@@ -4964,6 +4974,9 @@ html[data-theme="black-yellow"] {
     .hero__body {
       grid-template-columns: minmax(0, 1.5fr) minmax(240px, 0.85fr);
     }
+    .hero__body--single {
+      grid-template-columns: minmax(0, 1fr);
+    }
     .about__grid {
       grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
     }
@@ -4971,9 +4984,6 @@ html[data-theme="black-yellow"] {
     .about__lead {
       grid-template-columns: minmax(0, 1.35fr) minmax(0, 0.9fr);
       gap: clamp(2rem, 5vw, 5rem);
-    }
-    .docs__grid {
-      grid-template-columns: minmax(0, 1.3fr) minmax(220px, 0.7fr);
     }
     .hero__meta {
       display: block;
@@ -5142,6 +5152,10 @@ html[data-theme="black-yellow"] {
     .hero {
       align-content: start;
       padding-block-start: var(--s-6);
+    }
+    /* 跑马灯占用首屏底部；把 Hero 的下留白收进 ticker，避免首屏被撑高。 */
+    .home-first-screen .hero {
+      padding-bottom: var(--s-5);
     }
     .rail {
       display: flex;

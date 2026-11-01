@@ -427,13 +427,14 @@ Warning 色相刻意偏琥珀（远离 accent 的信号黄 / 钴蓝），避免�
 | 组件                                                                                                         | 路径         | 使用位置                                                           |
 | ------------------------------------------------------------------------------------------------------------ | ------------ | ------------------------------------------------------------------ |
 | `Hero` / `Ticker` / `AboutSection` / `ServicesSection` / `ProcessSection` / `DocsSection` / `ContactSection` | `home/`      | 仅首页                                                             |
-| `DocList` / `DocReadout`                                                                                     | `docs/`      | 首页文档区块与 `/docs` 页共用                                      |
+| `DocList` / `DocReadout`                                                                                     | `docs/`      | 组件保留；首页文档区已移除目录预览与仓库读数（issue #330）         |
 | `MemberSignup`                                                                                               | `join/`      | 仅 `/join`                                                         |
 | `MemberDashboard` / `MemberShortcuts` / `MemberUpcoming` / 工作台区块                                        | `member/`    | `/member` 工作台                                                   |
 | `RepairComments` / `FavoriteToggle` / `FavoriteList` / `NotificationInbox` / `RepairFlagControls`            | `community/` | 维修详情、工作台摘要、`/member/notifications`、`/member/favorites` |
 
-首页公开维修数据位于 Hero 之后、跑马灯之前的独立第二屏，复用 `Section` / `Container` /
-`SectionTitle`；首屏始终保持原有标题、背景与文档读数布局，不随公开开关改变。
+首页跑马灯收进首屏容器：≥1100px 贴视口底边，窄屏跟在 Hero 内容之后；首屏 Hero 右侧的
+文档仓库读数已移除（issue #330），改为维修统计读数，公开统计关闭时整块不渲染、Hero 单列。
+公开维修数据仍位于首屏之后的独立第二屏，复用 `Section` / `Container` / `SectionTitle`。
 至少一项数据可公开时显示区块，两项均关闭时整块不渲染；关闭的模块不占位，详细统计关闭时
 只显示累计服务设备。`.home-analytics__metrics` 使用语义化描述列表：≥760px 三项横排，
 手机主指标独占一行、辅助指标并排；≥1100px 第二屏至少一视口高，内容过多自然扩展，不锁定滚动。

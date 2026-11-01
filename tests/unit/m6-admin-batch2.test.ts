@@ -15,11 +15,7 @@ import {
 import { movedIds, reorderedIds } from "../../src/features/admin/reorder";
 import { applyOrder, movedManyIds, movingRowIds } from "../../src/lib/list-order";
 import { stableCodeFromName } from "../../src/lib/stable-code";
-import {
-  Permission,
-  RankingDisplayNameMode,
-  ReorderDirection,
-} from "../../src/types/contracts";
+import { Permission, RankingDisplayNameMode, ReorderDirection } from "../../src/types/contracts";
 import type { JoinApplicationExportRow, RepairExportRow } from "../../src/types/contracts";
 
 /**
@@ -133,7 +129,13 @@ test("报名导出的列顺序与 JoinApplicationExportRow 的键逐一对应", 
   assert.ok(keys.includes("qq"));
   assert.ok(keys.includes("phone"));
   // 学号 / 班级：插在「姓名」之后。
-  assert.deepEqual(keys.slice(0, 5), ["ticketNo", "recruitmentCycle", "realName", "studentId", "className"]);
+  assert.deepEqual(keys.slice(0, 5), [
+    "ticketNo",
+    "recruitmentCycle",
+    "realName",
+    "studentId",
+    "className",
+  ]);
 });
 
 test("维修导出列保持批次 1 的顺序（不得被批次 2 改动）", () => {
@@ -236,17 +238,17 @@ test("后台导航不进入公开索引栏（mainNav）", () => {
 
 /* ------------------------------------------------------------------ 设置 */
 
-test("公开统计的默认值是「全部关闭 + 仅昵称」", () => {
+test("公开统计的默认值是「全部关闭 + 真实姓名」", () => {
   assert.deepEqual(PUBLIC_CONTENT_SETTINGS_DEFAULTS, {
     publicRepairStatsEnabled: false,
     publicRepairStatsDetailEnabled: false,
     publicRankingsEnabled: false,
-    rankingDisplayName: "NICKNAME",
+    rankingDisplayName: "REAL_NAME",
   });
   assert.equal(PUBLIC_CONTENT_SETTINGS_ID, "public-content");
   assert.deepEqual([...RankingDisplayNameMode], ["REAL_NAME", "NICKNAME", "HIDDEN"]);
   // 默认项必须是枚举里的合法取值。
-  assert.ok((RankingDisplayNameMode as readonly string[]).includes("NICKNAME"));
+  assert.ok((RankingDisplayNameMode as readonly string[]).includes("REAL_NAME"));
 });
 
 /* ------------------------------------------------------------------ 枚举 */

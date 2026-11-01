@@ -2,14 +2,10 @@ import { Reveal } from "@/components/ui/Reveal";
 import { Section } from "@/components/ui/Section";
 import { SectionTitle } from "@/components/ui/SectionTitle";
 import { homePublicAnalytics as copy } from "@/config/home";
+import { formatRepairDurationHours, homeYearLabel } from "@/lib/home-analytics";
 import type { PublicHomeAnalytics } from "@/types/contracts";
 
 type Metric = { label: string; value: string; unit?: string };
-
-/** 学年标签由服务端在**同一次**统计里给出，避免标题与数据各取一次时钟。 */
-function yearLabel(template: string, data: PublicHomeAnalytics): string {
-  return template.replace("{academicYear}", data.academicYear.label);
-}
 
 /** 首屏后的独立区块；只接收已按公开策略裁剪的 DTO。 */
 export function HomePublicAnalytics({ data }: { data: PublicHomeAnalytics }) {
@@ -25,15 +21,13 @@ export function HomePublicAnalytics({ data }: { data: PublicHomeAnalytics }) {
       const { yearApprovedCount, totalApprovedDurationMinutes } = data.repairStats.details;
       metrics.push(
         {
-          label: yearLabel(copy.year, data),
+          label: homeYearLabel(copy.year, data),
           value: yearApprovedCount.toLocaleString("zh-CN"),
           unit: copy.countUnit,
         },
         {
           label: copy.duration,
-          value: (totalApprovedDurationMinutes / 60).toLocaleString("zh-CN", {
-            maximumFractionDigits: 1,
-          }),
+          value: formatRepairDurationHours(totalApprovedDurationMinutes),
           unit: copy.durationUnit,
         },
       );
@@ -70,7 +64,7 @@ export function HomePublicAnalytics({ data }: { data: PublicHomeAnalytics }) {
         <table className="home-analytics__table">
           <caption>
             <div className="home-analytics__caption">
-              <h3>{yearLabel(copy.rankingTitle, data)}</h3>
+              <h3>{homeYearLabel(copy.rankingTitle, data)}</h3>
               <span className="home-analytics__tag">{copy.rankingTag}</span>
             </div>
           </caption>
@@ -107,7 +101,7 @@ export function HomePublicAnalytics({ data }: { data: PublicHomeAnalytics }) {
         </table>
       ) : null}
       <p className="home-analytics__note">
-        {yearLabel(data.repairStats ? copy.note : copy.rankingNote, data)}
+        {homeYearLabel(data.repairStats ? copy.note : copy.rankingNote, data)}
       </p>
     </Section>
   );

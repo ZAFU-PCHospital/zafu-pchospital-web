@@ -11,7 +11,7 @@ import { tickerItems } from "@/config/home";
 
 export function Ticker() {
   return (
-    <div id="home-content" className="ticker" aria-hidden="true">
+    <div className="ticker" aria-hidden="true">
       <div className="ticker__track">
         {[0, 1].map((copy) => (
           <div className="ticker__group" key={copy}>

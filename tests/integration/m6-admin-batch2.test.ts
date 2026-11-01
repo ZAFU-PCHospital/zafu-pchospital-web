@@ -680,7 +680,7 @@ function shanghaiToday(offsetDays = 0): string {
 
 /* --------------------------------------------------------------- 公开设置 */
 
-dbTest("公开统计设置：默认全关、单行 upsert、辅助数据跟随主开关、审计", async () => {
+dbTest("公开统计设置：默认全关且展示实名、单行 upsert、辅助数据跟随主开关、审计", async () => {
   await getDb().publicContentSetting.deleteMany({ where: { id: PUBLIC_CONTENT_SETTINGS_ID } });
   const initial = await publicContentSettingsService.get(ADMIN_ACTOR);
   assert.deepEqual(
