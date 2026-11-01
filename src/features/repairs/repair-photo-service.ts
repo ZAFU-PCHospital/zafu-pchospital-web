@@ -13,6 +13,7 @@ import {
   type RepairPhotoStorage,
   uploadLimits,
 } from "./repair-photo-storage";
+import { withRepairPhotoImageSlot } from "./repair-photo-admission";
 import { processRepairPhoto } from "./repair-photo-image";
 import type { AuthorizedActor, RepairPhotoView } from "@/types/contracts";
 
@@ -52,14 +53,16 @@ export function createRepairPhotoService(storage: RepairPhotoStorage) {
               "REPAIR_PHOTO_TOO_LARGE",
               `「${file.name}」${formatBytes(file.size)}，超过单张 ${formatBytes(limits.maxBytes)} 的上限`,
             );
-          const bytes = new Uint8Array(await file.arrayBuffer());
-          const detected = detectImageType(bytes);
-          if (!detected || detected !== file.type)
-            throw new AppError(
-              "REPAIR_PHOTO_TYPE_UNSUPPORTED",
-              "仅支持真实的 JPEG、PNG 或 WebP 图片",
-            );
-          const processed = await processRepairPhoto(bytes);
+          const processed = await withRepairPhotoImageSlot(async () => {
+            const bytes = new Uint8Array(await file.arrayBuffer());
+            const detected = detectImageType(bytes);
+            if (!detected || detected !== file.type)
+              throw new AppError(
+                "REPAIR_PHOTO_TYPE_UNSUPPORTED",
+                "仅支持真实的 JPEG、PNG 或 WebP 图片",
+              );
+            return processRepairPhoto(bytes);
+          });
           const display = await storage.put({
             bytes: processed.display.bytes,
             mimeType: "image/webp",

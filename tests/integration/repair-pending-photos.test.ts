@@ -5,6 +5,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, beforeEach, test } from "node:test";
 
+import { POST as uploadRoute } from "../../src/app/api/v1/repairs/[id]/photos/route";
+import { repairPhotoUploadGate } from "../../src/features/repairs/repair-photo-admission";
 import {
   createRepairPhotoService,
   repairPhotoService,
@@ -18,6 +20,7 @@ import { disconnectDb, getDb } from "../../src/lib/db/client";
 import type { AuthorizedActor } from "../../src/types/contracts";
 import { TINY_PNG_BYTES } from "../support/image-fixtures";
 import { integrationTestsEnabled } from "./db-guard";
+import { sameOriginHeaders, sessionCookie } from "./http-harness";
 
 const enabled = integrationTestsEnabled();
 const dbTest = enabled ? test : test.skip;
@@ -241,6 +244,55 @@ after(async () => {
   await cleanupFixtures();
   if (uploadTestRoot) await rm(uploadTestRoot, { recursive: true, force: true });
   await disconnectDb();
+});
+
+dbTest("上传准入：队列占满时 429 且不解析 multipart，释放后可继续上传", async () => {
+  const member = await createMember("上传准入");
+  const recordId = await createPendingRecord(member.profileId);
+  const cookie = await sessionCookie(member.userId, "MEMBER");
+  const url = `http://localhost/api/v1/repairs/${recordId}/photos`;
+
+  let parsed = 0;
+  const blocked = new Request(url, {
+    method: "POST",
+    headers: { cookie, ...sameOriginHeaders() },
+    body: "--blocked--",
+  });
+  Object.defineProperty(blocked, "formData", {
+    value: async () => {
+      parsed += 1;
+      return new FormData();
+    },
+  });
+
+  const releaseActive = await repairPhotoUploadGate.acquire();
+  const waiting = repairPhotoUploadGate.acquire();
+  try {
+    const response = await uploadRoute(blocked, { params: Promise.resolve({ id: recordId }) });
+    const body = (await response.json()) as { error?: { code?: string } };
+    assert.equal(response.status, 429, JSON.stringify(body));
+    assert.equal(body.error?.code, "RATE_LIMITED");
+    assert.equal(parsed, 0, "准入拒绝的请求不应继续解析 multipart");
+  } finally {
+    releaseActive();
+  }
+  (await waiting)();
+
+  const form = new FormData();
+  form.append("photos", pngFile("admitted.png"));
+  const allowed = await uploadRoute(
+    new Request(url, {
+      method: "POST",
+      headers: { cookie, ...sameOriginHeaders() },
+      body: form,
+    }),
+    { params: Promise.resolve({ id: recordId }) },
+  );
+  const allowedBody = (await allowed.json()) as { success?: boolean };
+  assert.equal(allowed.status, 201, JSON.stringify(allowedBody));
+  assert.equal(allowedBody.success, true);
+  assert.equal((await activePhotos(recordId)).length, 1);
+  assert.deepEqual(repairPhotoUploadGate.snapshot(), { active: 0, waiting: 0 });
 });
 
 dbTest("PENDING 未审核：本人可上传、排序、删除照片", async () => {

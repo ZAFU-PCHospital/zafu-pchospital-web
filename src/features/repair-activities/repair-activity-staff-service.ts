@@ -824,8 +824,7 @@ export const repairActivityStaffService = {
       throw new AppError("VALIDATION_FAILED", "报名 ID 无效");
     }
     const isAdmin = actor.permissions.includes("activity:admin");
-    const photoKeys: string[] = [];
-    const result = await inSerializableTransaction(async (tx) => {
+    const { cleanup, ...result } = await inSerializableTransaction(async (tx) => {
       const reg = await tx.repairActivityRegistration.findFirst({
         where: { id: registrationId, activityId, deletedAt: null },
       });
@@ -844,6 +843,7 @@ export const repairActivityStaffService = {
         favorites: number;
         notifications: number;
       } | null = null;
+      let cleanup: { recordId: string | null; keys: string[] } = { recordId: null, keys: [] };
 
       if (reg.repairRecordId) {
         const record = await tx.repairRecord.findFirst({
@@ -858,7 +858,7 @@ export const repairActivityStaffService = {
           );
         const photos = await tx.repairPhoto.findMany({
           where: { repairRecordId: record.id },
-          select: { storageKey: true },
+          select: { storageKey: true, thumbnailKey: true },
         });
         // 社区与通知子表以 RESTRICT 引用记录：作者能读自己的 DRAFT，就可能留下
         // 评论 / 收藏 / 通知，不先清掉删记录会撞外键、把撤销打成 500。
@@ -890,7 +890,17 @@ export const repairActivityStaffService = {
         await tx.repairPhoto.deleteMany({ where: { repairRecordId: record.id } });
         await tx.repairTimelineEvent.deleteMany({ where: { repairRecordId: record.id } });
         await tx.repairRecord.delete({ where: { id: record.id } });
-        photoKeys.push(...photos.map((photo) => photo.storageKey));
+        // 事务只返回最终成功结果的文件键；重试时不会把已回滚尝试写入的键也删掉。
+        cleanup = {
+          recordId: record.id,
+          keys: [
+            ...new Set(
+              photos
+                .flatMap((photo) => [photo.storageKey, photo.thumbnailKey])
+                .filter((key): key is string => Boolean(key)),
+            ),
+          ],
+        };
         deleted = {
           id: record.id,
           photos: photos.length,
@@ -935,11 +945,19 @@ export const repairActivityStaffService = {
       return {
         registration: toStaffReg(updated),
         ...(deleted ? { deletedRecordId: deleted.id } : {}),
+        cleanup,
       };
     });
     // 事务提交后再删磁盘文件：回滚时不会删掉仍被引用的照片。
     await Promise.all(
-      photoKeys.map((key) => localRepairPhotoStorage.delete(key).catch(() => undefined)),
+      cleanup.keys.map((key) =>
+        localRepairPhotoStorage.delete(key).catch((error) => {
+          console.error(
+            `[repairs] 撤销接待清理照片失败 record=${cleanup.recordId ?? "none"} key=${key}`,
+            error,
+          );
+        }),
+      ),
     );
     return result;
   },

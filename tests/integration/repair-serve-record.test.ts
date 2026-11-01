@@ -1,10 +1,14 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { after, before, test } from "node:test";
 
 import { GET as GET_PREFILL } from "../../src/app/api/v1/member/repair-activities/[id]/registrations/[registrationId]/prefill/route";
 import { POST as POST_RECORD } from "../../src/app/api/v1/member/repair-activities/[id]/registrations/[registrationId]/record/route";
 import { repairActivityStaffService } from "../../src/features/repair-activities/repair-activity-staff-service";
+import { localRepairPhotoStorage } from "../../src/features/repairs/repair-photo-storage";
 import { AppError, type ApiErrorCode } from "../../src/lib/api/errors";
 import { permissionsForRoles } from "../../src/lib/auth/permissions";
 import { disconnectDb, getDb } from "../../src/lib/db/client";
@@ -43,6 +47,7 @@ const PREFIX = "SERVE221";
 let activityAt = new Date();
 let createdSystemCategory = false;
 let seq = 0;
+let uploadTestRoot = "";
 
 const staffActor: AuthorizedActor = {
   actorType: "USER",
@@ -283,6 +288,8 @@ async function serveAndRecord(
 
 before(async () => {
   if (!enabled) return;
+  uploadTestRoot = await mkdtemp(join(tmpdir(), "serve221-photos-"));
+  process.env.UPLOAD_PATH = uploadTestRoot;
   await prepareFixtures();
   const db = getDb();
   await repairActivityStaffService.markAttendance(ACTIVITY_ID, staffActor);
@@ -326,6 +333,7 @@ after(async () => {
   try {
     await cleanupFixtures();
   } finally {
+    if (uploadTestRoot) await rm(uploadTestRoot, { recursive: true, force: true });
     await disconnectDb();
   }
 });
@@ -738,6 +746,79 @@ dbTest("旧 serve 草稿过渡：仍可撤销并删除草稿；已提交的拒�
     data: { repairRecordId: recordId },
   });
 
+  const newDisplay = await localRepairPhotoStorage.put({
+    bytes: Uint8Array.from([1]),
+    mimeType: "image/webp",
+  });
+  const newThumb = await localRepairPhotoStorage.put({
+    bytes: Uint8Array.from([2]),
+    mimeType: "image/webp",
+  });
+  const legacyDisplay = await localRepairPhotoStorage.put({
+    bytes: Uint8Array.from([3]),
+    mimeType: "image/png",
+  });
+  const deletedDisplay = await localRepairPhotoStorage.put({
+    bytes: Uint8Array.from([4]),
+    mimeType: "image/webp",
+  });
+  const deletedThumb = await localRepairPhotoStorage.put({
+    bytes: Uint8Array.from([5]),
+    mimeType: "image/webp",
+  });
+  const photoRow = {
+    repairRecordId: recordId,
+    originalName: null,
+    mimeType: "image/webp",
+    sizeBytes: 1,
+    sha256Digest: Buffer.alloc(32),
+    uploadedByUserId: STAFF_USER_ID,
+    createdAt: now,
+  };
+  await db.repairPhoto.createMany({
+    data: [
+      {
+        ...photoRow,
+        id: randomUUID(),
+        storageKey: newDisplay.storageKey,
+        thumbnailKey: newThumb.storageKey,
+        sortOrder: 0,
+      },
+      {
+        ...photoRow,
+        id: randomUUID(),
+        storageKey: legacyDisplay.storageKey,
+        sortOrder: 1,
+      },
+      {
+        ...photoRow,
+        id: randomUUID(),
+        storageKey: deletedDisplay.storageKey,
+        thumbnailKey: deletedThumb.storageKey,
+        sortOrder: 2,
+        deletedAt: now,
+      },
+    ],
+  });
+  const photoKeys = [
+    newDisplay.storageKey,
+    newThumb.storageKey,
+    legacyDisplay.storageKey,
+    deletedDisplay.storageKey,
+    deletedThumb.storageKey,
+  ];
+
+  await expectCode(
+    () => repairActivityStaffService.revertServe(ACTIVITY_ID, registration.id, otherActor),
+    "FORBIDDEN",
+  );
+  await localRepairPhotoStorage.open(newThumb.storageKey);
+  assert.equal(
+    await db.repairPhoto.count({ where: { repairRecordId: recordId } }),
+    3,
+    "事务回滚时不能删除照片行或文件",
+  );
+
   const board = await repairActivityStaffService.getBoard(ACTIVITY_ID, staffActor);
   const row = board.served.find((item) => item.id === registration.id);
   assert.equal(row?.recordStatus, "DRAFT");
@@ -752,6 +833,14 @@ dbTest("旧 serve 草稿过渡：仍可撤销并删除草稿；已提交的拒�
   assert.equal(reverted.registration.status, "CHECKED_IN");
   assert.equal(reverted.deletedRecordId, recordId);
   assert.equal(await db.repairRecord.count({ where: { id: recordId } }), 0);
+  assert.equal(await db.repairPhoto.count({ where: { repairRecordId: recordId } }), 0);
+  for (const key of photoKeys) {
+    await assert.rejects(
+      () => localRepairPhotoStorage.open(key),
+      { code: "ENOENT" },
+      `撤销接待后应删除 ${key}`,
+    );
+  }
   const audit = await db.auditLog.findFirstOrThrow({
     where: {
       action: "repair_activity.registration_serve_reverted",

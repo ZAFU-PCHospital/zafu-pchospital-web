@@ -577,6 +577,12 @@ DELETE     /api/v1/admin/comments/:id
 - 历史记录在 P1b 回填前继续可读：`storage_key` 仍是原图，缩略图请求回退到它；回填完成后
   `storage_key` 指向 display，删除原图并写入 `thumbnail_key`、`width`、`height`。
 - `POST /api/v1/repairs/:id/photos` 的批量语义、数量/体积限制、权限和审核窗口不变。
+- 上传入口有进程级准入：同一时刻只处理 **1 个**上传请求，另允许 **1 个**等待（等待超时 5 秒）。
+  超出容量或等待超时返回 **429 `RATE_LIMITED`** 和可重试提示；请求在 `multipart` 解析前即被拒绝，
+  不会产生照片行或变体文件。图像解码与双变体生成另有进程级单任务闸门，成功、失败、超时和
+  取消都会释放名额。
+- 单张图片最多 **6000 万像素**（覆盖 5000 万像素手机直出）；超出返回 **413
+  `REPAIR_PHOTO_TOO_LARGE`**，与体积超限使用同一错误码，消息提示分辨率上限。
 
 ### 审核前补充照片（issue #226）
 
@@ -777,7 +783,8 @@ DELETE     /api/v1/admin/comments/:id
   的接待返回 409（属于审核流程）。审计 `repair_activity.registration_serve_reverted` 记录恢复状态。
 - **旧数据过渡**（PR #221 之前的接待草稿）：登记仍关联 `DRAFT` 且未提交时保留原撤销能力——
   撤销会删除该草稿及照片，并清理评论 / 收藏 / 通知（#195），审计额外记录 `deletedRecordId`；
-  已提交 / 已审核仍返回 409。存量处置见 #223。
+  照片同时清理 display 与 thumbnail 两类文件（含已软删除照片，键去重），文件删除在事务提交后
+  进行，失败只记录服务端日志，不影响撤销结果。已提交 / 已审核仍返回 409。存量处置见 #223。
 
 新增错误码：`ACTIVITY_SERVE_PENDING`(409)（取代 `ACTIVITY_SERVE_DRAFT_PENDING`）。
 

@@ -10,8 +10,12 @@ export const repairPhotoVariantSpec = {
   thumbnail: { maxEdge: 320, quality: 75 },
 } as const;
 
-/** 防止解压炸弹：单张最多 1 亿像素；当前历史原图最大 4096 长边。 */
-const MAX_INPUT_PIXELS = 100_000_000;
+/**
+ * 防止解压炸弹：单张最多 6000 万像素（覆盖 5000 万像素手机直出）。
+ * 隔离测量 50/64/100MP 单任务峰值增量约 108/107/138 MiB；生产机只有约 1.6G，
+ * 因此配合进程级单任务闸门，不再接受更高的解码内存。
+ */
+const MAX_INPUT_PIXELS = 60_000_000;
 
 export type ProcessedRepairPhotoVariant = {
   bytes: Uint8Array;
@@ -48,6 +52,14 @@ export async function processRepairPhoto(bytes: Uint8Array): Promise<ProcessedRe
   const input = Buffer.from(bytes);
   const options = { failOn: "error" as const, limitInputPixels: MAX_INPUT_PIXELS };
   try {
+    // 先只读文件头判断尺寸：超限时返回可理解的 413，而不是进入解码后再报格式错误。
+    const metadata = await sharp(input, { failOn: "error" }).metadata();
+    if (metadata.width && metadata.height && metadata.width * metadata.height > MAX_INPUT_PIXELS)
+      throw new AppError(
+        "REPAIR_PHOTO_TOO_LARGE",
+        `图片分辨率过高，最多 ${MAX_INPUT_PIXELS / 10_000} 万像素`,
+      );
+
     // 两次解码而不是同时保留多个 libvips 图像，优先控制生产机内存峰值。
     const display = await sharp(input, options)
       .rotate()
@@ -73,6 +85,7 @@ export async function processRepairPhoto(bytes: Uint8Array): Promise<ProcessedRe
 
     return { display: variant(display), thumbnail: variant(thumbnail) };
   } catch (error) {
+    if (error instanceof AppError) throw error;
     throw new AppError("REPAIR_PHOTO_TYPE_UNSUPPORTED", "图片无法解码或格式不受支持", {
       cause: error,
     });
