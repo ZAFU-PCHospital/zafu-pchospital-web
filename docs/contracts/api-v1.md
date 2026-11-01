@@ -247,6 +247,13 @@ PR 中记录影响范围。不强制单独评审；但若影响其他模块，�
 - `GET /api/v1/repair-categories`
 - `GET /api/v1/repair-members`
 
+`GET /api/v1/repair-members` 返回全局 `ACTIVE` 且未软删除成员的
+`{ id, name, realName, nickname }[]`，要求 `repair:read` 和有效成员身份，不含联系方式或学籍字段。
+`name` 按 `nickname → realName → displayName → "成员"` 回退；`realName` / `nickname`
+供普通新建、记录编辑与后台协作者选择按姓名或昵称搜索，维修列表筛选继续使用 `id` / `name`。
+选择器对展示名、姓名、昵称做大小写不敏感的包含匹配，去除查询词前后空白，保留姓名内的空格；
+空查询不展示候选。活动接待建单使用预填接口的本场出勤候选，采用相同匹配规则。
+
 管理端核心 API（M6 消费，不在 M2 建完整管理页面）：
 
 - `GET /api/v1/admin/repairs`、`GET /api/v1/admin/repairs/:id`
@@ -832,8 +839,8 @@ DELETE     /api/v1/admin/comments/:id
   超限 400 `VALIDATION_FAILED`，报错文案含上限）；不存在的成员 400 `VALIDATION_FAILED`，
   软删除成员不得新增为参与者，但完整名单中保留已有关联不阻止普通编辑；移除后不能重新添加。
   数组中的非字符串元素一律 400 `VALIDATION_FAILED`，不得转换为空名单；ID 去空白、统一小写后去重。
-- 候选名单复用 `GET /api/v1/repair-members`（`ACTIVE` 且未软删除的成员）；编辑器以
-  姓名输入框按已输入内容进行不区分大小写的包含匹配，直接选择候选成员添加；仅匹配既有
+- 候选名单复用 `GET /api/v1/repair-members`（`ACTIVE` 且未软删除的成员，返回姓名与昵称）；编辑器以
+  姓名或昵称输入框按已输入内容进行不区分大小写的包含匹配，直接选择候选成员添加；仅匹配既有
   可添加成员，已选成员和创建人不再列出。chip 旁「移除」删除，创建人 chip 固定不可移除。
   标题旁常驻已选人数与上限；满 9 人时输入框禁用并显示「已到达上限」，移除协作者后可继续添加。
 - 审核通知：`POST /api/v1/admin/repairs/:id/reviews`（含批量审核）的通知收件人从「创建人」

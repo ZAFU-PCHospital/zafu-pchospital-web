@@ -27,6 +27,7 @@ import type {
   MemberWorkQueue,
   MetricValue,
   RepairListInput,
+  RepairMemberOption,
   RepairQueryServiceContract,
 } from "@/types/contracts";
 
@@ -126,7 +127,9 @@ export async function listApprovedRepairsForAnalytics(input: { from?: Date; to?:
   });
 }
 
-export async function listRepairMemberOptions(actor: AuthorizedActor) {
+export async function listRepairMemberOptions(
+  actor: AuthorizedActor,
+): Promise<RepairMemberOption[]> {
   requirePermission(actor, "repair:read");
   await repairRepository.activeMemberForUser(actor.userId);
   const rows = await getDb().memberProfile.findMany({
@@ -137,6 +140,8 @@ export async function listRepairMemberOptions(actor: AuthorizedActor) {
   return rows.map((row) => ({
     id: row.id,
     name: row.nickname || row.realName || row.user.displayName || "成员",
+    realName: row.realName,
+    nickname: row.nickname,
   }));
 }
 

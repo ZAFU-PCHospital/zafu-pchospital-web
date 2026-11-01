@@ -33,3 +33,10 @@ test("缺少姓名/昵称字段时仍按展示名匹配", () => {
   assert.equal(matchesRepairMemberKeyword(member, "王五"), true);
   assert.equal(matchesRepairMemberKeyword(member, "赵六"), false);
 });
+
+test("真名为空时仍可按昵称匹配，不把空值当作姓名", () => {
+  const member = { id: "member-4", name: "旧昵称", realName: null, nickname: "旧昵称" };
+  assert.equal(matchesRepairMemberKeyword(member, "旧昵称"), true);
+  assert.equal(matchesRepairMemberKeyword(member, "林晓"), false);
+  assert.equal(matchesRepairMemberKeyword(member, "null"), false);
+});

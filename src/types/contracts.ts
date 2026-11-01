@@ -629,7 +629,7 @@ export type RepairCategoryAdminView = RepairCategoryView & {
 export type RepairMemberOption = {
   id: string;
   name: string;
-  /** 姓名 / 昵称：仅活动接待预填候选下发，用于姓名与昵称双关键字匹配。 */
+  /** 全局与活动接待候选均下发姓名 / 昵称供搜索；仅展示的已选成员可省略。 */
   realName?: string | null;
   nickname?: string | null;
 };
