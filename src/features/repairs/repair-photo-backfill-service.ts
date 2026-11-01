@@ -1,6 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { readdir } from "node:fs/promises";
-import { join } from "node:path";
 
 import { appendAuditLog } from "@/lib/audit/audit-service";
 import { AppError } from "@/lib/api/errors";
@@ -16,8 +14,8 @@ import type { VerifiedBackup } from "./repair-photo-backup";
 import { processRepairPhoto } from "./repair-photo-image";
 import {
   isRepairStorageKey,
+  listStoredRepairFiles,
   localRepairPhotoStorage,
-  uploadRoot,
   type RepairPhotoStorage,
 } from "./repair-photo-storage";
 
@@ -699,33 +697,12 @@ export async function scanRepairPhotoStorage(): Promise<{
     referenced.add(row.storageKey);
     if (row.thumbnailKey) referenced.add(row.thumbnailKey);
   }
-  const files = await listRepairFiles();
+  const files = await listStoredRepairFiles();
   return {
     files,
     referencedKeys: [...referenced],
     unreferencedKeys: files.filter((key) => !referenced.has(key)),
   };
-}
-
-async function listRepairFiles(): Promise<string[]> {
-  const root = join(uploadRoot(), "repairs");
-  const files: string[] = [];
-  await walk(root, "");
-  return files;
-
-  async function walk(dir: string, prefix: string): Promise<void> {
-    let entries;
-    try {
-      entries = await readdir(dir, { withFileTypes: true });
-    } catch {
-      return;
-    }
-    for (const entry of entries) {
-      const relative = prefix ? `${prefix}/${entry.name}` : entry.name;
-      if (entry.isDirectory()) await walk(join(dir, entry.name), relative);
-      else if (entry.isFile()) files.push(`repairs/${relative}`);
-    }
-  }
 }
 
 async function deleteVariants(
