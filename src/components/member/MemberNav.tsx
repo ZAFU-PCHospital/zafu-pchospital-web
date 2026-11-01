@@ -8,9 +8,19 @@ import { AccountMenu } from "@/components/layout/AccountMenu";
 import { ShellHomeLink } from "@/components/layout/ShellHomeLink";
 import { ShellTabBar, type ShellTab } from "@/components/layout/ShellTabBar";
 import { Icon } from "@/components/ui/Icon";
-import { MEMBER_NOTIFICATIONS_CHANGED_EVENT, memberCopy, memberNav } from "@/config/member";
+import {
+  MEMBER_NOTIFICATIONS_CHANGED_EVENT,
+  memberCopy,
+  memberNav,
+  memberTabs,
+} from "@/config/member";
 
-/** 成员持久导航；通知事件触发未读数刷新，导航按意图预取。 */
+/**
+ * 成员持久导航。
+ *
+ * 底部标签栏的「活动」直接进入维修活动页（issue #334）；「消息通知」不再占
+ * 底部标签，但工作台快捷操作与桌面侧栏仍保留入口。通知事件只刷新侧栏未读角标。
+ */
 
 export type MemberNavProps = {
   /** 服务端已认证的展示名，交给账号菜单做首屏乐观渲染 */
@@ -49,13 +59,7 @@ export function MemberNav({ displayName = null }: MemberNavProps) {
     return () => window.removeEventListener(MEMBER_NOTIFICATIONS_CHANGED_EVENT, onChanged);
   }, [loadUnread]);
 
-  const tabs: readonly ShellTab[] = [
-    { href: "/member", label: "工作台", icon: "home", exact: true },
-    { href: "/member/repairs", label: "维修", icon: "fileText" },
-    { href: "/member/repairs/new", label: "新增", icon: "plus", primary: true },
-    { href: "/member/notifications", label: "消息", icon: "bell", badge: unread },
-    { href: "/member/profile", label: "我的", icon: "user" },
-  ];
+  const tabs: readonly ShellTab[] = memberTabs;
 
   return (
     <>

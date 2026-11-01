@@ -6,6 +6,7 @@ import {
   MEMBER_NOTIFICATIONS_CHANGED_EVENT,
   memberCopy,
   memberNav,
+  memberTabs,
 } from "../../src/config/member";
 
 /**
@@ -67,4 +68,29 @@ test("未读条数仍由 communityCopy.notifications.unreadCount 提供（页面
   assert.match(communityCopy.notifications.unreadCount, /\{count\}/);
   assert.equal(communityCopy.notifications.unreadCount.replace("{count}", "3"), "未读 3 条");
   assert.equal(communityCopy.notifications.unreadCount.replace("{count}", "150"), "未读 150 条");
+});
+
+test("窄屏底部标签栏：活动替代消息，消息仍保留在工作台快捷入口", () => {
+  assert.deepEqual(
+    memberTabs.map((tab) => tab.href),
+    [
+      "/member",
+      "/member/repairs",
+      "/member/repairs/new",
+      "/member/repair-activities",
+      "/member/profile",
+    ],
+  );
+  assert.equal(
+    memberTabs.some((tab) => tab.href === "/member/notifications"),
+    false,
+  );
+  assert.deepEqual(
+    memberTabs.find((tab) => tab.href === "/member/repair-activities"),
+    { href: "/member/repair-activities", label: "活动", icon: "calendar" },
+  );
+  assert.ok(
+    memberNav.flatMap((group) => group.items).some((item) => item.href === "/member/notifications"),
+    "桌面侧栏仍保留消息入口",
+  );
 });

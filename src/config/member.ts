@@ -119,6 +119,28 @@ export const memberNav: readonly MemberNavGroup[] = [
   },
 ] as const;
 
+/**
+ * 窄屏底部标签栏（issue #334）。
+ *
+ * 「活动」直接进入 `/member/repair-activities`，替代原「消息」标签；
+ * 消息入口保留在工作台快捷操作与桌面侧栏，底部栏不再重复。
+ */
+export type MemberTabItem = {
+  href: string;
+  label: string;
+  icon: NonNullable<NavItem["icon"]>;
+  exact?: boolean;
+  primary?: boolean;
+};
+
+export const memberTabs: readonly MemberTabItem[] = [
+  { href: "/member", label: "工作台", icon: "home", exact: true },
+  { href: "/member/repairs", label: "维修", icon: "fileText" },
+  { href: "/member/repairs/new", label: "新增", icon: "plus", primary: true },
+  { href: "/member/repair-activities", label: "活动", icon: "calendar" },
+  { href: "/member/profile", label: "我的", icon: "user" },
+];
+
 export const memberCopy = {
   /** 成员壳品牌与导航无障碍名 */
   shell: {
