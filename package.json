@@ -31,6 +31,8 @@
     "email:notify": "tsx --env-file=.env tools/account-notifications.ts",
     "email:cleanup": "tsx --env-file=.env tools/email-cleanup.ts",
     "retire:repair-drafts": "tsx --env-file=.env tools/retire-repair-drafts.ts",
+    "repair:photos:backfill": "tsx --env-file=.env tools/repair-photo-backfill.ts",
+    "repair:photos:prune-originals": "tsx --env-file=.env tools/repair-photo-prune-originals.ts",
     "test": "tsx --test tests/**/*.test.ts",
     "test:unit": "tsx --test tests/unit/**/*.test.ts",
     "test:db": "tsx --env-file=.env --test --test-concurrency=1 tests/integration/**/*.test.ts"
