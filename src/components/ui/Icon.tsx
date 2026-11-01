@@ -23,6 +23,8 @@ export type IconName =
   | "github"
   | "eye"
   | "eyeOff"
+  | "zoomIn"
+  | "zoomOut"
   | "sun"
   | "moon"
   // M6 管理后台需要的最小集：新增/编辑/删除/导出/通过。仍遵守 24 格、stroke 2、round 端点。
@@ -183,6 +185,21 @@ const shapes: Record<IconName, ReactNode> = {
       <path d="M10.6 5.2Q11.3 5 12 5c6.3 0 9.9 7 9.9 7a16 16 0 0 1-2.4 3.4" />
       <path d="M6.1 6.1C3.5 8 2.1 12 2.1 12s3.6 7 9.9 7c1.6 0 3-.4 4.2-1" />
       <path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" />
+    </>
+  ),
+  zoomIn: (
+    <>
+      <circle cx="11" cy="11" r="7" />
+      <path d="m21 21-4.3-4.3" />
+      <path d="M11 8v6" />
+      <path d="M8 11h6" />
+    </>
+  ),
+  zoomOut: (
+    <>
+      <circle cx="11" cy="11" r="7" />
+      <path d="m21 21-4.3-4.3" />
+      <path d="M8 11h6" />
     </>
   ),
   /* 正常模式 / 深色模式：主题切换入口使用。两者互为对照，线宽与端点规则与其他图标一致。 */

@@ -77,6 +77,27 @@ export const repairCopy = {
   },
   empty: "暂时没有符合条件的维修记录",
 } as const;
+/**
+ * 维修照片的浏览文案。
+ *
+ * `alt` 与 `open` 是模板而不是完整句子：详情页与审核弹窗共用同一套读屏口径，
+ * 改口径只改这里，不在两个组件里各写一份。
+ */
+export const repairPhotoCopy = {
+  alt: "维修照片 {index}，共 {count} 张",
+  open: "查看维修照片 {index}，共 {count} 张",
+  title: "照片预览",
+  counter: "第 {index} / {count} 张",
+  unavailable: "照片暂时无法读取",
+  loading: "正在加载照片…",
+  loadFailed: "照片加载失败，可能无权查看或文件已被清理",
+  retry: "重新加载",
+  close: "关闭照片预览",
+  previous: "上一张照片",
+  next: "下一张照片",
+  zoomIn: "放大至原始尺寸",
+  zoomOut: "适应窗口",
+} as const;
 export const repairStatusLabels: Record<(typeof RepairStatus)[number], string> = {
   DRAFT: "草稿",
   PENDING: "待审核",
