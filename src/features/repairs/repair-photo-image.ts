@@ -53,7 +53,7 @@ export async function processRepairPhoto(bytes: Uint8Array): Promise<ProcessedRe
   const options = { failOn: "error" as const, limitInputPixels: MAX_INPUT_PIXELS };
   try {
     // 先只读文件头判断尺寸：超限时返回可理解的 413，而不是进入解码后再报格式错误。
-    const metadata = await sharp(input, { failOn: "error" }).metadata();
+    const metadata = await sharp(input, { failOn: "error", limitInputPixels: false }).metadata();
     if (metadata.width && metadata.height && metadata.width * metadata.height > MAX_INPUT_PIXELS)
       throw new AppError(
         "REPAIR_PHOTO_TOO_LARGE",
