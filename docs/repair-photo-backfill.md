@@ -18,6 +18,7 @@ sudo ls -l /opt/zafu-pchospital-backups/scheduled/daily/
 取最新目录的 `manifest.txt` 作为后续 `--backup-manifest`。工具会核对 `db.sql.gz` /
 `uploads.tar.gz` 的大小与 SHA256、表数与 INSERT，并要求 `uploads_files > 0`；真正执行
 apply 时还会检查 `uploads.tar.gz` 条目确实包含待处理原图，而不是只验归档完整性。
+读取归档条目依赖系统 `tar`；备份脚本本身也使用 `tar`，生产机应已具备。
 
 ## 1. 回填 dry-run
 
@@ -53,7 +54,6 @@ sudo pnpm repair:photos:backfill --apply \
 
 结束时核对：
 
-- 清单的 `database` 必须与当前库一致（apply/dry-run 都会核对）；
 - `remainingLegacy = 0`、`missingVariantFiles = 0`、`mismatchedRows = 0`；
 - 原图文件仍在，等下一步删除；
 - 用有照片查看权限的账号抽样打开 `/api/v1/repair-photos/<id>/content` 与
@@ -69,6 +69,8 @@ sudo pnpm repair:photos:backfill --apply \
 - 可以随时重跑 dry-run；已经回填的照片不会被重复处理。
 
 ## 4. 原图删除
+
+清单的 `database` 必须与当前库一致；dry-run 和 apply 都会核对，不一致直接拒绝。
 
 先 dry-run，只列出清单内、当前数据库仍指向新变体、变体摘要一致、原图摘要一致且没有任何
 `repair_photos` 行再引用原图键的文件：
@@ -111,6 +113,8 @@ sudo pnpm repair:photos:prune-originals \
 - **回填后展示异常、尚未删原图**：直接重跑会跳过已更新行；需要回退时用定时备份恢复
   数据库，uploads 备份恢复原图（变体文件可作为孤儿留存）。
 - **删除原图后发现异常**：用删除前的新备份恢复数据库与 uploads；恢复前暂停应用写入。
+- **prune 报 `audit-failed`**：原图已经删除，但审计写入失败；保留 `--json` 结果清单，按其中
+  photoId / 原图键补审计或工单记录，不要重复删除；该状态会让命令以非 0 退出。
 - **部分原图已删除后重跑 prune**：必须继续使用第一次删除前的同一份备份（它包含已删原图），
   不要换成只包含剩余文件的新备份；工具会在 apply 前核对清单原图是否都在备份归档里。
 - **多份回填清单来自不同数据库**：工具直接拒绝；不要手工拼接清单。

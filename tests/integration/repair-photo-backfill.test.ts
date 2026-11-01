@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -434,4 +435,64 @@ dbTest("prune 拒绝来自其他数据库的回填清单", async () => {
       }),
     /数据库不匹配/,
   );
+});
+
+dbTest("CLI：空库 apply 正常退出 0", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "photo323-cli-"));
+  try {
+    const backupDir = join(dir, "backup");
+    const outDir = join(dir, "out");
+    await mkdir(backupDir, { recursive: true });
+    await mkdir(outDir, { recursive: true });
+    const db = Buffer.from("fake-db");
+    const uploads = Buffer.from("fake-uploads");
+    const sha = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
+    await writeFile(join(backupDir, "db.sql.gz"), db);
+    await writeFile(join(backupDir, "uploads.tar.gz"), uploads);
+    const manifestPath = join(backupDir, "manifest.txt");
+    await writeFile(
+      manifestPath,
+      [
+        "created_at=2026-11-01T00:00:00Z",
+        "db_tables=39",
+        "db_inserts=10",
+        `db_bytes=${db.byteLength}`,
+        "uploads_files=4",
+        `uploads_bytes=${uploads.byteLength}`,
+        `sha256_db.sql.gz=${sha(db)}`,
+        `sha256_uploads.tar.gz=${sha(uploads)}`,
+      ].join("\n"),
+    );
+    const dbName = new URL(process.env.DATABASE_URL!).pathname.replace(/^\/+/, "");
+    const result = spawnSync(
+      process.execPath,
+      [
+        join(process.cwd(), "node_modules", "tsx", "dist", "cli.mjs"),
+        "tools/repair-photo-backfill.ts",
+        "--apply",
+        `--backup-manifest=${manifestPath}`,
+        `--manifest-out=${join(outDir, "backfill.json")}`,
+        `--expect-db=${dbName}`,
+        `--json=${join(outDir, "result.json")}`,
+      ],
+      {
+        cwd: process.cwd(),
+        env: { ...process.env, UPLOAD_PATH: uploadTestRoot },
+        encoding: "utf8",
+      },
+    );
+    assert.equal(
+      result.status,
+      0,
+      `${result.stdout}
+${result.stderr}`,
+    );
+    const report = JSON.parse(await readFile(join(outDir, "result.json"), "utf8")) as {
+      report: { legacyPhotos: number; postCheck: { passed: boolean } };
+    };
+    assert.equal(report.report.legacyPhotos, 0);
+    assert.equal(report.report.postCheck.passed, true);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });

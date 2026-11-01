@@ -228,6 +228,14 @@ test("上传归档必须包含清单中的原图", { skip: !hasTar() }, async ()
     () => verifyUploadsArchiveContains({ directory: dir }, ["repairs/aa/missing.webp"]),
     /缺少 1 个待处理原图/,
   );
+
+  await mkdir(join(dir, "evil", "repairs", "aa"), { recursive: true });
+  await writeFile(join(dir, "evil", "repairs", "aa", "photo.webp"), "photo");
+  execFileSync("tar", ["-czf", "uploads.tar.gz", "evil"], { cwd: dir });
+  await assert.rejects(
+    () => verifyUploadsArchiveContains({ directory: dir }, ["repairs/aa/photo.webp"]),
+    /缺少 1 个待处理原图/,
+  );
 });
 
 test("备份清单：缺字段或表数不足拒绝", async () => {

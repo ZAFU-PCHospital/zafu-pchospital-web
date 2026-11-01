@@ -118,10 +118,13 @@ export async function verifyUploadsArchiveContains(
       `无法读取备份 uploads.tar.gz 条目：${error instanceof Error ? error.message : String(error)}`,
     );
   }
-  const entries = stdout.split(/\r?\n/).filter(Boolean);
-  const missing = keys.filter(
-    (key) => !entries.some((entry) => entry === key || entry.endsWith(`/${key}`)),
+  const entries = new Set(
+    stdout
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .map((entry) => entry.replace(/^\.\//, "")),
   );
+  const missing = keys.filter((key) => !entries.has(`uploads/${key}`));
   if (missing.length)
     throw new Error(`备份 uploads.tar.gz 缺少 ${missing.length} 个待处理原图，拒绝执行`);
 }
