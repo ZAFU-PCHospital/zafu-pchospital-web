@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, beforeEach, test } from "node:test";
@@ -41,6 +41,14 @@ function fakeBackup(): VerifiedBackup {
     uploadsBytes: 1,
     dbSha256: "a".repeat(64),
     uploadsSha256: "b".repeat(64),
+  };
+}
+
+function applyOptions() {
+  return {
+    apply: true as const,
+    backup: fakeBackup(),
+    verifyBackupUploads: async () => {},
   };
 }
 
@@ -98,6 +106,13 @@ async function createNewStylePhoto() {
     },
   });
   return { photo, displayKey: display.storageKey, thumbKey: thumb.storageKey };
+}
+
+async function backfillOne() {
+  const legacy = await createLegacyPhoto();
+  const applied = await backfillRepairPhotos(applyOptions());
+  assert.equal(applied.manifest?.photos.length, 1);
+  return { legacy, manifest: applied.manifest! };
 }
 
 async function resetPhotos(): Promise<void> {
@@ -190,7 +205,7 @@ dbTest("回填：dry-run 不写，apply 更新有效与软删除照片，重跑�
   assert.equal(activeRow.storageKey, active.originalKey);
   assert.equal(activeRow.thumbnailKey, null);
 
-  const applied = await backfillRepairPhotos({ apply: true, backup: fakeBackup() });
+  const applied = await backfillRepairPhotos(applyOptions());
   assert.equal(applied.report.byStatus.updated, 2);
   assert.equal(applied.report.postCheck?.remainingLegacy, 0);
   assert.equal(applied.report.postCheck?.passed, true);
@@ -220,7 +235,7 @@ dbTest("回填：dry-run 不写，apply 更新有效与软删除照片，重跑�
 
   const rerunDry = await backfillRepairPhotos({ apply: false });
   assert.equal(rerunDry.report.legacyPhotos, 0);
-  const rerun = await backfillRepairPhotos({ apply: true, backup: fakeBackup() });
+  const rerun = await backfillRepairPhotos(applyOptions());
   assert.equal(rerun.report.byStatus.updated ?? 0, 0);
   assert.equal(rerun.manifest?.photos.length, 0);
   assert.equal(
@@ -235,7 +250,7 @@ dbTest("原图删除：只删清单内、DB 不再引用且摘要一致的原图
   const db = getDb();
   const active = await createLegacyPhoto();
   const deleted = await createLegacyPhoto({ deletedAt: SEED_TIME });
-  const applied = await backfillRepairPhotos({ apply: true, backup: fakeBackup() });
+  const applied = await backfillRepairPhotos(applyOptions());
   const manifest = applied.manifest!;
   assert.equal(manifest.photos.length, 2);
 
@@ -253,6 +268,7 @@ dbTest("原图删除：只删清单内、DB 不再引用且摘要一致的原图
     manifest,
     apply: true,
     backup: fakeBackup(),
+    verifyBackupUploads: async () => {},
   });
   assert.equal(appliedPrune.byStatus.deleted, 2);
   assert.equal(appliedPrune.postCheck.remainingOriginalFiles, 0);
@@ -263,8 +279,14 @@ dbTest("原图删除：只删清单内、DB 不再引用且摘要一致的原图
   const activeRow = await db.repairPhoto.findUniqueOrThrow({ where: { id: active.photo.id } });
   assert.ok((await localRepairPhotoStorage.open(activeRow.storageKey)).byteLength > 0);
   assert.ok((await localRepairPhotoStorage.open(activeRow.thumbnailKey!)).byteLength > 0);
+  assert.equal(
+    await db.auditLog.count({
+      where: { action: "repair.photo.original.pruned", targetType: "RepairPhoto" },
+    }),
+    2,
+  );
   assert.equal((await scanRepairPhotoStorage()).files.includes("repairs/zz/keep.bin"), true);
-  assert.equal(await localRepairPhotoStorage.open("not-a-photo.txt").then(() => true), true);
+  assert.equal(await readFile(join(uploadRoot(), "not-a-photo.txt"), "utf8"), "keep me");
 
   const rerun = await pruneBackfilledOriginals({ manifest, apply: false });
   assert.equal(rerun.candidates, 0);
@@ -302,7 +324,7 @@ dbTest("原图缺失 / 摘要不符：不写变体，回填继续处理其他照
     },
   });
 
-  const result = await backfillRepairPhotos({ apply: true, backup: fakeBackup() });
+  const result = await backfillRepairPhotos(applyOptions());
   assert.equal(result.report.byStatus.updated ?? 0, 0);
   assert.equal(result.report.byStatus["missing-original"], 1);
   assert.equal(result.report.byStatus["digest-mismatch"], 1);
@@ -310,5 +332,106 @@ dbTest("原图缺失 / 摘要不符：不写变体，回填继续处理其他照
   assert.equal(
     await getDb().repairPhoto.count({ where: { repairRecordId: recordId, thumbnailKey: null } }),
     2,
+  );
+});
+
+dbTest("回填拒绝 repairs/../ 原图键，不读取或改写上传根下文件", async () => {
+  const outside = join(uploadRoot(), "NOT-A-REPAIR-PHOTO.txt");
+  await writeFile(outside, "keep me");
+  await getDb().repairPhoto.create({
+    data: {
+      id: randomUUID(),
+      repairRecordId: recordId,
+      storageKey: "repairs/../NOT-A-REPAIR-PHOTO.txt",
+      mimeType: "image/png",
+      sizeBytes: TINY_PNG_BYTES.byteLength,
+      sha256Digest: new Uint8Array(pngDigest()),
+      sortOrder: 0,
+      uploadedByUserId: userId,
+      createdAt: SEED_TIME,
+    },
+  });
+
+  const result = await backfillRepairPhotos(applyOptions());
+  assert.equal(result.report.byStatus["invalid-key"], 1);
+  assert.equal(result.manifest?.photos.length, 0);
+  assert.equal(await readFile(outside, "utf8"), "keep me");
+});
+
+dbTest("prune 拒绝 repairs/../ 清单键，不删除上传根下文件", async () => {
+  const { manifest } = await backfillOne();
+  const outside = join(uploadRoot(), "NOT-A-REPAIR-PHOTO.txt");
+  await writeFile(outside, "keep me");
+  const bad = {
+    ...manifest,
+    photos: [{ ...manifest.photos[0]!, originalKey: "repairs/../NOT-A-REPAIR-PHOTO.txt" }],
+  };
+  const report = await pruneBackfilledOriginals({
+    manifest: bad,
+    apply: true,
+    backup: fakeBackup(),
+    verifyBackupUploads: async () => {},
+  });
+  assert.equal(report.byStatus["invalid-key"], 1);
+  assert.equal(await readFile(outside, "utf8"), "keep me");
+  assert.ok((await localRepairPhotoStorage.open(manifest.photos[0]!.originalKey)).byteLength > 0);
+});
+
+dbTest("prune 跳过被其他照片行重新引用的原图键", async () => {
+  const { legacy, manifest } = await backfillOne();
+  await getDb().repairPhoto.create({
+    data: {
+      id: randomUUID(),
+      repairRecordId: recordId,
+      storageKey: legacy.originalKey,
+      mimeType: "image/png",
+      sizeBytes: TINY_PNG_BYTES.byteLength,
+      sha256Digest: new Uint8Array(pngDigest()),
+      sortOrder: 9,
+      uploadedByUserId: userId,
+      createdAt: SEED_TIME,
+    },
+  });
+
+  const report = await pruneBackfilledOriginals({ manifest, apply: false });
+  assert.equal(report.byStatus["still-referenced"], 1);
+  assert.ok((await localRepairPhotoStorage.open(legacy.originalKey)).byteLength > 0);
+});
+
+dbTest("prune 跳过行已变化、变体缺失、原图摘要不符的项", async () => {
+  const { manifest } = await backfillOne();
+  const photo = manifest.photos[0]!;
+
+  await getDb().repairPhoto.update({
+    where: { id: photo.photoId },
+    data: { width: photo.width + 1 },
+  });
+  let report = await pruneBackfilledOriginals({ manifest, apply: false });
+  assert.equal(report.byStatus["row-changed"], 1);
+
+  await getDb().repairPhoto.update({
+    where: { id: photo.photoId },
+    data: { width: photo.width },
+  });
+  await writeFile(join(uploadRoot(), photo.originalKey), Buffer.alloc(photo.originalSizeBytes, 1));
+  report = await pruneBackfilledOriginals({ manifest, apply: false });
+  assert.equal(report.byStatus["digest-mismatch"], 1);
+
+  await writeFile(join(uploadRoot(), photo.originalKey), TINY_PNG_BYTES);
+  await writeFile(join(uploadRoot(), photo.displayKey), "tampered");
+  report = await pruneBackfilledOriginals({ manifest, apply: false });
+  assert.equal(report.byStatus["missing-variant"], 1);
+  assert.ok((await localRepairPhotoStorage.open(photo.originalKey)).byteLength > 0);
+});
+
+dbTest("prune 拒绝来自其他数据库的回填清单", async () => {
+  const { manifest } = await backfillOne();
+  await assert.rejects(
+    () =>
+      pruneBackfilledOriginals({
+        manifest: { ...manifest, database: "other:3306/other" },
+        apply: false,
+      }),
+    /数据库不匹配/,
   );
 });

@@ -1,8 +1,10 @@
+import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { pipeline } from "node:stream/promises";
+import { promisify } from "node:util";
 
 export type VerifiedBackup = {
   manifestPath: string;
@@ -16,6 +18,8 @@ export type VerifiedBackup = {
   dbSha256: string;
   uploadsSha256: string;
 };
+
+const execFileAsync = promisify(execFile);
 
 const REQUIRED_FIELDS = [
   "created_at",
@@ -54,6 +58,8 @@ export async function verifyBackupManifest(manifestPath: string): Promise<Verifi
   if (dbTables < 27) throw new Error(`备份只有 ${dbTables} 张表，低于 27，拒绝使用`);
   if (dbInserts <= 0) throw new Error("备份没有任何 INSERT，拒绝使用");
   if (dbBytes <= 0) throw new Error("备份 db_bytes 无效");
+  if (uploadsFiles <= 0) throw new Error("备份 uploads_files 为 0，拒绝作为照片删除的备份");
+  if (uploadsBytes <= 0) throw new Error("备份 uploads_bytes 无效");
 
   const dbSha256 = fields.get("sha256_db.sql.gz")!;
   const uploadsSha256 = fields.get("sha256_uploads.tar.gz")!;
@@ -85,6 +91,39 @@ export async function verifyBackupManifest(manifestPath: string): Promise<Verifi
     dbSha256,
     uploadsSha256,
   };
+}
+
+/**
+ * 确认删除前备份的上传归档真的包含待处理原图，而不只是“备份文件本身完整”。
+ * 备份脚本把 uploads 目录整体打包，条目形如 `uploads/repairs/...`。
+ */
+export async function verifyUploadsArchiveContains(
+  backup: Pick<VerifiedBackup, "directory">,
+  keys: readonly string[],
+): Promise<void> {
+  if (!keys.length) return;
+  let stdout: string;
+  try {
+    ({ stdout } = await execFileAsync(
+      "tar",
+      [
+        ...(process.platform === "win32" ? ["--force-local"] : []),
+        "-tzf",
+        join(backup.directory, "uploads.tar.gz"),
+      ],
+      { maxBuffer: 64 * 1024 * 1024 },
+    ));
+  } catch (error) {
+    throw new Error(
+      `无法读取备份 uploads.tar.gz 条目：${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  const entries = stdout.split(/\r?\n/).filter(Boolean);
+  const missing = keys.filter(
+    (key) => !entries.some((entry) => entry === key || entry.endsWith(`/${key}`)),
+  );
+  if (missing.length)
+    throw new Error(`备份 uploads.tar.gz 缺少 ${missing.length} 个待处理原图，拒绝执行`);
 }
 
 function parseManifest(text: string): Map<string, string> {

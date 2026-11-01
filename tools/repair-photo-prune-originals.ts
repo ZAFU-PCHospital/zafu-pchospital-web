@@ -9,7 +9,10 @@ import {
   pruneBackfilledOriginals,
   type PruneReport,
 } from "../src/features/repairs/repair-photo-backfill-service";
-import { verifyBackupManifest } from "../src/features/repairs/repair-photo-backup";
+import {
+  verifyBackupManifest,
+  verifyUploadsArchiveContains,
+} from "../src/features/repairs/repair-photo-backup";
 import { disconnectDb } from "../src/lib/db/client";
 
 /**
@@ -56,6 +59,7 @@ async function main(): Promise<void> {
     manifest,
     apply: options.apply,
     backup,
+    verifyBackupUploads: backup ? (keys) => verifyUploadsArchiveContains(backup, keys) : undefined,
     onProgress: (item) => {
       console.log(
         `- ${item.photoId} [${item.deletedAt ? "已软删除" : "有效"}] ${item.status} ${item.originalKey}${item.message ? `：${item.message}` : ""}`,
@@ -125,6 +129,8 @@ function parseArgs(args: string[]): CliOptions {
     throw new Error("--apply 必须同时提供 --backup-manifest=<manifest.txt>");
   if (options.apply && !options.expectDb)
     throw new Error("--apply 必须用 --expect-db=<库名> 确认目标数据库");
+  if (options.apply && !options.jsonPath)
+    throw new Error("--apply 必须提供 --json=<结果清单路径>，保留删除记录");
   return options;
 }
 
@@ -149,12 +155,20 @@ function assertExpectedDatabase(expected: string): void {
 }
 
 function mergeManifests(manifests: BackfillManifest[]): BackfillManifest {
+  const database = manifests[0]!.database;
+  if (manifests.some((manifest) => manifest.database !== database))
+    throw new Error("多份回填清单来自不同数据库，拒绝合并");
   const photos = new Map<string, BackfillManifest["photos"][number]>();
   for (const manifest of manifests) {
     for (const photo of manifest.photos) {
       const existing = photos.get(photo.photoId);
-      if (existing && existing.originalKey !== photo.originalKey)
-        throw new Error(`同一照片出现在多份清单但原图键不同：${photo.photoId}`);
+      if (
+        existing &&
+        (existing.originalKey !== photo.originalKey ||
+          existing.displayKey !== photo.displayKey ||
+          existing.thumbnailKey !== photo.thumbnailKey)
+      )
+        throw new Error(`同一照片出现在多份清单但文件键不同：${photo.photoId}`);
       photos.set(photo.photoId, photo);
     }
   }
@@ -196,7 +210,7 @@ function printUsage(): void {
   - 只删除回填清单中成功更新的原图；清单外文件与备份目录不会触碰。
   - 多轮回填产生多份清单时重复 --manifest，按 photoId 去重。
   - 删除前复核数据库引用、变体摘要、原图大小与 SHA256。
-  - 缺省 dry-run；--apply 需要校验通过的定时备份清单与目标库确认。`);
+  - 缺省 dry-run；--apply 需要校验通过的定时备份清单、目标库确认和 --json 删除记录。`);
 }
 
 async function writeJson(path: string, value: unknown): Promise<void> {

@@ -1,5 +1,5 @@
 import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
-import { extname, isAbsolute, relative, resolve, sep } from "node:path";
+import { extname, isAbsolute, posix, relative, resolve, sep } from "node:path";
 import { randomUUID } from "node:crypto";
 import { AppError } from "@/lib/api/errors";
 
@@ -50,12 +50,34 @@ export const localRepairPhotoStorage: RepairPhotoStorage = {
   },
 };
 
-function safePath(storageKey: string): string {
-  if (storageKey.includes("\\") || storageKey.startsWith("/") || isAbsolute(storageKey))
+/** 维修照片键必须是规范的 `repairs/...` 相对路径，拒绝 `.` / `..` 与空段。 */
+export function isRepairStorageKey(storageKey: string): boolean {
+  if (
+    !storageKey ||
+    storageKey.includes("\\") ||
+    storageKey.startsWith("/") ||
+    isAbsolute(storageKey)
+  )
+    return false;
+  if (storageKey !== posix.normalize(storageKey)) return false;
+  const segments = storageKey.split("/");
+  return (
+    segments.length >= 2 &&
+    segments[0] === "repairs" &&
+    segments.every((segment) => segment !== "" && segment !== "." && segment !== "..")
+  );
+}
+
+export function assertRepairStorageKey(storageKey: string): string {
+  if (!isRepairStorageKey(storageKey))
     throw new AppError("REPAIR_PHOTO_STORAGE_FAILED", "照片存储路径无效");
+  return storageKey;
+}
+
+function safePath(storageKey: string): string {
   const root = uploadRoot();
-  const target = resolve(root, storageKey);
-  if (!isWithin(root, target))
+  const target = resolve(root, assertRepairStorageKey(storageKey));
+  if (!isWithin(resolve(root, "repairs"), target))
     throw new AppError("REPAIR_PHOTO_STORAGE_FAILED", "照片存储路径无效");
   return target;
 }

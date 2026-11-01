@@ -5,7 +5,11 @@ import {
   backfillRepairPhotos,
   type BackfillReport,
 } from "../src/features/repairs/repair-photo-backfill-service";
-import { verifyBackupManifest } from "../src/features/repairs/repair-photo-backup";
+import { isBackfillComplete } from "../src/features/repairs/repair-photo-backfill";
+import {
+  verifyBackupManifest,
+  verifyUploadsArchiveContains,
+} from "../src/features/repairs/repair-photo-backup";
 import { disconnectDb } from "../src/lib/db/client";
 
 /**
@@ -46,6 +50,7 @@ async function main(): Promise<void> {
   const result = await backfillRepairPhotos({
     apply: options.apply,
     backup,
+    verifyBackupUploads: backup ? (keys) => verifyUploadsArchiveContains(backup, keys) : undefined,
     onProgress: (item) => {
       const detail =
         item.status === "ready" || item.status === "updated"
@@ -73,7 +78,8 @@ async function main(): Promise<void> {
     console.log(
       "下一步：先对清单做 prune dry-run；确认原图列表后再执行删除。观察期内不要删除备份。",
     );
-    if (result.report.byStatus.updated !== result.report.legacyPhotos) process.exitCode = 1;
+    if (!isBackfillComplete(result.report.legacyPhotos, result.report.byStatus))
+      process.exitCode = 1;
     if (result.report.postCheck && !result.report.postCheck.passed) process.exitCode = 1;
   } else {
     const notReady = result.report.items.filter((item) => item.status !== "ready").length;

@@ -1,16 +1,24 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
 
-import { parseBackfillManifest } from "../../src/features/repairs/repair-photo-backfill";
+import {
+  isBackfillComplete,
+  parseBackfillManifest,
+} from "../../src/features/repairs/repair-photo-backfill";
+import { isRepairStorageKey } from "../../src/features/repairs/repair-photo-storage";
 import {
   backfillRepairPhotos,
   pruneBackfilledOriginals,
 } from "../../src/features/repairs/repair-photo-backfill-service";
-import { verifyBackupManifest } from "../../src/features/repairs/repair-photo-backup";
+import {
+  verifyBackupManifest,
+  verifyUploadsArchiveContains,
+} from "../../src/features/repairs/repair-photo-backup";
 
 const tempDirs: string[] = [];
 
@@ -37,36 +45,94 @@ function manifestPhoto() {
   };
 }
 
-test("回填清单：读取成功，拒绝类型/版本/字段不完整", () => {
-  const manifest = parseBackfillManifest(
-    JSON.stringify({
-      kind: "repair-photo-backfill",
-      version: 1,
-      runId: "run-1",
-      photos: [manifestPhoto()],
-    }),
-  );
+function manifestBody(overrides: Record<string, unknown> = {}) {
+  return {
+    kind: "repair-photo-backfill",
+    version: 1,
+    runId: "run-1",
+    database: "127.0.0.1:3307/zafu_pchospital",
+    startedAt: "2026-11-01T00:00:00.000Z",
+    finishedAt: "2026-11-01T00:01:00.000Z",
+    backup: {
+      manifestPath: "/backups/manifest.txt",
+      createdAt: "2026-11-01T00:00:00.000Z",
+      dbTables: 39,
+      dbInserts: 10,
+      dbBytes: 100,
+      uploadsFiles: 4,
+      uploadsBytes: 100,
+      dbSha256: "d".repeat(64),
+      uploadsSha256: "e".repeat(64),
+    },
+    totals: { totalPhotos: 1, legacyPhotos: 1, updated: 1, failed: 0, remainingLegacy: 0 },
+    photos: [manifestPhoto()],
+    failures: [],
+    ...overrides,
+  };
+}
+
+test("回填清单：读取成功，拒绝类型/版本/路径穿越/重复照片", () => {
+  const manifest = parseBackfillManifest(JSON.stringify(manifestBody()));
   assert.equal(manifest.runId, "run-1");
   assert.equal(manifest.photos[0]!.displayKey, "repairs/bb/display.webp");
 
   assert.throws(
     () =>
       parseBackfillManifest(
-        JSON.stringify({ kind: "repair-photo-backfill", version: 2, photos: [] }),
+        JSON.stringify(manifestBody({ kind: "repair-photo-backfill", version: 2 })),
       ),
     /类型或版本/,
   );
   assert.throws(
     () =>
       parseBackfillManifest(
-        JSON.stringify({
-          kind: "repair-photo-backfill",
-          version: 1,
-          photos: [{ ...manifestPhoto(), originalSha256: "" }],
-        }),
+        JSON.stringify(
+          manifestBody({
+            photos: [{ ...manifestPhoto(), originalSha256: "" }],
+          }),
+        ),
       ),
     /originalSha256/,
   );
+  assert.throws(
+    () =>
+      parseBackfillManifest(
+        JSON.stringify(
+          manifestBody({
+            photos: [{ ...manifestPhoto(), originalKey: "repairs/../NOT-A-PHOTO.txt" }],
+          }),
+        ),
+      ),
+    /不是规范的 repairs/,
+  );
+  assert.throws(
+    () =>
+      parseBackfillManifest(
+        JSON.stringify(manifestBody({ photos: [manifestPhoto(), manifestPhoto()] })),
+      ),
+    /photoId 重复/,
+  );
+});
+
+test("回填完成判定：空库成功，部分更新失败", () => {
+  assert.equal(isBackfillComplete(0, {}), true);
+  assert.equal(isBackfillComplete(2, { updated: 2 }), true);
+  assert.equal(isBackfillComplete(2, { updated: 1 }), false);
+});
+
+test("维修照片键必须是规范 repairs/ 路径", () => {
+  assert.equal(isRepairStorageKey("repairs/aa/photo.webp"), true);
+  for (const key of [
+    "repairs/../NOT-A-PHOTO.txt",
+    "repairs/./photo.webp",
+    "repairs//photo.webp",
+    "repairs",
+    "repairs/",
+    "/repairs/photo.webp",
+    "repairs\photo.webp",
+    "../photo.webp",
+  ])
+    assert.equal(isRepairStorageKey(key), false, key);
 });
 
 test("apply 未提供备份时在写库 / 删除前拒绝", async () => {
@@ -150,6 +216,20 @@ test("备份清单：校验归档大小与 SHA256，篡改后拒绝", async () =
   await assert.rejects(() => verifyBackupManifest(join(dir, "manifest.txt")), /SHA256 不符/);
 });
 
+test("上传归档必须包含清单中的原图", { skip: !hasTar() }, async () => {
+  const dir = await mkdtemp(join(tmpdir(), "photo-tar-"));
+  tempDirs.push(dir);
+  await mkdir(join(dir, "uploads", "repairs", "aa"), { recursive: true });
+  await writeFile(join(dir, "uploads", "repairs", "aa", "photo.webp"), "photo");
+  execFileSync("tar", ["-czf", "uploads.tar.gz", "uploads"], { cwd: dir });
+
+  await verifyUploadsArchiveContains({ directory: dir }, ["repairs/aa/photo.webp"]);
+  await assert.rejects(
+    () => verifyUploadsArchiveContains({ directory: dir }, ["repairs/aa/missing.webp"]),
+    /缺少 1 个待处理原图/,
+  );
+});
+
 test("备份清单：缺字段或表数不足拒绝", async () => {
   const dir = await mkdtemp(join(tmpdir(), "photo-backup-bad-"));
   tempDirs.push(dir);
@@ -158,6 +238,15 @@ test("备份清单：缺字段或表数不足拒绝", async () => {
   await writeFile(join(dir, "manifest.txt"), "created_at=2026-11-01T00:00:00Z\n");
   await assert.rejects(() => verifyBackupManifest(join(dir, "manifest.txt")), /缺少 db_tables/);
 });
+
+function hasTar(): boolean {
+  try {
+    execFileSync("tar", ["--version"], { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 function hash(bytes: Uint8Array): string {
   return createHash("sha256").update(bytes).digest("hex");

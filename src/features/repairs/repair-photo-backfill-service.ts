@@ -15,6 +15,7 @@ import {
 import type { VerifiedBackup } from "./repair-photo-backup";
 import { processRepairPhoto } from "./repair-photo-image";
 import {
+  isRepairStorageKey,
   localRepairPhotoStorage,
   uploadRoot,
   type RepairPhotoStorage,
@@ -75,6 +76,8 @@ export type BackfillOptions = {
   apply: boolean;
   /** apply 前必须由 CLI 校验定时备份清单；没有它拒绝写库。 */
   backup?: VerifiedBackup;
+  /** apply 前确认备份归档包含原图；CLI 会传入 tar 条目校验。 */
+  verifyBackupUploads?: (keys: readonly string[]) => Promise<void>;
   storage?: RepairPhotoStorage;
   now?: Date;
   runId?: string;
@@ -114,6 +117,11 @@ export async function backfillRepairPhotos(options: BackfillOptions): Promise<Ba
       },
     }),
   ]);
+
+  if (options.apply && rows.length) {
+    if (!options.verifyBackupUploads) throw new Error("apply 必须先确认备份归档包含待处理原图");
+    await options.verifyBackupUploads(rows.map((row) => row.storageKey));
+  }
 
   const items: BackfillItemReport[] = [];
   const manifestPhotos: BackfillManifestPhoto[] = [];
@@ -212,6 +220,14 @@ async function processLegacyPhoto(input: {
     originalSizeBytes: row.sizeBytes,
     deletedAt: row.deletedAt?.toISOString() ?? null,
   };
+  if (!isRepairStorageKey(row.storageKey))
+    return {
+      report: {
+        ...base,
+        status: "invalid-key",
+        message: "原图键不是规范的 repairs/ 路径，拒绝处理",
+      },
+    };
   let originalBytes: Uint8Array;
   try {
     originalBytes = await storage.open(row.storageKey);
@@ -404,7 +420,8 @@ export type PruneItemStatus =
   | "size-mismatch"
   | "digest-mismatch"
   | "missing-variant"
-  | "delete-failed";
+  | "delete-failed"
+  | "audit-failed";
 
 export type PruneItemReport = {
   photoId: string;
@@ -448,6 +465,7 @@ export type PruneOptions = {
   manifest: BackfillManifest;
   apply: boolean;
   backup?: VerifiedBackup;
+  verifyBackupUploads?: (keys: readonly string[]) => Promise<void>;
   storage?: RepairPhotoStorage;
   now?: Date;
   runId?: string;
@@ -464,6 +482,14 @@ export type PruneOptions = {
 export async function pruneBackfilledOriginals(options: PruneOptions): Promise<PruneReport> {
   if (options.apply && !options.backup)
     throw new Error("apply 必须先提供并校验备份清单，拒绝删除文件");
+  if (options.manifest.database !== databaseLabel())
+    throw new Error(
+      `回填清单数据库不匹配：清单为「${options.manifest.database}」，当前为「${databaseLabel()}」。已拒绝执行。`,
+    );
+  if (options.apply && options.manifest.photos.length) {
+    if (!options.verifyBackupUploads) throw new Error("apply 必须先确认备份归档包含待删除原图");
+    await options.verifyBackupUploads(options.manifest.photos.map((photo) => photo.originalKey));
+  }
   const storage = options.storage ?? localRepairPhotoStorage;
   const now = options.now ?? new Date();
   const runId = options.runId ?? createRunId("photo-originals-prune", now);
@@ -499,8 +525,8 @@ export async function pruneBackfilledOriginals(options: PruneOptions): Promise<P
       originalSizeBytes: photo.originalSizeBytes,
       deletedAt: photo.deletedAt,
     };
-    if (!photo.originalKey.startsWith("repairs/") || photo.originalKey.includes("\\"))
-      items.push({ ...base, status: "invalid-key", message: "原图键不在 repairs/ 目录" });
+    const keyProblem = invalidManifestKey(photo);
+    if (keyProblem) items.push({ ...base, status: "invalid-key", message: keyProblem });
     else {
       const row = rowById.get(photo.photoId);
       if (
@@ -527,12 +553,37 @@ export async function pruneBackfilledOriginals(options: PruneOptions): Promise<P
             });
           else if (!options.apply) items.push({ ...base, status: "deletable" });
           else {
+            let status: PruneItemStatus = "deleted";
+            let message: string | undefined;
             try {
               await storage.delete(photo.originalKey);
-              items.push({ ...base, status: "deleted" });
             } catch (error) {
-              items.push({ ...base, status: "delete-failed", message: errorMessage(error) });
+              status = "delete-failed";
+              message = errorMessage(error);
             }
+            if (status === "deleted") {
+              try {
+                await inSerializableTransaction((tx) =>
+                  appendAuditLog(tx, {
+                    actor: { requestId: `photo-prune:${runId}` },
+                    actorType: "SYSTEM",
+                    action: "repair.photo.original.pruned",
+                    targetType: "RepairPhoto",
+                    targetId: photo.photoId,
+                    result: "SUCCESS",
+                    before: {
+                      originalKey: photo.originalKey,
+                      sizeBytes: photo.originalSizeBytes,
+                    },
+                    after: { runId, manifestRunId: options.manifest.runId },
+                  }),
+                );
+              } catch (error) {
+                status = "audit-failed";
+                message = `原图已删除，但审计写入失败：${errorMessage(error)}`;
+              }
+            }
+            items.push({ ...base, status, message });
           }
         }
       }
@@ -582,6 +633,17 @@ export async function pruneBackfilledOriginals(options: PruneOptions): Promise<P
         (!options.apply || remainingOriginalFiles === 0),
     },
   };
+}
+
+function invalidManifestKey(photo: BackfillManifestPhoto): string | null {
+  for (const [label, key] of [
+    ["原图", photo.originalKey],
+    ["display", photo.displayKey],
+    ["thumbnail", photo.thumbnailKey],
+  ] as const) {
+    if (!isRepairStorageKey(key)) return `${label}键不是规范的 repairs/ 路径`;
+  }
+  return null;
 }
 
 async function verifyVariants(
