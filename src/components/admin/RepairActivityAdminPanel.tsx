@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { adminCopy, adminShared } from "@/config/admin";
-import { adminFetch } from "@/features/admin/admin-client";
+import { adminFetch, type AdminApiResult } from "@/features/admin/admin-client";
 import {
   repairActivityIssueTypeLabels,
   repairActivityRegistrationStatusLabels,
@@ -42,6 +42,9 @@ export function RepairActivityAdminPanel() {
   const [registrations, setRegistrations] = useState<RegistrationAdminView[]>([]);
   const [registrationState, setRegistrationState] = useState<"idle" | "loading" | "ready">("idle");
   const [registrationProblem, setRegistrationProblem] = useState("");
+  const [registrationMutationProblem, setRegistrationMutationProblem] = useState("");
+  const registrationWriteRef = useRef(false);
+  const registrationDialogRef = useRef<HTMLDivElement>(null);
   const [editingRegistration, setEditingRegistration] = useState<RegistrationAdminView | null>(
     null,
   );
@@ -52,7 +55,9 @@ export function RepairActivityAdminPanel() {
   const load = useCallback(async () => {
     setState((current) => (current === "ready" ? "ready" : "loading"));
     setProblem("");
-    const result = await adminFetch<RepairActivityAdminView[]>("/api/v1/admin/repair-activities");
+    const result = await adminFetch<RepairActivityAdminView[]>("/api/v1/admin/repair-activities", {
+      signal: AbortSignal.timeout(10_000),
+    });
     if (!result.ok) {
       setState("error");
       setProblem(result.message);
@@ -65,6 +70,14 @@ export function RepairActivityAdminPanel() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (!registrationActivity || editingRegistration || removingRegistration) return;
+    // 子窗口关闭后仍在名单中：维持滚动锁，并把焦点交回仍存在的名单窗口。
+    document.body.style.overflow = "hidden";
+    const dialog = registrationDialogRef.current;
+    if (dialog && !dialog.contains(document.activeElement)) dialog.focus({ preventScroll: true });
+  }, [registrationActivity, registrationState, editingRegistration, removingRegistration]);
 
   async function create(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -134,78 +147,124 @@ export function RepairActivityAdminPanel() {
     setRegistrationProblem("");
     const result = await adminFetch<RegistrationAdminView[]>(
       `/api/v1/admin/repair-activities/${activityId}/registrations`,
+      { signal: AbortSignal.timeout(10_000) },
     );
     // 切换活动后旧请求不能覆盖新名单。
     if (request !== registrationRequestRef.current) return;
     if (!result.ok) {
       setRegistrationState("ready");
       setRegistrationProblem(result.message);
-      return;
+      return result;
     }
     setRegistrations(result.data);
     setRegistrationState("ready");
+    return result;
   }, []);
 
   async function openRegistrations(activity: RepairActivityAdminView) {
     setRegistrationActivity(activity);
     setEditingRegistration(null);
     setRemovingRegistration(null);
+    setRegistrationMutationProblem("");
     await loadRegistrations(activity.id, true);
   }
 
   async function saveRegistration(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!registrationActivity || !editingRegistration) return;
+    if (!registrationActivity || !editingRegistration || registrationWriteRef.current) return;
     const activityId = registrationActivity.id;
+    const registrationId = editingRegistration.id;
+    registrationWriteRef.current = true;
     setBusy(true);
+    setRegistrationMutationProblem("");
     const data = Object.fromEntries(new FormData(event.currentTarget)) as Record<string, string>;
-    const result = await adminFetch<RegistrationAdminView>(
-      `/api/v1/admin/repair-activities/${activityId}/registrations/${editingRegistration.id}`,
-      {
-        method: "PATCH",
-        body: {
-          name: data.name ?? "",
-          phone: data.phone ?? "",
-          issueType: data.issueType ?? "",
-        },
-      },
-    );
-    setBusy(false);
-    if (!result.ok) {
-      setRegistrationProblem(result.message);
-      return;
+    const fields = {
+      name: (data.name ?? "").trim(),
+      phone: (data.phone ?? "").replace(/\D/g, ""),
+      issueType: data.issueType ?? "",
+    };
+    try {
+      const result = await adminFetch<RegistrationAdminView>(
+        `/api/v1/admin/repair-activities/${activityId}/registrations/${registrationId}`,
+        { method: "PATCH", body: fields, signal: AbortSignal.timeout(15_000) },
+      );
+      let saved = result.ok ? result.data : undefined;
+      if (!result.ok && isUncertainRegistrationWrite(result)) {
+        // 写入已提交但响应丢失时，用服务端当前字段确认结果，不重复发送 PATCH。
+        const check = await loadRegistrations(activityId, false);
+        const current = check?.ok
+          ? check.data.find((item) => item.id === registrationId)
+          : undefined;
+        if (
+          current &&
+          !current.deletedAt &&
+          current.name === fields.name &&
+          current.phone === fields.phone &&
+          current.issueType === fields.issueType
+        )
+          saved = current;
+      }
+      if (!saved) {
+        if (!result.ok) setRegistrationMutationProblem(result.message);
+        return;
+      }
+      setRegistrations((items) => items.map((item) => (item.id === saved.id ? saved : item)));
+      setEditingRegistration(null);
+      setToast({ text: copy.registrations.saved, tone: "success" });
+      // 重拉整份名单，避免其它行的「同名」标记停留在修改前的状态。
+      await loadRegistrations(activityId, false);
+    } finally {
+      registrationWriteRef.current = false;
+      setBusy(false);
     }
-    setRegistrations((items) =>
-      items.map((item) => (item.id === result.data.id ? result.data : item)),
-    );
-    setEditingRegistration(null);
-    // 重拉整份名单，避免其它行的「同名」标记停留在修改前的状态。
-    await loadRegistrations(activityId, false);
   }
 
   async function confirmRegistrationRemove() {
-    if (!registrationActivity || !removingRegistration) return;
+    if (!registrationActivity || !removingRegistration || registrationWriteRef.current) return;
     const activityId = registrationActivity.id;
     const registrationId = removingRegistration.id;
+    registrationWriteRef.current = true;
     setBusy(true);
-    const result = await adminFetch<{ deleted: boolean }>(
-      `/api/v1/admin/repair-activities/${activityId}/registrations/${registrationId}`,
-      { method: "DELETE" },
-    );
-    setBusy(false);
-    if (!result.ok) {
-      setRegistrationProblem(result.message);
-      return;
+    setRegistrationMutationProblem("");
+    try {
+      const result = await adminFetch<{ deleted: boolean }>(
+        `/api/v1/admin/repair-activities/${activityId}/registrations/${registrationId}`,
+        { method: "DELETE", signal: AbortSignal.timeout(15_000) },
+      );
+      let deleted = result.ok && result.data.deleted;
+      if (
+        !result.ok &&
+        (isUncertainRegistrationWrite(result) || result.code === "ACTIVITY_REGISTRATION_NOT_FOUND")
+      ) {
+        // 包括另一位管理员先删的情况；只有重读确认已删除，才完成当前确认流程。
+        const check = await loadRegistrations(activityId, false);
+        if (check?.ok) {
+          const current = check.data.find((item) => item.id === registrationId);
+          deleted = !current || Boolean(current.deletedAt);
+        }
+      }
+      if (!deleted) {
+        setRegistrationMutationProblem(
+          result.ok ? copy.registrations.deleteFailed : result.message,
+        );
+        return;
+      }
+      setRegistrations((items) =>
+        items.map((item) =>
+          item.id === registrationId
+            ? { ...item, deletedAt: item.deletedAt ?? new Date().toISOString() }
+            : item,
+        ),
+      );
+      setRemovingRegistration(null);
+      setToast({ text: copy.registrations.deletedDone, tone: "neutral" });
+      // 删除后同样重拉：同名标记与被删行一起刷新，再更新活动列表的名额计数。
+      await loadRegistrations(activityId, false);
+      await load();
+    } finally {
+      registrationWriteRef.current = false;
+      setBusy(false);
     }
-    setRegistrations((items) =>
-      items.map((item) =>
-        item.id === registrationId ? { ...item, deletedAt: new Date().toISOString() } : item,
-      ),
-    );
-    setRemovingRegistration(null);
-    // 删除后同样重拉：同名标记与被删行一起刷新，再更新活动列表的名额计数。
-    await loadRegistrations(activityId, false);
-    await load();
   }
 
   async function confirmRemove() {
@@ -285,14 +344,20 @@ export function RepairActivityAdminPanel() {
                     <Button
                       variant="ghost"
                       disabled={busy || Boolean(registration.deletedAt)}
-                      onClick={() => setEditingRegistration(registration)}
+                      onClick={() => {
+                        setRegistrationMutationProblem("");
+                        setEditingRegistration(registration);
+                      }}
                     >
                       {copy.registrations.edit}
                     </Button>
                     <Button
                       variant="ghost"
                       disabled={busy || Boolean(registration.deletedAt)}
-                      onClick={() => setRemovingRegistration(registration)}
+                      onClick={() => {
+                        setRegistrationMutationProblem("");
+                        setRemovingRegistration(registration);
+                      }}
                     >
                       {copy.registrations.delete}
                     </Button>
@@ -532,9 +597,13 @@ export function RepairActivityAdminPanel() {
 
       {registrationActivity ? (
         <AdminModal
+          dialogRef={registrationDialogRef}
           title={copy.registrations.title}
           subtitle={registrationActivity.title}
-          onClose={() => setRegistrationActivity(null)}
+          onClose={() => {
+            if (!busy && !editingRegistration && !removingRegistration)
+              setRegistrationActivity(null);
+          }}
         >
           {registrationProblem ? (
             <p className="admin-status admin-status--error" role="alert">
@@ -577,8 +646,19 @@ export function RepairActivityAdminPanel() {
       ) : null}
 
       {editingRegistration && registrationActivity ? (
-        <AdminModal title={copy.registrations.edit} onClose={() => setEditingRegistration(null)}>
+        <AdminModal
+          title={copy.registrations.edit}
+          onClose={() => {
+            if (!busy) setEditingRegistration(null);
+          }}
+        >
           <form className="admin-form" onSubmit={saveRegistration}>
+            <p
+              className={`activity-board__feedback admin-status ${registrationMutationProblem ? "admin-status--error" : ""}`}
+              role="alert"
+            >
+              {registrationMutationProblem}
+            </p>
             <label className="field">
               <span className="field__label">{copy.registrations.name}</span>
               <input
@@ -588,6 +668,7 @@ export function RepairActivityAdminPanel() {
                 minLength={2}
                 maxLength={40}
                 defaultValue={editingRegistration.name}
+                disabled={busy}
               />
             </label>
             <label className="field">
@@ -599,6 +680,7 @@ export function RepairActivityAdminPanel() {
                 inputMode="numeric"
                 maxLength={11}
                 defaultValue={editingRegistration.phone}
+                disabled={busy}
               />
             </label>
             <label className="field">
@@ -608,6 +690,7 @@ export function RepairActivityAdminPanel() {
                 name="issueType"
                 required
                 defaultValue={editingRegistration.issueType}
+                disabled={busy}
               >
                 {Object.entries(repairActivityIssueTypeLabels).map(([value, label]) => (
                   <option key={value} value={value}>
@@ -617,7 +700,12 @@ export function RepairActivityAdminPanel() {
               </select>
             </label>
             <div className="signup__actions">
-              <Button type="button" variant="ghost" onClick={() => setEditingRegistration(null)}>
+              <Button
+                type="button"
+                variant="ghost"
+                disabled={busy}
+                onClick={() => setEditingRegistration(null)}
+              >
                 {copy.registrations.cancel}
               </Button>
               <Button type="submit" variant="solid" disabled={busy}>
@@ -639,6 +727,12 @@ export function RepairActivityAdminPanel() {
           }}
           onConfirm={() => void confirmRegistrationRemove()}
         >
+          <p
+            className={`activity-board__feedback admin-status ${registrationMutationProblem ? "admin-status--error" : ""}`}
+            role="alert"
+          >
+            {registrationMutationProblem}
+          </p>
           <p>{copy.registrations.deleteHint}</p>
           <p>
             <strong>
@@ -666,6 +760,13 @@ export function RepairActivityAdminPanel() {
         </ConfirmDialog>
       ) : null}
     </div>
+  );
+}
+
+function isUncertainRegistrationWrite(result: Extract<AdminApiResult<unknown>, { ok: false }>) {
+  return (
+    result.status >= 500 ||
+    ["NETWORK_ERROR", "INVALID_RESPONSE", "REQUEST_ABORTED"].includes(result.code)
   );
 }
 

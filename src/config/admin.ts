@@ -612,6 +612,7 @@ export const adminCopy = {
       empty: "暂无报名记录",
       saved: "报名已更新",
       deletedDone: "报名已删除",
+      deleteFailed: "删除未完成，请重试。",
       cancel: "取消",
     },
     count: "共 {count} 场活动",
