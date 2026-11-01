@@ -260,7 +260,7 @@ PR 中记录影响范围。不强制单独评审；但若影响其他模块，�
 
 | 传递方式                     | 端点                                                                                                                                                               |
 | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `Idempotency-Key` **请求头** | 成员端写接口：`POST /api/v1/repairs`、`POST /api/v1/repairs/:id/submit`、`POST /api/v1/repairs/:id/photos`（按文件派生键）                                                       |
+| `Idempotency-Key` **请求头** | 成员端写接口：`POST /api/v1/repairs`、`POST /api/v1/repairs/:id/submit`、`POST /api/v1/repairs/:id/photos`（按文件派生键）                                         |
 | 请求体字段 `idempotencyKey`  | 管理端与后台写接口：`POST /api/v1/admin/repairs/:id/reviews`、`.../batch-reviews`、`admin/members`、`join-applications/:id/reviews`、`member-registrations/invite` |
 
 单条审核的键上限 128 位；批次键按 `${批次键}:${recordId}` 给每条记录派生一个键，`recordId` 是
@@ -272,8 +272,12 @@ PR 中记录影响范围。不强制单独评审；但若影响其他模块，�
 照片上传幂等（issue #324）：`POST /api/v1/repairs/:id/photos` 的 `Idempotency-Key` 按文件派生
 （单文件请求就是原键，批量请求为 `<key>:<index>`）。同一记录内同键重试返回原照片，不重复落库、
 不占新名额、不重复写时间线；删除照片会释放键。缺省不传键时保持旧语义（每次上传都是新照片）。
+批量请求重试应整批重发（同一组文件与顺序）：只重发其中部分文件会按新的请求形状重新派生键，
+无法命中已成功照片的原键。同一基础键也不要混用单文件与批量形状。客户端逐张上传，因此正常
+重试沿用每张照片自己的原键。
 客户端在上传前可把照片压缩到 display 目标（1280 长边 WebP），服务端仍按文件头复核并重新生成
-最终变体。
+最终变体。单张上限来自服务端 `UPLOAD_MAX_BYTES`（默认 10MB），客户端在选择阶段按**原图大小**
+预检；压缩只减少传输体积，不用于绕过该接收上限。
 
 `POST /api/v1/repairs` 为「提交即建单」（issue #222）：请求体是完整草稿字段 + `Idempotency-Key`
 请求头，服务端按成员自助提交同一套校验直接创建 **`PENDING`** 记录，不再先建草稿；同一幂等键

@@ -315,6 +315,14 @@ dbTest("上传幂等键：同键重试不重复落库与时间线，不同键仍
   assert.equal(retry[0]!.id, first[0]!.id, "同键重试应返回原照片");
   assert.equal((await activePhotos(recordId)).length, 1);
   assert.equal(
+    (await getDb().repairPhoto.findUnique({
+      where: { id: first[0]!.id },
+      select: { uploadKey: true },
+    }))!.uploadKey,
+    "photo-key-1",
+    "单文件请求保存客户端带来的原键",
+  );
+  assert.equal(
     await getDb().repairTimelineEvent.count({
       where: { repairRecordId: recordId, eventType: "PHOTO_ADDED" },
     }),
@@ -344,6 +352,14 @@ dbTest("上传幂等键：同键重试不重复落库与时间线，不同键仍
     batch1.map((photo) => photo.id),
   );
   assert.equal((await activePhotos(recordId)).length, 4);
+  const batchKeys = (
+    await getDb().repairPhoto.findMany({
+      where: { id: { in: batch1.map((photo) => photo.id) } },
+      orderBy: { sortOrder: "asc" },
+      select: { uploadKey: true },
+    })
+  ).map((photo) => photo.uploadKey);
+  assert.deepEqual(batchKeys, ["batch-key:0", "batch-key:1"], "批量请求按序号派生键");
   assert.equal(
     await getDb().repairTimelineEvent.count({
       where: { repairRecordId: recordId, eventType: "PHOTO_ADDED" },

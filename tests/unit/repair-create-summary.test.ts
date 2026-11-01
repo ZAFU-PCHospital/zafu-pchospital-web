@@ -142,12 +142,17 @@ test("没有选照片时确认步骤提示照片选填", () => {
   assert.ok(text(pickerTree).includes(repairEditorCopy.noPhotos));
 });
 
-test("上传失败后确认页允许移除有问题的照片再重试", () => {
+test("上传失败后确认页只允许移除失败项，成功项已落库不能本地删除", () => {
   const removed: string[] = [];
+  const mixed: PendingPhoto[] = [
+    { ...photos[0]!, status: "success" },
+    { ...photos[1]!, status: "error", error: "网络异常，照片未上传，请重试" },
+  ];
   const tree = RepairCreateSummary({
     record,
-    photos,
+    photos: mixed,
     onRemovePhoto: (id) => removed.push(id),
+    onRetryPhoto: () => {},
   });
   const picker = findElement(tree, (element) => element.type === PendingPhotoPicker);
   assert.ok(picker);
@@ -155,11 +160,16 @@ test("上传失败后确认页允许移除有问题的照片再重试", () => {
   assert.equal(picker.props.allowRemove, true);
   assert.equal(picker.props.disabled, false, "允许移除时按钮必须可用");
   const pickerTree = PendingPhotoPicker(picker.props as Parameters<typeof PendingPhotoPicker>[0]);
+  assert.equal(
+    findElement(pickerTree, (element) => element.props["aria-label"] === "移除待上传照片 1"),
+    undefined,
+    "成功上传的照片不能显示移除按钮",
+  );
   const remove = findElement(
     pickerTree,
-    (element) => element.props["aria-label"] === "移除待上传照片 1",
+    (element) => element.props["aria-label"] === "移除待上传照片 2",
   );
   assert.ok(remove);
   (remove.props.onClick as () => void)();
-  assert.deepEqual(removed, ["pending-1"]);
+  assert.deepEqual(removed, ["pending-2"]);
 });

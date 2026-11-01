@@ -35,6 +35,8 @@ type Props = {
   readOnly?: boolean;
   /** 只读场景仍允许移除（例如建单后照片上传失败，先删掉有问题的照片再重试）。 */
   allowRemove?: boolean;
+  /** 只读场景下按项决定能否移除；缺省全部可移除。摘要页只让失败项移除。 */
+  canRemovePhoto?: (photo: PendingPhoto) => boolean;
   emptyLabel: string;
   onAdd?: (files: File[]) => void;
   onRemove?: (id: string) => void;
@@ -49,6 +51,7 @@ export function PendingPhotoPicker({
   disabled,
   readOnly,
   allowRemove,
+  canRemovePhoto,
   emptyLabel,
   onAdd,
   onRemove,
@@ -138,6 +141,7 @@ export function PendingPhotoPicker({
               photo.originalSize !== undefined
                 ? formatBytes(photo.originalSize)
                 : formatBytes(photo.file.size);
+            const removable = canRemove && (!canRemovePhoto || canRemovePhoto(photo));
             return (
               <figure className="gap-s-2 grid" key={photo.id}>
                 <Image
@@ -187,7 +191,7 @@ export function PendingPhotoPicker({
                   </div>
                 )}
                 <figcaption className="gap-s-2 flex flex-wrap">
-                  {canRemove ? (
+                  {removable ? (
                     <Button
                       type="button"
                       disabled={

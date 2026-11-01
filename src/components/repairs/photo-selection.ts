@@ -46,6 +46,8 @@ export function validatePhotoSelection(
   if (heic) return { kind: "heic", name: heic.name };
   const unsupported = files.find((file) => !SERVER_ALLOWED_TYPES.has(file.type));
   if (unsupported) return { kind: "unsupported", name: unsupported.name };
+  // 单张上限是服务端 `UPLOAD_MAX_BYTES` 的接收硬上限：在压缩前按原图大小拦截。
+  // 压缩只减少传输体积，不承诺把超限原图压到上限内，避免本地放行后服务端再拒绝。
   const oversized = files.find((file) => file.size > limits.maxBytes);
   if (oversized) {
     return {

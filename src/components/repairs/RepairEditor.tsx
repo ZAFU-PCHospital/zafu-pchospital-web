@@ -427,6 +427,8 @@ export function RepairEditorView({
     const target = pendingPhotos.find((photo) => photo.id === id);
     if (!target) return;
     if (target.status === "preparing" || target.status === "uploading") return;
+    // 建单后成功项已在服务端；本地移除只会造成摘要与记录不一致。
+    if (createdRecordId && target.status !== "error") return;
     URL.revokeObjectURL(target.previewUrl);
     setPendingPhotos((current) => current.filter((photo) => photo.id !== id));
     setMessage("");
@@ -570,7 +572,7 @@ export function RepairEditorView({
     photos: PendingPhoto[],
     update: (id: string, patch: Partial<PendingPhoto>) => void,
     existingIds: Set<string>,
-  ): Promise<{ succeeded: number; failed: number; successIds: string[] }> {
+  ): Promise<{ succeeded: number; failed: number; successIds: string[]; refreshed: boolean }> {
     const targets = photos.filter((photo) => photo.status !== "success");
     let succeeded = 0;
     let failed = 0;
@@ -606,8 +608,8 @@ export function RepairEditorView({
         failed += 1;
       }
     }
-    if (targets.length > 0) await refreshPhotos(recordId);
-    return { succeeded, failed, successIds };
+    const refreshed = targets.length > 0 ? await refreshPhotos(recordId) : true;
+    return { succeeded, failed, successIds, refreshed };
   }
 
   async function uploadPendingPhotos(recordId: string, photos: PendingPhoto[]) {
@@ -697,6 +699,12 @@ export function RepairEditorView({
       }
       if (pendingPhotos.every((item) => item.id === id || item.status === "success"))
         completeCreate(createdRecordId);
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : repairEditorCopy.photoUploadSummaryFailed.replace("{count}", "1"),
+      );
     } finally {
       createSubmittingRef.current = false;
       setBusy(false);
@@ -772,12 +780,21 @@ export function RepairEditorView({
         : current,
     );
   }
-  /** 照片是即时保存的，只合并照片 —— 整块重载会丢掉表单里还没保存的改动。 */
-  async function refreshPhotos(targetId: string) {
-    const response = await fetch(`/api/v1/repairs/${targetId}`, { cache: "no-store" });
-    const json = await response.json();
-    if (!json.success) return;
-    setRecord((current) => (current ? { ...current, photos: json.data.photos } : current));
+  /**
+   * 照片是即时保存的，只合并照片 —— 整块重载会丢掉表单里还没保存的改动。
+   * 刷新失败返回 false 而不是抛错：照片已经上传成功，不能把它误报成上传失败；
+   * 调用方按场景提示刷新页面。
+   */
+  async function refreshPhotos(targetId: string): Promise<boolean> {
+    try {
+      const response = await fetch(`/api/v1/repairs/${targetId}`, { cache: "no-store" });
+      const json = await response.json();
+      if (!json.success) return false;
+      setRecord((current) => (current ? { ...current, photos: json.data.photos } : current));
+      return true;
+    } catch {
+      return false;
+    }
   }
   function updateEditUpload(id: string, patch: Partial<PendingPhoto>) {
     setEditUploads((current) =>
@@ -799,7 +816,7 @@ export function RepairEditorView({
     setMessage("");
     try {
       const uploadedIds = new Set(record.photos.map((photo) => photo.id));
-      const { failed, successIds } = await uploadPhotos(
+      const { failed, successIds, refreshed } = await uploadPhotos(
         serverId,
         photos,
         updateEditUpload,
@@ -812,7 +829,15 @@ export function RepairEditorView({
       setMessage(
         failed > 0
           ? repairEditorCopy.photoUploadSummaryFailed.replace("{count}", String(failed))
-          : repairEditorCopy.photoUploadSuccess,
+          : refreshed
+            ? repairEditorCopy.photoUploadSuccess
+            : repairEditorCopy.photoRefreshFailed,
+      );
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : repairEditorCopy.photoUploadSummaryFailed.replace("{count}", String(photos.length)),
       );
     } finally {
       editUploadingRef.current = false;
@@ -865,7 +890,7 @@ export function RepairEditorView({
       });
       const json = await response.json();
       if (!json.success) throw new Error(json.error.message);
-      await refreshPhotos(serverId);
+      if (!(await refreshPhotos(serverId))) setMessage(repairEditorCopy.photoListRefreshFailed);
     } catch (e) {
       setMessage(e instanceof Error ? e.message : "移除失败");
     } finally {
@@ -873,12 +898,16 @@ export function RepairEditorView({
     }
   }
   async function reorder(photoId: string, sortOrder: number) {
-    await fetch(`/api/v1/repairs/${recordId}/photos/${photoId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sortOrder }),
-    });
-    await refreshPhotos(serverId);
+    try {
+      await fetch(`/api/v1/repairs/${recordId}/photos/${photoId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sortOrder }),
+      });
+      if (!(await refreshPhotos(serverId))) setMessage(repairEditorCopy.photoListRefreshFailed);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : repairEditorCopy.photoListRefreshFailed);
+    }
   }
   if (state === "loading") return <p role="status">正在加载表单…</p>;
   if (state === "error")

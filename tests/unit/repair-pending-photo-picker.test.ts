@@ -142,6 +142,33 @@ test("只读但允许移除时保留移除按钮，仍不显示文件输入", ()
   assert.equal(removed, "photo-1");
 });
 
+test("只读摘要只让失败项移除，成功项不提供本地移除", () => {
+  const removed: string[] = [];
+  const photos: PendingPhoto[] = [
+    { ...pendingPhoto(1), status: "success" },
+    { ...pendingPhoto(2), status: "error", error: "网络异常" },
+  ];
+  const tree = PendingPhotoPicker({
+    photos,
+    readOnly: true,
+    allowRemove: true,
+    canRemovePhoto: (photo) => photo.status === "error",
+    emptyLabel: "未选择照片",
+    onRemove: (id) => removed.push(id),
+    onRetry: () => {},
+  });
+  assert.equal(
+    findElement(tree, (element) => element.props["aria-label"] === "移除待上传照片 1"),
+    undefined,
+    "已上传成功的照片不能只删本地状态",
+  );
+  const remove = findElement(tree, (element) => element.props["aria-label"] === "移除待上传照片 2");
+  assert.ok(remove);
+  assert.equal(remove.props.type, "button", "原生按钮可键盘触发");
+  (remove.props.onClick as () => void)();
+  assert.deepEqual(removed, ["photo-2"]);
+});
+
 test("逐张状态：进度、压缩体积、失败原因与单张重试", () => {
   let retried = "";
   const photos: PendingPhoto[] = [
@@ -174,6 +201,7 @@ test("逐张状态：进度、压缩体积、失败原因与单张重试", () =>
   assert.ok(content.includes("网络异常，照片未上传，请重试"));
   const retry = findElement(tree, (element) => element.props["aria-label"] === "重试上传照片 2");
   assert.ok(retry);
+  assert.equal(retry.props.type, "button", "重试也是原生按钮，可键盘触发");
   (retry.props.onClick as () => void)();
   assert.equal(retried, "photo-2");
 });

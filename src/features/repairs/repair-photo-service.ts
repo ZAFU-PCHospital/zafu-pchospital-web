@@ -42,7 +42,12 @@ export function createRepairPhotoService(storage: RepairPhotoStorage) {
       const existingKeys = new Set(
         record.photos.map((photo) => photo.uploadKey).filter((key): key is string => Boolean(key)),
       );
-      const derivedKeys = baseKey ? files.map((_, index) => `${baseKey}:${index}`) : [];
+      // 单文件请求沿用原键（客户端逐张上传）；只有批量请求才按序号派生。
+      const derivedKeys = baseKey
+        ? files.length === 1
+          ? [baseKey]
+          : files.map((_, index) => `${baseKey}:${index}`)
+        : [];
       const newFileCount =
         derivedKeys.length === 0
           ? files.length
@@ -105,8 +110,8 @@ export function createRepairPhotoService(storage: RepairPhotoStorage) {
             sha256Digest: processed.display.digest,
             width: processed.display.width,
             height: processed.display.height,
-            // 批量请求按文件序号派生键；单文件请求就是客户端带来的原键。
-            uploadKey: baseKey ? `${baseKey}:${index}` : null,
+            // 与上面的预检使用同一套派生规则：单文件原键，批量 `<key>:<index>`。
+            uploadKey: derivedKeys[index] ?? null,
           });
         }
         const now = new Date();

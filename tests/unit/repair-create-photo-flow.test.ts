@@ -83,7 +83,9 @@ test("上传失败保留重试入口，建单成功后不重复建单", () => {
     /onRetryPhoto=\{createdRecordId && !busy \? retryPendingPhoto : undefined\}/,
   );
   assert.match(summary, /allowRemove=\{Boolean\(onRemovePhoto\)\}/);
+  assert.match(summary, /canRemovePhoto=\{\(photo\) => photo\.status === "error"\}/);
   assert.match(picker, /allowRemove/);
+  assert.match(editor, /if \(createdRecordId && target\.status !== "error"\) return/);
   assert.match(editor, /createSubmittingRef/);
   assert.match(editor, /if \(busy \|\| createSubmittingRef\.current \|\| !record\) return/);
   assert.match(
@@ -110,4 +112,21 @@ test("第一步校验失败时聚焦并滚动到首个错误字段", () => {
   assert.match(editor, /Object\.keys\(error\.fieldErrors \?\? \{\}\)\[0\]/);
   assert.match(editor, /scrollIntoView\(\{ block: "center" \}\)/);
   assert.match(editor, /focus\(\{ preventScroll: true \}\)/);
+});
+
+test("照片列表刷新失败不抛错，改为提示刷新页面", () => {
+  assert.match(editor, /async function refreshPhotos\(targetId: string\): Promise<boolean>/);
+  assert.match(editor, /catch \{\s*return false;\s*\}/);
+  assert.match(editor, /photoRefreshFailed/);
+  assert.match(editor, /photoListRefreshFailed/);
+});
+
+test("确认步骤把焦点移到标题，按钮保持原生键盘语义", () => {
+  assert.match(editor, /ref=\{confirmHeadingRef\}/);
+  assert.match(editor, /tabIndex=\{-1\}/);
+  assert.match(editor, /confirmHeadingRef\.current\?\.focus\(\)/);
+  assert.match(editor, /formRef\.current\?\.focus\(\{ preventScroll: true \}\)/);
+  assert.match(picker, /type="button"/);
+  assert.match(picker, /aria-label=\{repairEditorCopy\.photoRemoveLabel/);
+  assert.match(picker, /aria-label=\{repairEditorCopy\.photoRetryLabel/);
 });

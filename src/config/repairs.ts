@@ -177,6 +177,9 @@ export const repairEditorCopy = {
   photoUploadFailed: "「{name}」上传失败：{reason}",
   photoUploadSummaryFailed: "{count} 张照片上传失败，可逐张重试",
   photoUploadSuccess: "照片已上传。",
+  /** 上传成功但列表刷新失败：照片已在服务端，不能让用户误以为丢失或重复上传。 */
+  photoRefreshFailed: "照片已上传，但列表刷新失败，请刷新页面。",
+  photoListRefreshFailed: "列表刷新失败，请刷新页面后重试。",
   photoDuplicateSkipped: "已跳过 {count} 张重复选择的照片",
   photoNoPendingUploads: "没有待上传的照片",
   /** 新建流程的同页两步：填写（含照片）→ 核对确认。 */

@@ -14,7 +14,7 @@ type Props = {
   record: RepairDetailView;
   photos: PendingPhoto[];
   serveContext?: boolean;
-  /** 建单成功但照片上传失败时，允许先移除有问题的照片再重试。 */
+  /** 建单成功但照片上传失败时，允许先移除失败项再重试（成功项已落库，不能在本地删）。 */
   onRemovePhoto?: (id: string) => void;
   /** 单张重试：只重传这一张。 */
   onRetryPhoto?: (id: string) => void;
@@ -71,6 +71,7 @@ export function RepairCreateSummary({
           photos={photos}
           readOnly
           allowRemove={Boolean(onRemovePhoto)}
+          canRemovePhoto={(photo) => photo.status === "error"}
           onRemove={onRemovePhoto}
           onRetry={onRetryPhoto}
           emptyLabel={repairEditorCopy.noPhotos}
