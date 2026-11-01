@@ -114,10 +114,10 @@ export const repairEditorCopy = {
   participantsLabel: "参与维修人员",
   participantsCreatorTag: "创建人",
   participantsHint: "维修时长计入每位参与成员",
-  participantsAddLabel: "输入姓名添加协作者",
-  participantsAddPlaceholder: "输入姓名，选择匹配成员…",
+  participantsAddLabel: "输入姓名或昵称添加协作者",
+  participantsAddPlaceholder: "输入姓名或昵称，选择匹配成员…",
   participantsMatches: "找到 {count} 位成员，选择即可添加",
-  participantsNoMatches: "未找到匹配成员，请尝试其他姓名",
+  participantsNoMatches: "未找到匹配成员，请尝试其他姓名或昵称",
   participantsNoOptions: "暂无可添加的成员",
   /** 活动接待：候选只来自本场出勤成员，姓名/昵称均可搜索。 */
   participantsAttendanceAddLabel: "输入姓名或昵称添加本场出勤成员",

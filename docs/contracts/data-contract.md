@@ -237,7 +237,8 @@ Repository / Service 的默认读取必须加 `deletedAt: null`。身份采用�
   - 成员与管理端编辑（`PATCH`）：请求体 `participantIds`（**不含创建人本人**；缺省 = 不动、
     数组 = 整体替换）经 `composeParticipantIds`（创建人恒在首位、去重）落库并修正 `sort_order`。
 - 上限 `repairFieldLimits.participantMaxCount = 9`（含创建人，额外成员 ≤ 8）；候选名单默认来自
-  `GET /api/v1/repair-members`（`ACTIVE` 且未软删除）。**活动接待建单例外**（issue #238）：
+  `GET /api/v1/repair-members`（`ACTIVE` 且未软删除），返回展示名、姓名与昵称，支持按姓名或昵称搜索。
+  **活动接待建单例外**（issue #238）：
   候选随预填接口下发，仅本场出勤且 `ACTIVE`、未软删除的成员；姓名与昵称均可作为搜索关键字。
   `createServedRepairRecord` 在服务端按 `activityId` 复核**最终参与人（含创建人）**均在本场出勤，
   绕过界面直接提交未出勤成员会返回 400 `VALIDATION_FAILED`，不占用接待登记。
