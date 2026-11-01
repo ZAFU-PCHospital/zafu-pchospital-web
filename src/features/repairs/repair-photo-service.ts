@@ -23,13 +23,31 @@ export function createRepairPhotoService(storage: RepairPhotoStorage) {
       recordId: string,
       files: File[],
       actor: AuthorizedActor,
+      uploadKey?: string,
     ): Promise<RepairPhotoView[]> {
       const record = await repairRepository.getById(recordId);
       assertCanAttachRepairPhotos(actor, record);
       const limits = uploadLimits();
       if (!files.length) throw new AppError("VALIDATION_FAILED", "请选择照片");
-      // 快照预检先挡住明显超限的请求，避免读文件和落盘；并发下仍以锁后复核为准。
-      if (record.photos.length + files.length > limits.maxFiles)
+      const baseKey = uploadKey?.trim() ?? "";
+      if (baseKey.length > 128) throw new AppError("VALIDATION_FAILED", "Idempotency-Key 无效");
+      // 单次请求本身不能超过总上限；实际新增数量在锁后按幂等键去重再核对。
+      if (files.length > limits.maxFiles)
+        throw new AppError(
+          "REPAIR_PHOTO_LIMIT_EXCEEDED",
+          `每条记录最多上传 ${limits.maxFiles} 张照片`,
+        );
+      // 快照预检：真正的新增照片超限时，在读取文件和落盘前就拒绝；
+      // 已经存在的幂等键（响应丢失后的重试）不占新名额，必须放行。
+      const existingKeys = new Set(
+        record.photos.map((photo) => photo.uploadKey).filter((key): key is string => Boolean(key)),
+      );
+      const derivedKeys = baseKey ? files.map((_, index) => `${baseKey}:${index}`) : [];
+      const newFileCount =
+        derivedKeys.length === 0
+          ? files.length
+          : derivedKeys.filter((key) => !existingKeys.has(key)).length;
+      if (record.photos.length + newFileCount > limits.maxFiles)
         throw new AppError(
           "REPAIR_PHOTO_LIMIT_EXCEEDED",
           `每条记录最多上传 ${limits.maxFiles} 张照片`,
@@ -43,11 +61,12 @@ export function createRepairPhotoService(storage: RepairPhotoStorage) {
         sha256Digest: Buffer;
         width: number;
         height: number;
+        uploadKey: string | null;
       };
       const stored: StoredPhoto[] = [];
       try {
         // 逐张读取、解码、落盘：最多 9 张时也不并发占用多张大图的内存。
-        for (const file of files) {
+        for (const [index, file] of files.entries()) {
           if (file.size > limits.maxBytes)
             throw new AppError(
               "REPAIR_PHOTO_TOO_LARGE",
@@ -86,52 +105,80 @@ export function createRepairPhotoService(storage: RepairPhotoStorage) {
             sha256Digest: processed.display.digest,
             width: processed.display.width,
             height: processed.display.height,
+            // 批量请求按文件序号派生键；单文件请求就是客户端带来的原键。
+            uploadKey: baseKey ? `${baseKey}:${index}` : null,
           });
         }
         const now = new Date();
+        /** 与已有照片同摘要的暂存文件在事务成功后删除；事务失败由外层统一清理。 */
+        const duplicateKeys: string[] = [];
         const created = await inSerializableTransaction(async (tx) => {
           // 审核与补附件可能并发：锁记录行后复核状态和实际照片数，避免审核通过后照片才落库。
           const locked = await lockRecordForPhotoMutation(tx, recordId);
           assertCanAttachRepairPhotos(actor, locked);
-          if (locked.photos.length + stored.length > limits.maxFiles)
+          type LockedPhoto = (typeof locked.photos)[number];
+          const byKey = new Map<string, LockedPhoto>();
+          for (const photo of locked.photos) if (photo.uploadKey) byKey.set(photo.uploadKey, photo);
+
+          // 幂等键命中视为同一次上传（响应丢失后的重试）：不新建行、不占名额、
+          // 不重复写时间线。没有键的请求保持旧语义，每次都是新照片。
+          const newCount = stored.filter(
+            (entry) => !entry.uploadKey || !byKey.has(entry.uploadKey),
+          ).length;
+          if (locked.photos.length + newCount > limits.maxFiles)
             throw new AppError(
               "REPAIR_PHOTO_LIMIT_EXCEEDED",
               `每条记录最多上传 ${limits.maxFiles} 张照片`,
             );
+
           // 先收敛历史空洞 / 重复序号，再把新照片接在有效照片末尾。
           await normalizePhotoSortOrders(tx, locked.photos);
-          const rows = [];
-          for (const [index, entry] of stored.entries()) {
-            rows.push(
-              await tx.repairPhoto.create({
-                data: {
-                  id: randomUUID(),
-                  repairRecordId: recordId,
-                  storageKey: entry.storageKey,
-                  thumbnailKey: entry.thumbnailKey,
-                  originalName: entry.originalName,
-                  mimeType: entry.mimeType,
-                  sizeBytes: entry.sizeBytes,
-                  sha256Digest: new Uint8Array(entry.sha256Digest),
-                  width: entry.width,
-                  height: entry.height,
-                  sortOrder: locked.photos.length + index,
-                  uploadedByUserId: actor.userId!,
-                  createdAt: now,
-                },
-              }),
-            );
+          const rows: LockedPhoto[] = [];
+          const createdRows: LockedPhoto[] = [];
+          let newIndex = 0;
+          for (const entry of stored) {
+            const existing = entry.uploadKey ? byKey.get(entry.uploadKey) : undefined;
+            if (existing) {
+              rows.push(existing);
+              duplicateKeys.push(entry.storageKey, entry.thumbnailKey);
+              continue;
+            }
+            const row = await tx.repairPhoto.create({
+              data: {
+                id: randomUUID(),
+                repairRecordId: recordId,
+                storageKey: entry.storageKey,
+                thumbnailKey: entry.thumbnailKey,
+                originalName: entry.originalName,
+                mimeType: entry.mimeType,
+                sizeBytes: entry.sizeBytes,
+                sha256Digest: new Uint8Array(entry.sha256Digest),
+                width: entry.width,
+                height: entry.height,
+                uploadKey: entry.uploadKey,
+                sortOrder: locked.photos.length + newIndex,
+                uploadedByUserId: actor.userId!,
+                createdAt: now,
+              },
+            });
+            newIndex += 1;
+            if (entry.uploadKey) byKey.set(entry.uploadKey, row);
+            rows.push(row);
+            createdRows.push(row);
           }
-          await timeline(
-            tx,
-            recordId,
-            actor.userId,
-            "PHOTO_ADDED",
-            { count: rows.length, photoIds: rows.map((row) => row.id) },
-            now,
-          );
+          if (createdRows.length > 0)
+            await timeline(
+              tx,
+              recordId,
+              actor.userId,
+              "PHOTO_ADDED",
+              { count: createdRows.length, photoIds: createdRows.map((row) => row.id) },
+              now,
+            );
           return rows;
         });
+        if (duplicateKeys.length)
+          await Promise.allSettled(duplicateKeys.map((key) => storage.delete(key)));
         return created.map(view);
       } catch (error) {
         await Promise.allSettled(
@@ -156,7 +203,11 @@ export function createRepairPhotoService(storage: RepairPhotoStorage) {
         if (!locked.photos.some((item) => item.id === photoId))
           throw new AppError("REPAIR_NOT_FOUND", "照片不存在");
         const now = new Date();
-        await tx.repairPhoto.update({ where: { id: photoId }, data: { deletedAt: now } });
+        await tx.repairPhoto.update({
+          where: { id: photoId },
+          // 释放幂等键：删除后同一键的重试应当能重新落一张，而不是撞唯一索引。
+          data: { deletedAt: now, uploadKey: null },
+        });
         // 删除后收敛剩余照片，避免补传沿用已释放的序号。
         await normalizePhotoSortOrders(
           tx,
@@ -288,7 +339,6 @@ async function lockRecordForPhotoMutation(tx: Prisma.TransactionClient, recordId
       photos: {
         where: { deletedAt: null },
         orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }, { id: "asc" }],
-        select: { id: true, sortOrder: true },
       },
     },
   });

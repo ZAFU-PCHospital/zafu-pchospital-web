@@ -30,6 +30,21 @@ test("不支持的图片格式整批拒绝", () => {
   assert.equal(formatPhotoSelectionError(error!), repairEditorCopy.photoTypeUnsupported);
 });
 
+test("HEIC / HEIF：本轮不转换，给出 iPhone 相机格式指引", () => {
+  for (const [name, type] of [
+    ["IMG_0001.HEIC", "image/heic"],
+    ["IMG_0002.heif", "image/heif"],
+    // iOS 有时不给 MIME，靠扩展名识别。
+    ["IMG_0003.heic", ""],
+  ] as const) {
+    const error = validatePhotoSelection([file(name, 10, type)], 0, limits);
+    assert.deepEqual(error, { kind: "heic", name }, name);
+    assert.equal(formatPhotoSelectionError(error!), repairEditorCopy.photoHeicUnsupported);
+  }
+  // HEIC 与普通不支持格式的文案必须区分：前者可操作（改相机格式），后者只是拒绝。
+  assert.notEqual(repairEditorCopy.photoHeicUnsupported, repairEditorCopy.photoTypeUnsupported);
+});
+
 test("超过单张上限时指出文件名与大小", () => {
   const error = validatePhotoSelection([file("big.png", 2048)], 0, limits);
   assert.equal(error?.kind, "too-large");

@@ -295,6 +295,75 @@ dbTest("上传准入：队列占满时 429 且不解析 multipart，释放后可
   assert.deepEqual(repairPhotoUploadGate.snapshot(), { active: 0, waiting: 0 });
 });
 
+dbTest("上传幂等键：同键重试不重复落库与时间线，不同键仍可上传相同图片", async () => {
+  const member = await createMember("幂等上传");
+  const owner = ownerActor(member);
+  const recordId = await createPendingRecord(member.profileId);
+
+  const first = await repairPhotoService.upload(
+    recordId,
+    [pngFile("same.png")],
+    owner,
+    "photo-key-1",
+  );
+  const retry = await repairPhotoService.upload(
+    recordId,
+    [pngFile("same.png")],
+    owner,
+    "photo-key-1",
+  );
+  assert.equal(retry[0]!.id, first[0]!.id, "同键重试应返回原照片");
+  assert.equal((await activePhotos(recordId)).length, 1);
+  assert.equal(
+    await getDb().repairTimelineEvent.count({
+      where: { repairRecordId: recordId, eventType: "PHOTO_ADDED" },
+    }),
+    1,
+  );
+
+  // 不带幂等键的旧客户端语义不变：相同字节仍是一张新照片。
+  const noKey = await repairPhotoService.upload(recordId, [pngFile("same.png")], owner);
+  assert.notEqual(noKey[0]!.id, first[0]!.id);
+  assert.equal((await activePhotos(recordId)).length, 2);
+
+  // 批量请求按文件序号派生键，同一批重试全部复用原行。
+  const batch1 = await repairPhotoService.upload(
+    recordId,
+    [pngFile("b.png"), pngFile("c.png")],
+    owner,
+    "batch-key",
+  );
+  const batch2 = await repairPhotoService.upload(
+    recordId,
+    [pngFile("b.png"), pngFile("c.png")],
+    owner,
+    "batch-key",
+  );
+  assert.deepEqual(
+    batch2.map((photo) => photo.id),
+    batch1.map((photo) => photo.id),
+  );
+  assert.equal((await activePhotos(recordId)).length, 4);
+  assert.equal(
+    await getDb().repairTimelineEvent.count({
+      where: { repairRecordId: recordId, eventType: "PHOTO_ADDED" },
+    }),
+    3,
+    "首传、无键补传、批量首传各一条；两次重试都不写时间线",
+  );
+
+  // 删除会释放幂等键：同一键的重试可以重新落一张。
+  await repairPhotoService.remove(recordId, first[0]!.id, owner);
+  const afterDelete = await repairPhotoService.upload(
+    recordId,
+    [pngFile("same.png")],
+    owner,
+    "photo-key-1",
+  );
+  assert.notEqual(afterDelete[0]!.id, first[0]!.id);
+  assert.equal((await activePhotos(recordId)).length, 4);
+});
+
 dbTest("PENDING 未审核：本人可上传、排序、删除照片", async () => {
   const member = await createMember("本人补传");
   const owner = ownerActor(member);

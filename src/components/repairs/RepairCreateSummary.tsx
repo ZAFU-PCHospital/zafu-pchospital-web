@@ -16,10 +16,18 @@ type Props = {
   serveContext?: boolean;
   /** 建单成功但照片上传失败时，允许先移除有问题的照片再重试。 */
   onRemovePhoto?: (id: string) => void;
+  /** 单张重试：只重传这一张。 */
+  onRetryPhoto?: (id: string) => void;
 };
 
 /** 新建维修记录确认步骤：只读核对字段与本地照片，不在这里发请求。 */
-export function RepairCreateSummary({ record, photos, serveContext, onRemovePhoto }: Props) {
+export function RepairCreateSummary({
+  record,
+  photos,
+  serveContext,
+  onRemovePhoto,
+  onRetryPhoto,
+}: Props) {
   return (
     <div className="gap-s-4 grid">
       {serveContext ? <p className="field__hint">{repairEditorCopy.serveSubmitNote}</p> : null}
@@ -64,8 +72,9 @@ export function RepairCreateSummary({ record, photos, serveContext, onRemovePhot
           readOnly
           allowRemove={Boolean(onRemovePhoto)}
           onRemove={onRemovePhoto}
+          onRetry={onRetryPhoto}
           emptyLabel={repairEditorCopy.noPhotos}
-          disabled={!onRemovePhoto}
+          disabled={!onRemovePhoto && !onRetryPhoto}
         />
         <p className="field__hint">{repairEditorCopy.photosSubmitNote}</p>
       </div>

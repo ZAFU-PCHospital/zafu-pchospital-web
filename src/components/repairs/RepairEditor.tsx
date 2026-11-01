@@ -39,6 +39,13 @@ import {
 } from "./create-draft-storage";
 import { PendingPhotoPicker, type PendingPhoto } from "./PendingPhotoPicker";
 import { formatPhotoSelectionError, validatePhotoSelection } from "./photo-selection";
+import {
+  dedupePhotoFiles,
+  photoSignature,
+  preparePhoto,
+  uploadPhotoWithProgress,
+  type UploadPhotoFn,
+} from "./photo-upload";
 import { RepairCreateSummary } from "./RepairCreateSummary";
 
 /** 点击整块日期输入框都弹出原生日历（默认只有右侧小图标会弹）。 */
@@ -187,7 +194,14 @@ export function RepairEditorView({
   serveContext,
   photoLimits,
   router,
-}: RepairEditorProps & { router: EditorRouter }) {
+  preparePhotoFn = preparePhoto,
+  uploadPhotoFn = uploadPhotoWithProgress,
+}: RepairEditorProps & {
+  router: EditorRouter;
+  /** 测试注入点：默认走 Canvas 压缩与 XHR 逐张上传。 */
+  preparePhotoFn?: typeof preparePhoto;
+  uploadPhotoFn?: UploadPhotoFn;
+}) {
   const createMode = !recordId;
   /** 活动接待补单的本地暂存按报名分桶。 */
   const draftScope = serveContext?.registrationId;
@@ -210,10 +224,14 @@ export function RepairEditorView({
   const [toast, setToast] = useState<AdminToastMessage | null>(null);
   const [createStep, setCreateStep] = useState<CreateStep>("edit");
   const [pendingPhotos, setPendingPhotos] = useState<PendingPhoto[]>([]);
+  /** 编辑页的逐张上传队列：成功项刷新后移出，失败项留着重试。 */
+  const [editUploads, setEditUploads] = useState<PendingPhoto[]>([]);
   const [createdRecordId, setCreatedRecordId] = useState<string | null>(null);
   const confirmHeadingRef = useRef<HTMLHeadingElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const pendingPhotosRef = useRef<PendingPhoto[]>([]);
+  const editUploadsRef = useRef<PendingPhoto[]>([]);
+  const editUploadingRef = useRef(false);
   /** 确认 / 重试上传的同步防连点：busy 重新渲染前也可能被点第二次。 */
   const createSubmittingRef = useRef(false);
   useEffect(() => {
@@ -227,8 +245,12 @@ export function RepairEditorView({
     pendingPhotosRef.current = pendingPhotos;
   }, [pendingPhotos]);
   useEffect(() => {
+    editUploadsRef.current = editUploads;
+  }, [editUploads]);
+  useEffect(() => {
     return () => {
       pendingPhotosRef.current.forEach((photo) => URL.revokeObjectURL(photo.previewUrl));
+      editUploadsRef.current.forEach((photo) => URL.revokeObjectURL(photo.previewUrl));
     };
   }, []);
   useEffect(() => {
@@ -366,24 +388,46 @@ export function RepairEditorView({
   function field<K extends keyof RepairDetailView>(key: K, value: RepairDetailView[K]) {
     setRecord((current) => (current ? { ...current, [key]: value } : current));
   }
+  function updatePendingPhoto(id: string, patch: Partial<PendingPhoto>) {
+    setPendingPhotos((current) =>
+      current.map((photo) => (photo.id === id ? { ...photo, ...patch } : photo)),
+    );
+  }
   function addPendingPhotos(files: File[]) {
     if (!record || files.length === 0) return;
-    const error = validatePhotoSelection(files, pendingPhotos.length, record.photoLimits);
+    const { unique, duplicateCount } = dedupePhotoFiles(
+      files,
+      pendingPhotos.map((photo) => photoSignature(photo.file)),
+    );
+    if (duplicateCount > 0)
+      setMessage(repairEditorCopy.photoDuplicateSkipped.replace("{count}", String(duplicateCount)));
+    if (unique.length === 0) return;
+    const error = validatePhotoSelection(unique, pendingPhotos.length, record.photoLimits);
     if (error) {
       setMessage(formatPhotoSelectionError(error));
       return;
     }
-    const additions = files.map((file) => ({
-      id: createIdempotencyKey(),
-      file,
-      previewUrl: URL.createObjectURL(file),
-    }));
+    const additions = unique.map((file) => {
+      const id = createIdempotencyKey();
+      return {
+        id,
+        file,
+        previewUrl: URL.createObjectURL(file),
+        status: "ready" as const,
+        progress: 0,
+        originalSize: file.size,
+        // 幂等键跟照片走：重试复用，响应丢失也不会在服务端落两张。
+        uploadKey: id,
+      };
+    });
     setPendingPhotos((current) => [...current, ...additions]);
-    setMessage("");
+    if (duplicateCount === 0) setMessage("");
   }
   function removePendingPhoto(id: string) {
     const target = pendingPhotos.find((photo) => photo.id === id);
-    if (target) URL.revokeObjectURL(target.previewUrl);
+    if (!target) return;
+    if (target.status === "preparing" || target.status === "uploading") return;
+    URL.revokeObjectURL(target.previewUrl);
     setPendingPhotos((current) => current.filter((photo) => photo.id !== id));
     setMessage("");
   }
@@ -517,17 +561,66 @@ export function RepairEditorView({
     return json.data.id as string;
   }
 
-  /** 记录已创建后一次性批量上传暂存照片；失败时保留文件供重试。 */
-  async function uploadPendingPhotos(recordId: string): Promise<void> {
-    if (pendingPhotos.length === 0) return;
-    const form = new FormData();
-    pendingPhotos.forEach((photo) => form.append("photos", photo.file));
-    const response = await fetch(`/api/v1/repairs/${recordId}/photos`, {
-      method: "POST",
-      body: form,
-    });
-    const json = await response.json();
-    if (!json.success) throw new Error(json.error?.message ?? "照片上传失败");
+  /**
+   * 逐张压缩 + 上传（issue #324）：一张失败不阻塞其余，失败项留着重试；
+   * 成功的照片不会再次上传（调用方传进来的列表已过滤 success）。
+   */
+  async function uploadPhotos(
+    recordId: string,
+    photos: PendingPhoto[],
+    update: (id: string, patch: Partial<PendingPhoto>) => void,
+    existingIds: Set<string>,
+  ): Promise<{ succeeded: number; failed: number; successIds: string[] }> {
+    const targets = photos.filter((photo) => photo.status !== "success");
+    let succeeded = 0;
+    let failed = 0;
+    const successIds: string[] = [];
+    for (const photo of targets) {
+      update(photo.id, { status: "preparing", progress: 0, error: undefined });
+      try {
+        const prepared = await preparePhotoFn(photo.file);
+        update(photo.id, {
+          status: "uploading",
+          progress: 0,
+          originalSize: photo.file.size,
+          preparedSize: prepared.preparedSize,
+          compressed: prepared.compressed,
+        });
+        const result = await uploadPhotoFn({
+          recordId,
+          file: prepared.file,
+          uploadKey: photo.uploadKey,
+          onProgress: (ratio) => update(photo.id, { progress: ratio }),
+        });
+        const uploaded = result[0];
+        if (uploaded) existingIds.add(uploaded.id);
+        update(photo.id, { status: "success", progress: 1, error: undefined });
+        successIds.push(photo.id);
+        succeeded += 1;
+      } catch (error) {
+        update(photo.id, {
+          status: "error",
+          progress: 0,
+          error: error instanceof Error ? error.message : "上传失败",
+        });
+        failed += 1;
+      }
+    }
+    if (targets.length > 0) await refreshPhotos(recordId);
+    return { succeeded, failed, successIds };
+  }
+
+  async function uploadPendingPhotos(recordId: string, photos: PendingPhoto[]) {
+    const uploadedIds = new Set((record?.photos ?? []).map((photo) => photo.id));
+    return uploadPhotos(recordId, photos, updatePendingPhoto, uploadedIds);
+  }
+
+  function finishCreateAfterUpload(recordId: string, failed: number) {
+    if (failed > 0) {
+      setMessage(repairEditorCopy.photoUploadSummaryFailed.replace("{count}", String(failed)));
+      return;
+    }
+    completeCreate(recordId);
   }
 
   function completeCreate(recordId: string) {
@@ -541,7 +634,7 @@ export function RepairEditorView({
     }
   }
 
-  /** 确认步骤：先建单，再上传照片；建单成功后失败只重试上传，不重复建单。 */
+  /** 确认步骤：先建单，再逐张上传；建单成功后失败只重试失败照片，不重复建单。 */
   async function confirmCreate() {
     if (busy || createSubmittingRef.current || !record) return;
     createSubmittingRef.current = true;
@@ -553,8 +646,8 @@ export function RepairEditorView({
         recordId = serveContext ? await createServeRecord() : await createRepairRecord();
         setCreatedRecordId(recordId);
       }
-      if (pendingPhotos.length) await uploadPendingPhotos(recordId);
-      completeCreate(recordId);
+      const { failed } = await uploadPendingPhotos(recordId, pendingPhotos);
+      finishCreateAfterUpload(recordId, failed);
     } catch (error) {
       const text = error instanceof Error ? error.message : "提交失败";
       setMessage(
@@ -572,8 +665,9 @@ export function RepairEditorView({
     setBusy(true);
     setMessage("");
     try {
-      await uploadPendingPhotos(createdRecordId);
-      completeCreate(createdRecordId);
+      const targets = pendingPhotos.filter((photo) => photo.status !== "success");
+      const { failed } = await uploadPendingPhotos(createdRecordId, targets);
+      finishCreateAfterUpload(createdRecordId, failed);
     } catch (error) {
       setMessage(
         repairEditorCopy.recordCreatedUploadFailed.replace(
@@ -581,6 +675,28 @@ export function RepairEditorView({
           error instanceof Error ? error.message : "照片上传失败",
         ),
       );
+    } finally {
+      createSubmittingRef.current = false;
+      setBusy(false);
+    }
+  }
+
+  /** 确认页的单张重试：只重传这一张；若其余都已成功，直接完成建单流程。 */
+  async function retryPendingPhoto(id: string) {
+    if (busy || createSubmittingRef.current || !createdRecordId) return;
+    const photo = pendingPhotos.find((item) => item.id === id);
+    if (!photo) return;
+    createSubmittingRef.current = true;
+    setBusy(true);
+    setMessage("");
+    try {
+      const { failed } = await uploadPendingPhotos(createdRecordId, [photo]);
+      if (failed > 0) {
+        setMessage(repairEditorCopy.photoUploadSummaryFailed.replace("{count}", "1"));
+        return;
+      }
+      if (pendingPhotos.every((item) => item.id === id || item.status === "success"))
+        completeCreate(createdRecordId);
     } finally {
       createSubmittingRef.current = false;
       setBusy(false);
@@ -663,51 +779,83 @@ export function RepairEditorView({
     if (!json.success) return;
     setRecord((current) => (current ? { ...current, photos: json.data.photos } : current));
   }
-  async function upload(files: File[]) {
-    // 新建/接待补单提交前没有记录，照片入口已在界面隐藏。
-    if (createMode) return;
-    if (!files.length || !record) return;
-    const selected = files;
+  function updateEditUpload(id: string, patch: Partial<PendingPhoto>) {
+    setEditUploads((current) =>
+      current.map((photo) => (photo.id === id ? { ...photo, ...patch } : photo)),
+    );
+  }
+  function removeEditUpload(id: string) {
+    const target = editUploads.find((photo) => photo.id === id);
+    if (!target) return;
+    if (target.status === "preparing" || target.status === "uploading") return;
+    URL.revokeObjectURL(target.previewUrl);
+    setEditUploads((current) => current.filter((photo) => photo.id !== id));
+  }
+  /** 编辑页逐张上传：成功后移出队列（照片已进服务端网格），失败项留着重试。 */
+  async function runEditUploads(photos: PendingPhoto[]) {
+    if (!serverId || !record || editUploadingRef.current || photos.length === 0) return;
+    editUploadingRef.current = true;
     setBusy(true);
     setMessage("");
     try {
-      const targetId = serverId;
-      const current = record;
-      const { maxBytes, maxFiles } = current.photoLimits;
-      // 按服务端下发的上限拦一遍：超限的文件根本传不上去，不必等 multipart 走完再说。
-      const oversized = selected.find((file) => file.size > maxBytes);
-      if (oversized) {
-        setMessage(
-          repairEditorCopy.photoTooLarge
-            .replace("{name}", oversized.name)
-            .replace("{size}", formatBytes(oversized.size))
-            .replace("{limit}", formatBytes(maxBytes)),
-        );
-        return;
+      const uploadedIds = new Set(record.photos.map((photo) => photo.id));
+      const { failed, successIds } = await uploadPhotos(
+        serverId,
+        photos,
+        updateEditUpload,
+        uploadedIds,
+      );
+      for (const photo of photos) {
+        if (successIds.includes(photo.id)) URL.revokeObjectURL(photo.previewUrl);
       }
-      if (current.photos.length + selected.length > maxFiles) {
-        setMessage(
-          repairEditorCopy.photoTooMany
-            .replace("{count}", String(current.photos.length))
-            .replace("{remain}", String(Math.max(maxFiles - current.photos.length, 0))),
-        );
-        return;
-      }
-      const form = new FormData();
-      selected.forEach((file) => form.append("photos", file));
-      const response = await fetch(`/api/v1/repairs/${targetId}/photos`, {
-        method: "POST",
-        body: form,
-      });
-      const json = await response.json();
-      if (!json.success) throw new Error(json.error.message);
-      await refreshPhotos(targetId);
-      setMessage("照片已上传。");
-    } catch (e) {
-      setMessage(e instanceof Error ? e.message : "上传失败");
+      setEditUploads((current) => current.filter((photo) => !successIds.includes(photo.id)));
+      setMessage(
+        failed > 0
+          ? repairEditorCopy.photoUploadSummaryFailed.replace("{count}", String(failed))
+          : repairEditorCopy.photoUploadSuccess,
+      );
     } finally {
+      editUploadingRef.current = false;
       setBusy(false);
     }
+  }
+  function uploadEditFiles(files: File[]) {
+    // 新建 / 接待补单提交前没有记录，照片入口已在界面隐藏。
+    if (createMode || !record || files.length === 0) return;
+    const { unique, duplicateCount } = dedupePhotoFiles(
+      files,
+      editUploads.map((photo) => photoSignature(photo.file)),
+    );
+    if (duplicateCount > 0)
+      setMessage(repairEditorCopy.photoDuplicateSkipped.replace("{count}", String(duplicateCount)));
+    if (unique.length === 0) return;
+    const error = validatePhotoSelection(
+      unique,
+      record.photos.length + editUploads.length,
+      record.photoLimits,
+    );
+    if (error) {
+      setMessage(formatPhotoSelectionError(error));
+      return;
+    }
+    const additions = unique.map((file) => {
+      const id = createIdempotencyKey();
+      return {
+        id,
+        file,
+        previewUrl: URL.createObjectURL(file),
+        status: "ready" as const,
+        progress: 0,
+        originalSize: file.size,
+        uploadKey: id,
+      };
+    });
+    setEditUploads((current) => [...current, ...additions]);
+    void runEditUploads(additions);
+  }
+  function retryEditUpload(id: string) {
+    const photo = editUploads.find((item) => item.id === id);
+    if (photo) void runEditUploads([photo]);
   }
   async function remove(photoId: string) {
     setBusy(true);
@@ -790,6 +938,7 @@ export function RepairEditorView({
             photos={pendingPhotos}
             serveContext={Boolean(serveContext)}
             onRemovePhoto={createdRecordId && !busy ? removePendingPhoto : undefined}
+            onRetryPhoto={createdRecordId && !busy ? retryPendingPhoto : undefined}
           />
           {message ? (
             <p className="signup__status signup__status--alert" role="alert">
@@ -1042,6 +1191,11 @@ export function RepairEditorView({
             <PendingPhotoPicker
               photos={pendingPhotos}
               hint={`${createPhotoHint}。${repairEditorCopy.photoPendingNote}`}
+              maxFiles={
+                Number.isFinite(record.photoLimits.maxFiles)
+                  ? record.photoLimits.maxFiles
+                  : undefined
+              }
               disabled={busy}
               emptyLabel={repairEditorCopy.noPhotos}
               onAdd={addPendingPhotos}
@@ -1065,24 +1219,15 @@ export function RepairEditorView({
           </>
         ) : (
           <>
-            <label className="field">
-              <span className="field__label">{repairEditorCopy.photoSelectLabel}</span>
-              <input
-                className="field__input"
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                multiple
-                disabled={busy}
-                onChange={(e) => {
-                  // 先拷成数组再清空 input：Blink 的 FileList 是活视图，清空 value 会把它一起清空，
-                  // 存引用再清空等于传了个空列表；拷成数组后「同一张图片再选一次」也能触发 change。
-                  const files = Array.from(e.target.files ?? []);
-                  e.target.value = "";
-                  void upload(files);
-                }}
-              />
-              <span className="field__hint">{photoHint}</span>
-            </label>
+            <PendingPhotoPicker
+              photos={editUploads}
+              hint={photoHint}
+              disabled={busy}
+              emptyLabel={repairEditorCopy.photoNoPendingUploads}
+              onAdd={(files) => uploadEditFiles(files)}
+              onRemove={removeEditUpload}
+              onRetry={retryEditUpload}
+            />
             <div className="gap-s-4 grid md:grid-cols-2">
               {record.photos.map((photo, index) => (
                 <figure className="gap-s-2 grid" key={photo.id}>
