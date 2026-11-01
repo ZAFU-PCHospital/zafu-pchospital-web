@@ -436,11 +436,17 @@ model RepairRecordParticipant {
 model RepairPhoto {
   id               String       @id @db.Char(36)
   repairRecordId   String       @map("repair_record_id") @db.Char(36)
+  /// 新上传存 display 变体；P1b 回填前，历史记录仍存原图。不再保留原图。
   storageKey       String       @unique(map: "repair_photos_storage_key_uq") @map("storage_key") @db.VarChar(255)
+  /// 320 长边缩略图；历史记录回填前为空，读取时回退到 storageKey。
+  thumbnailKey     String?      @unique(map: "repair_photos_thumbnail_key_uq") @map("thumbnail_key") @db.VarChar(255)
   originalName     String?      @map("original_name") @db.VarChar(255)
   mimeType         String       @map("mime_type") @db.VarChar(64)
   sizeBytes        Int          @map("size_bytes")
   sha256Digest     Bytes        @map("sha256_digest") @db.Binary(32)
+  /// display 变体的像素尺寸；历史记录回填前为空。
+  width            Int?
+  height           Int?
   sortOrder        Int          @default(0) @map("sort_order")
   uploadedByUserId String       @map("uploaded_by_user_id") @db.Char(36)
   createdAt        DateTime     @map("created_at") @db.DateTime(3)

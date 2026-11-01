@@ -26,6 +26,8 @@ function readBuildCommit(): string {
 const nextConfig: NextConfig = {
   env: { NEXT_PUBLIC_BUILD_COMMIT: readBuildCommit() },
   reactStrictMode: true,
+  /** sharp 是原生模块，只在 Node 运行时加载，不参与打包。 */
+  serverExternalPackages: ["sharp"],
   /* 默认会发 `X-Powered-By: Next.js`，等于对外报技术栈（安全审计 F6）。
      nginx 侧也可以用 `proxy_hide_header` 抹掉，这里从源头关掉更省事。 */
   poweredByHeader: false,

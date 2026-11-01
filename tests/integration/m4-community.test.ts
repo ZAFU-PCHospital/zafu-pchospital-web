@@ -20,6 +20,7 @@ import { permissionsForRoles } from "../../src/lib/auth/permissions";
 import { digestSessionToken } from "../../src/lib/security/secrets";
 import { disconnectDb, getDb } from "../../src/lib/db/client";
 import type { AuthorizedActor } from "../../src/types/contracts";
+import { TINY_PNG_BYTES } from "../support/image-fixtures";
 import { integrationTestsEnabled } from "./db-guard";
 import { sameOriginHeaders } from "./http-harness";
 
@@ -189,7 +190,7 @@ async function createApprovedRepair(
     },
     owner,
   );
-  const png = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
+  const png = TINY_PNG_BYTES;
   await repairPhotoService.upload(
     draft.id,
     [new File([png], "m4-case.png", { type: "image/png" })],

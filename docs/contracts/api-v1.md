@@ -273,8 +273,9 @@ PR 中记录影响范围。不强制单独评审；但若影响其他模块，�
 请求头，服务端按成员自助提交同一套校验直接创建 **`PENDING`** 记录，不再先建草稿；同一幂等键
 重试返回原记录（并发同键也只落一条）。原记录若已被管理员删除，重试返回 **409
 `REPAIR_STATE_INVALID`** 并提示刷新后重新提交，不会把已删除记录当作成功结果下发。新建页在
-提交前不落库（非图片字段暂存本机 sessionStorage）；提交前没有记录可挂照片，提交后由记录本人在
-审核前到详情页补充（issue #226）。
+提交前不落库（非图片字段暂存本机 sessionStorage）；#319 起可在提交前选择照片，确认提交后
+先建单、再复用 `POST /api/v1/repairs/:id/photos` 批量上传；记录本人也可在审核前到详情页补充
+（issue #226）。
 编辑既有记录（`DRAFT` / `REJECTED`）携带 `version`；过期版本返回
 `REPAIR_VERSION_CONFLICT`。列表支持分页、成员、分类、状态、结果、日期、疑难、典型和关键词
 筛选；普通成员只能看到本人全部状态与他人的 `APPROVED` 记录。照片内容接口要求有效 Session，
@@ -563,6 +564,26 @@ DELETE     /api/v1/admin/comments/:id
   `REPAIR_PHOTO_TOO_LARGE`，消息带文件名与实际体积（`「xx.jpg」12.4 MB，超过单张 10 MB 的上限`）。
   `maxBytes` 是**单张**上限，不是本次合计。
 
+### 维修照片变体（issue #322）
+
+- 新上传不再保留原图：服务端按真实文件头确认格式后，自动纠正 EXIF 方向、移除 EXIF/GPS，
+  生成 **display 1280 长边 / thumb 320 长边** WebP（quality 80 / 75），随后只落这两个变体。
+- `RepairPhotoView` 增加 `thumbnailUrl`、`width`、`height`；`contentUrl` 继续表示 display，
+  `thumbnailUrl` 为 `...?variant=thumb`。历史照片回填前 `width/height` 为 null，
+  `thumbnailUrl` 回退到原图。
+- `GET /api/v1/repair-photos/:photoId/content` 支持 `variant=display|thumb`（缺省 display）；
+  仍要求有效 Session。响应使用 `Cache-Control: private, no-cache`、强 ETag 与
+  `If-None-Match` 304；内容变化时 ETag 变化。不提供原图 variant。
+- 历史记录在 P1b 回填前继续可读：`storage_key` 仍是原图，缩略图请求回退到它；回填完成后
+  `storage_key` 指向 display，删除原图并写入 `thumbnail_key`、`width`、`height`。
+- `POST /api/v1/repairs/:id/photos` 的批量语义、数量/体积限制、权限和审核窗口不变。
+- 上传入口有进程级准入：同一时刻只处理 **1 个**上传请求，另允许 **1 个**等待（等待超时 5 秒）。
+  超出容量或等待超时返回 **429 `RATE_LIMITED`** 和可重试提示；请求在 `multipart` 解析前即被拒绝，
+  不会产生照片行或变体文件。图像解码与双变体生成另有进程级单任务闸门，成功、失败、超时和
+  取消都会释放名额。
+- 单张图片最多 **6000 万像素**（覆盖 5000 万像素手机直出）；超出返回 **413
+  `REPAIR_PHOTO_TOO_LARGE`**，与体积超限使用同一错误码，消息提示分辨率上限。
+
 ### 审核前补充照片（issue #226）
 
 - 照片上传 / 排序 / 删除的权限从 `DRAFT` / `REJECTED` 扩展到：**记录本人**且
@@ -762,7 +783,8 @@ DELETE     /api/v1/admin/comments/:id
   的接待返回 409（属于审核流程）。审计 `repair_activity.registration_serve_reverted` 记录恢复状态。
 - **旧数据过渡**（PR #221 之前的接待草稿）：登记仍关联 `DRAFT` 且未提交时保留原撤销能力——
   撤销会删除该草稿及照片，并清理评论 / 收藏 / 通知（#195），审计额外记录 `deletedRecordId`；
-  已提交 / 已审核仍返回 409。存量处置见 #223。
+  照片同时清理 display 与 thumbnail 两类文件（含已软删除照片，键去重），文件删除在事务提交后
+  进行，失败只记录服务端日志，不影响撤销结果。已提交 / 已审核仍返回 409。存量处置见 #223。
 
 新增错误码：`ACTIVITY_SERVE_PENDING`(409)（取代 `ACTIVITY_SERVE_DRAFT_PENDING`）。
 

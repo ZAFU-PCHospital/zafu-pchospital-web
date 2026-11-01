@@ -5,6 +5,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, beforeEach, test } from "node:test";
 
+import { POST as uploadRoute } from "../../src/app/api/v1/repairs/[id]/photos/route";
+import { repairPhotoUploadGate } from "../../src/features/repairs/repair-photo-admission";
 import {
   createRepairPhotoService,
   repairPhotoService,
@@ -16,7 +18,9 @@ import { AppError } from "../../src/lib/api/errors";
 import { permissionsForRoles } from "../../src/lib/auth/permissions";
 import { disconnectDb, getDb } from "../../src/lib/db/client";
 import type { AuthorizedActor } from "../../src/types/contracts";
+import { TINY_PNG_BYTES } from "../support/image-fixtures";
 import { integrationTestsEnabled } from "./db-guard";
+import { sameOriginHeaders, sessionCookie } from "./http-harness";
 
 const enabled = integrationTestsEnabled();
 const dbTest = enabled ? test : test.skip;
@@ -52,9 +56,7 @@ function rejectsWith(code: string) {
 }
 
 function pngFile(name: string): File {
-  return new File([Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])], name, {
-    type: "image/png",
-  });
+  return new File([TINY_PNG_BYTES], name, { type: "image/png" });
 }
 
 async function cleanupFixtures(): Promise<void> {
@@ -242,6 +244,55 @@ after(async () => {
   await cleanupFixtures();
   if (uploadTestRoot) await rm(uploadTestRoot, { recursive: true, force: true });
   await disconnectDb();
+});
+
+dbTest("上传准入：队列占满时 429 且不解析 multipart，释放后可继续上传", async () => {
+  const member = await createMember("上传准入");
+  const recordId = await createPendingRecord(member.profileId);
+  const cookie = await sessionCookie(member.userId, "MEMBER");
+  const url = `http://localhost/api/v1/repairs/${recordId}/photos`;
+
+  let parsed = 0;
+  const blocked = new Request(url, {
+    method: "POST",
+    headers: { cookie, ...sameOriginHeaders() },
+    body: "--blocked--",
+  });
+  Object.defineProperty(blocked, "formData", {
+    value: async () => {
+      parsed += 1;
+      return new FormData();
+    },
+  });
+
+  const releaseActive = await repairPhotoUploadGate.acquire();
+  const waiting = repairPhotoUploadGate.acquire();
+  try {
+    const response = await uploadRoute(blocked, { params: Promise.resolve({ id: recordId }) });
+    const body = (await response.json()) as { error?: { code?: string } };
+    assert.equal(response.status, 429, JSON.stringify(body));
+    assert.equal(body.error?.code, "RATE_LIMITED");
+    assert.equal(parsed, 0, "准入拒绝的请求不应继续解析 multipart");
+  } finally {
+    releaseActive();
+  }
+  (await waiting)();
+
+  const form = new FormData();
+  form.append("photos", pngFile("admitted.png"));
+  const allowed = await uploadRoute(
+    new Request(url, {
+      method: "POST",
+      headers: { cookie, ...sameOriginHeaders() },
+      body: form,
+    }),
+    { params: Promise.resolve({ id: recordId }) },
+  );
+  const allowedBody = (await allowed.json()) as { success?: boolean };
+  assert.equal(allowed.status, 201, JSON.stringify(allowedBody));
+  assert.equal(allowedBody.success, true);
+  assert.equal((await activePhotos(recordId)).length, 1);
+  assert.deepEqual(repairPhotoUploadGate.snapshot(), { active: 0, waiting: 0 });
 });
 
 dbTest("PENDING 未审核：本人可上传、排序、删除照片", async () => {
@@ -487,11 +538,13 @@ dbTest("并发审核：文件存储期间审核完成，补传整体失败并清
     releasePut = resolve;
   });
   const deletedKeys: string[] = [];
+  let putCount = 0;
   const service = createRepairPhotoService({
     async put() {
       markPutStarted();
       await release;
-      return { storageKey: "repairs/race/photo.png" };
+      putCount += 1;
+      return { storageKey: `repairs/race/photo-${putCount}.png` };
     },
     async open() {
       return new Uint8Array();
@@ -511,7 +564,7 @@ dbTest("并发审核：文件存储期间审核完成，补传整体失败并清
   releasePut();
 
   await assert.rejects(upload, rejectsWith("REPAIR_STATE_INVALID"));
-  assert.deepEqual(deletedKeys, ["repairs/race/photo.png"]);
+  assert.deepEqual(deletedKeys, ["repairs/race/photo-1.png", "repairs/race/photo-2.png"]);
   assert.equal(
     await getDb().repairPhoto.count({ where: { repairRecordId: recordId, deletedAt: null } }),
     0,

@@ -19,6 +19,7 @@ import { digestSessionToken } from "../../src/lib/security/secrets";
 import { disconnectDb, getDb } from "../../src/lib/db/client";
 import type { AuthorizedActor } from "../../src/types/contracts";
 import { MEMBER_SKILL_LIMIT } from "../../src/types/contracts";
+import { TINY_PNG_BYTES } from "../support/image-fixtures";
 import { integrationTestsEnabled } from "./db-guard";
 import { sameOriginHeaders } from "./http-harness";
 
@@ -212,7 +213,7 @@ async function createApprovedRepair(
     owner,
   );
   // 照片是选填附件：这里仍上传一张，顺带覆盖照片路径。
-  const png = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
+  const png = TINY_PNG_BYTES;
   await repairPhotoService.upload(
     draft.id,
     [new File([png], "m3-case.png", { type: "image/png" })],
@@ -510,7 +511,7 @@ dbTest("M3 工作台只统计本人已通过记录且不计入草稿待审退回
     },
     owner,
   );
-  const pendingPng = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
+  const pendingPng = TINY_PNG_BYTES;
   await repairPhotoService.upload(
     pending.id,
     [new File([pendingPng], "m3-pending.png", { type: "image/png" })],

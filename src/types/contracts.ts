@@ -598,10 +598,16 @@ export type MemberBatchToggleResult = {
 
 export type RepairPhotoView = {
   id: string;
+  /** display 变体：新照片为 1280 长边 WebP；回填前历史照片为原图。 */
   contentUrl: string;
+  /** 320 长边缩略图；历史照片回填前回退为 contentUrl。 */
+  thumbnailUrl: string;
   originalName: string | null;
   mimeType: string;
   sizeBytes: number;
+  /** display 变体像素尺寸；历史照片回填前为 null。 */
+  width: number | null;
+  height: number | null;
   sortOrder: number;
   createdAt: string;
 };
