@@ -13,6 +13,7 @@ import {
   type RepairPhotoStorage,
   uploadLimits,
 } from "./repair-photo-storage";
+import { processRepairPhoto } from "./repair-photo-image";
 import type { AuthorizedActor, RepairPhotoView } from "@/types/contracts";
 
 export function createRepairPhotoService(storage: RepairPhotoStorage) {
@@ -32,8 +33,20 @@ export function createRepairPhotoService(storage: RepairPhotoStorage) {
           "REPAIR_PHOTO_LIMIT_EXCEEDED",
           `每条记录最多上传 ${limits.maxFiles} 张照片`,
         );
-      const prepared = await Promise.all(
-        files.map(async (file) => {
+      type StoredPhoto = {
+        storageKey: string;
+        thumbnailKey: string;
+        originalName: string | null;
+        mimeType: "image/webp";
+        sizeBytes: number;
+        sha256Digest: Buffer;
+        width: number;
+        height: number;
+      };
+      const stored: StoredPhoto[] = [];
+      try {
+        // 逐张读取、解码、落盘：最多 9 张时也不并发占用多张大图的内存。
+        for (const file of files) {
           if (file.size > limits.maxBytes)
             throw new AppError(
               "REPAIR_PHOTO_TOO_LARGE",
@@ -46,17 +59,32 @@ export function createRepairPhotoService(storage: RepairPhotoStorage) {
               "REPAIR_PHOTO_TYPE_UNSUPPORTED",
               "仅支持真实的 JPEG、PNG 或 WebP 图片",
             );
-          return {
-            file,
-            bytes,
-            mimeType: detected,
-            digest: createHash("sha256").update(bytes).digest(),
-          };
-        }),
-      );
-      const stored: Array<{ storageKey: string; item: (typeof prepared)[number] }> = [];
-      try {
-        for (const item of prepared) stored.push({ ...(await storage.put(item)), item });
+          const processed = await processRepairPhoto(bytes);
+          const display = await storage.put({
+            bytes: processed.display.bytes,
+            mimeType: "image/webp",
+          });
+          let thumbnail: { storageKey: string };
+          try {
+            thumbnail = await storage.put({
+              bytes: processed.thumbnail.bytes,
+              mimeType: "image/webp",
+            });
+          } catch (error) {
+            await storage.delete(display.storageKey);
+            throw error;
+          }
+          stored.push({
+            storageKey: display.storageKey,
+            thumbnailKey: thumbnail.storageKey,
+            originalName: file.name.slice(0, 255) || null,
+            mimeType: "image/webp",
+            sizeBytes: processed.display.bytes.byteLength,
+            sha256Digest: processed.display.digest,
+            width: processed.display.width,
+            height: processed.display.height,
+          });
+        }
         const now = new Date();
         const created = await inSerializableTransaction(async (tx) => {
           // 审核与补附件可能并发：锁记录行后复核状态和实际照片数，避免审核通过后照片才落库。
@@ -77,10 +105,13 @@ export function createRepairPhotoService(storage: RepairPhotoStorage) {
                   id: randomUUID(),
                   repairRecordId: recordId,
                   storageKey: entry.storageKey,
-                  originalName: entry.item.file.name.slice(0, 255) || null,
-                  mimeType: entry.item.mimeType,
-                  sizeBytes: entry.item.bytes.byteLength,
-                  sha256Digest: entry.item.digest,
+                  thumbnailKey: entry.thumbnailKey,
+                  originalName: entry.originalName,
+                  mimeType: entry.mimeType,
+                  sizeBytes: entry.sizeBytes,
+                  sha256Digest: new Uint8Array(entry.sha256Digest),
+                  width: entry.width,
+                  height: entry.height,
                   sortOrder: locked.photos.length + index,
                   uploadedByUserId: actor.userId!,
                   createdAt: now,
@@ -100,7 +131,12 @@ export function createRepairPhotoService(storage: RepairPhotoStorage) {
         });
         return created.map(view);
       } catch (error) {
-        await Promise.allSettled(stored.map((entry) => storage.delete(entry.storageKey)));
+        await Promise.allSettled(
+          stored.flatMap((entry) => [
+            storage.delete(entry.storageKey),
+            storage.delete(entry.thumbnailKey),
+          ]),
+        );
         if (error instanceof AppError) throw error;
         throw new AppError("REPAIR_PHOTO_STORAGE_FAILED", "照片保存失败", { cause: error });
       }
@@ -168,32 +204,51 @@ export function createRepairPhotoService(storage: RepairPhotoStorage) {
       return view(updated);
     },
 
-    async open(photoId: string, actor: AuthorizedActor) {
+    async open(photoId: string, actor: AuthorizedActor, variant: "display" | "thumb" = "display") {
       const photo = await getDb().repairPhoto.findFirst({
         where: { id: photoId, deletedAt: null },
         include: { record: { include: { memberProfile: true } } },
       });
       if (!photo || photo.record.deletedAt) throw new AppError("REPAIR_NOT_FOUND", "照片不存在");
       assertCanReadRepair(actor, photo.record);
-      try {
-        const bytes = await storage.open(photo.storageKey);
-        if (bytes.byteLength !== photo.sizeBytes) throw new Error("stored photo size mismatch");
-        return { photo, bytes };
-      } catch (error) {
-        await inSerializableTransaction((tx) =>
-          appendAuditLog(tx, {
-            actor,
-            actorType: "USER",
-            actorUserId: actor.userId,
-            action: "repair.photo.storage_failed",
-            targetType: "RepairPhoto",
-            targetId: photo.id,
-            result: "FAILURE",
-            errorCode: "REPAIR_PHOTO_STORAGE_FAILED",
-          }),
-        );
-        throw new AppError("REPAIR_PHOTO_STORAGE_FAILED", "照片暂时不可读取", { cause: error });
+      // 历史照片没有 thumbnailKey；新照片缩略图缺失也回退到展示图，避免 404。
+      const candidates =
+        variant === "thumb"
+          ? [photo.thumbnailKey, photo.storageKey].filter((key): key is string => Boolean(key))
+          : [photo.storageKey];
+      let lastError: unknown;
+      for (const key of candidates) {
+        try {
+          const bytes = await storage.open(key);
+          if (key === photo.storageKey && bytes.byteLength !== photo.sizeBytes)
+            throw new Error("stored photo size mismatch");
+          return {
+            photo,
+            bytes,
+            mimeType: key === photo.storageKey ? photo.mimeType : "image/webp",
+            etag: `"${createHash("sha256")
+              .update(`${Buffer.from(photo.sha256Digest).toString("hex")}:${variant}:${key}`)
+              .digest("hex")}"`,
+          };
+        } catch (error) {
+          lastError = error;
+        }
       }
+      await inSerializableTransaction((tx) =>
+        appendAuditLog(tx, {
+          actor,
+          actorType: "USER",
+          actorUserId: actor.userId,
+          action: "repair.photo.storage_failed",
+          targetType: "RepairPhoto",
+          targetId: photo.id,
+          result: "FAILURE",
+          errorCode: "REPAIR_PHOTO_STORAGE_FAILED",
+        }),
+      );
+      throw new AppError("REPAIR_PHOTO_STORAGE_FAILED", "照片暂时不可读取", {
+        cause: lastError,
+      });
     },
   };
 }
@@ -263,15 +318,20 @@ function view(photo: {
   originalName: string | null;
   mimeType: string;
   sizeBytes: number;
+  width: number | null;
+  height: number | null;
   sortOrder: number;
   createdAt: Date;
 }): RepairPhotoView {
   return {
     id: photo.id,
     contentUrl: `/api/v1/repair-photos/${photo.id}/content`,
+    thumbnailUrl: `/api/v1/repair-photos/${photo.id}/content?variant=thumb`,
     originalName: photo.originalName,
     mimeType: photo.mimeType,
     sizeBytes: photo.sizeBytes,
+    width: photo.width,
+    height: photo.height,
     sortOrder: photo.sortOrder,
     createdAt: photo.createdAt.toISOString(),
   };

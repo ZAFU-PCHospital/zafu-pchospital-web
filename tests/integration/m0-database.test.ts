@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
+import sharp from "sharp";
 
 import { inviteCodeService } from "../../src/features/invitations/invite-code-service";
 import { joinApplicationService } from "../../src/features/recruitment/join-application-service";
@@ -18,13 +20,16 @@ import {
   createRepairPhotoService,
   repairPhotoService,
 } from "../../src/features/repairs/repair-photo-service";
+import { localRepairPhotoStorage } from "../../src/features/repairs/repair-photo-storage";
 import {
   repairQueryService,
   listApprovedRepairsForAnalytics,
 } from "../../src/features/repairs/repair-query-service";
 import { repairReviewService } from "../../src/features/repairs/repair-review-service";
+import { GET as photoContentRoute } from "../../src/app/api/v1/repair-photos/[photoId]/content/route";
+import { TINY_JPEG_BYTES, TINY_PNG_BYTES } from "../support/image-fixtures";
 import { assertDestructiveDbAllowed, integrationTestsEnabled } from "./db-guard";
-import { sameOriginHeaders } from "./http-harness";
+import { sameOriginHeaders, sessionCookie } from "./http-harness";
 import { POST as loginRoute } from "../../src/app/api/v1/auth/login/route";
 import { GET as meRoute } from "../../src/app/api/v1/me/route";
 
@@ -701,12 +706,91 @@ dbTest("M2 草稿、照片、提交、审核、可见性与统计形成闭环", 
       ),
     (error) => error instanceof AppError && error.code === "REPAIR_VERSION_CONFLICT",
   );
-  const png = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
+  const png = TINY_PNG_BYTES;
   const uploaded = await repairPhotoService.upload(
     draft.id,
     [new File([png], "../../unsafe.png", { type: "image/png" })],
     owner,
   );
+  const photo = uploaded[0]!;
+  assert.equal(photo.mimeType, "image/webp");
+  assert.equal(photo.width, 8);
+  assert.equal(photo.height, 8);
+  assert.match(photo.thumbnailUrl, /variant=thumb/);
+  const storedPhoto = await getDb().repairPhoto.findUniqueOrThrow({ where: { id: photo.id } });
+  assert.equal(storedPhoto.mimeType, "image/webp");
+  assert.ok(storedPhoto.storageKey.endsWith(".webp"));
+  assert.ok(storedPhoto.thumbnailKey?.endsWith(".webp"));
+  assert.notEqual(storedPhoto.storageKey, storedPhoto.thumbnailKey);
+
+  const cookie = await sessionCookie(adminId);
+  const photoRequest = new Request(`http://localhost/api/v1/repair-photos/${photo.id}/content`, {
+    headers: { cookie },
+  });
+  const content = await photoContentRoute(photoRequest, {
+    params: Promise.resolve({ photoId: photo.id }),
+  });
+  assert.equal(content.status, 200);
+  assert.equal(content.headers.get("content-type"), "image/webp");
+  assert.equal(content.headers.get("cache-control"), "private, no-cache");
+  const etag = content.headers.get("etag");
+  assert.ok(etag);
+  const contentMeta = await sharp(Buffer.from(await content.arrayBuffer())).metadata();
+  assert.equal(contentMeta.width, 8);
+  assert.equal(contentMeta.height, 8);
+
+  const notModified = await photoContentRoute(
+    new Request(`http://localhost/api/v1/repair-photos/${photo.id}/content`, {
+      headers: { cookie, "if-none-match": etag },
+    }),
+    { params: Promise.resolve({ photoId: photo.id }) },
+  );
+  assert.equal(notModified.status, 304);
+
+  const thumb = await photoContentRoute(
+    new Request(`http://localhost/api/v1/repair-photos/${photo.id}/content?variant=thumb`, {
+      headers: { cookie },
+    }),
+    { params: Promise.resolve({ photoId: photo.id }) },
+  );
+  assert.equal(thumb.status, 200);
+  const thumbMeta = await sharp(Buffer.from(await thumb.arrayBuffer())).metadata();
+  assert.equal(thumbMeta.width, 8);
+  assert.equal(thumbMeta.height, 8);
+
+  // 历史照片没有 thumbnailKey/width/height：两个 variant 都必须回退到原图。
+  const legacyKey = await localRepairPhotoStorage.put({
+    bytes: TINY_PNG_BYTES,
+    mimeType: "image/png",
+  });
+  const legacyPhoto = await getDb().repairPhoto.create({
+    data: {
+      id: randomUUID(),
+      repairRecordId: draft.id,
+      storageKey: legacyKey.storageKey,
+      originalName: "legacy.png",
+      mimeType: "image/png",
+      sizeBytes: TINY_PNG_BYTES.byteLength,
+      sha256Digest: createHash("sha256").update(TINY_PNG_BYTES).digest(),
+      sortOrder: 99,
+      uploadedByUserId: owner.userId!,
+      createdAt: new Date(),
+    },
+  });
+  assert.equal((await repairPhotoService.open(legacyPhoto.id, owner)).mimeType, "image/png");
+  assert.equal(
+    (await repairPhotoService.open(legacyPhoto.id, owner, "thumb")).mimeType,
+    "image/png",
+  );
+  const legacyContent = await photoContentRoute(
+    new Request(`http://localhost/api/v1/repair-photos/${legacyPhoto.id}/content?variant=thumb`, {
+      headers: { cookie },
+    }),
+    { params: Promise.resolve({ photoId: legacyPhoto.id }) },
+  );
+  assert.equal(legacyContent.status, 200);
+  assert.equal(legacyContent.headers.get("content-type"), "image/png");
+
   const submitted = await repairService.submit(
     draft.id,
     { version: updated.version, idempotencyKey: randomUUID() },
@@ -797,7 +881,7 @@ dbTest("M2 数据库写入失败会补偿删除已写入的文件", async () => 
       deleted.push(key);
     },
   });
-  const png = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  const png = TINY_PNG_BYTES;
   await assert.rejects(
     () =>
       service.upload(
@@ -811,7 +895,7 @@ dbTest("M2 数据库写入失败会补偿删除已写入的文件", async () => 
     (error) => error instanceof AppError && error.code === "REPAIR_PHOTO_STORAGE_FAILED",
   );
   assert.equal(await getDb().repairPhoto.count({ where: { repairRecordId: draft.id } }), 0);
-  assert.equal(deleted.length, 2);
+  assert.equal(deleted.length, 4);
 });
 
 dbTest("M2 并发审核只有一个结果成功且事务记录一致", async () => {
@@ -846,7 +930,7 @@ dbTest("M2 并发审核只有一个结果成功且事务记录一致", async () 
     },
     owner,
   );
-  const jpeg = Uint8Array.from([0xff, 0xd8, 0xff, 0, 0, 0]);
+  const jpeg = TINY_JPEG_BYTES;
   await repairPhotoService.upload(
     draft.id,
     [new File([jpeg], "case.jpg", { type: "image/jpeg" })],

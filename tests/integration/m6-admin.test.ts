@@ -19,6 +19,7 @@ import { AppError, type ApiErrorCode } from "../../src/lib/api/errors";
 import { permissionsForRoles } from "../../src/lib/auth/permissions";
 import { disconnectDb, getDb } from "../../src/lib/db/client";
 import type { AuthorizedActor, MemberListEntry } from "../../src/types/contracts";
+import { TINY_PNG_BYTES } from "../support/image-fixtures";
 import { integrationTestsEnabled } from "./db-guard";
 import { callRoute, sessionCookie } from "./http-harness";
 
@@ -206,7 +207,7 @@ async function draftRepair(owner: AuthorizedActor) {
 /** 建一条 PENDING（已提交待审核）的维修记录。照片现在是选填附件。 */
 async function pendingRepair(owner: AuthorizedActor) {
   const updated = await draftRepair(owner);
-  const png = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
+  const png = TINY_PNG_BYTES;
   await repairPhotoService.upload(
     updated.id,
     [new File([png], "m6-case.png", { type: "image/png" })],

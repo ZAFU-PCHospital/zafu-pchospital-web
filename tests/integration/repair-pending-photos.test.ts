@@ -16,6 +16,7 @@ import { AppError } from "../../src/lib/api/errors";
 import { permissionsForRoles } from "../../src/lib/auth/permissions";
 import { disconnectDb, getDb } from "../../src/lib/db/client";
 import type { AuthorizedActor } from "../../src/types/contracts";
+import { TINY_PNG_BYTES } from "../support/image-fixtures";
 import { integrationTestsEnabled } from "./db-guard";
 
 const enabled = integrationTestsEnabled();
@@ -52,9 +53,7 @@ function rejectsWith(code: string) {
 }
 
 function pngFile(name: string): File {
-  return new File([Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])], name, {
-    type: "image/png",
-  });
+  return new File([TINY_PNG_BYTES], name, { type: "image/png" });
 }
 
 async function cleanupFixtures(): Promise<void> {
@@ -487,11 +486,13 @@ dbTest("并发审核：文件存储期间审核完成，补传整体失败并清
     releasePut = resolve;
   });
   const deletedKeys: string[] = [];
+  let putCount = 0;
   const service = createRepairPhotoService({
     async put() {
       markPutStarted();
       await release;
-      return { storageKey: "repairs/race/photo.png" };
+      putCount += 1;
+      return { storageKey: `repairs/race/photo-${putCount}.png` };
     },
     async open() {
       return new Uint8Array();
@@ -511,7 +512,7 @@ dbTest("并发审核：文件存储期间审核完成，补传整体失败并清
   releasePut();
 
   await assert.rejects(upload, rejectsWith("REPAIR_STATE_INVALID"));
-  assert.deepEqual(deletedKeys, ["repairs/race/photo.png"]);
+  assert.deepEqual(deletedKeys, ["repairs/race/photo-1.png", "repairs/race/photo-2.png"]);
   assert.equal(
     await getDb().repairPhoto.count({ where: { repairRecordId: recordId, deletedAt: null } }),
     0,

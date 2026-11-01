@@ -420,9 +420,12 @@ test("照片本地顺序：写操作后按展示顺序收敛为 0..n-1（issue #
   const photo = (id: string, sortOrder: number) => ({
     id,
     contentUrl: `/api/v1/repair-photos/${id}/content`,
+    thumbnailUrl: `/api/v1/repair-photos/${id}/content?variant=thumb`,
     originalName: null,
     mimeType: "image/png",
     sizeBytes: 1,
+    width: null,
+    height: null,
     sortOrder,
     createdAt: "2026-10-01T00:00:00.000Z",
   });

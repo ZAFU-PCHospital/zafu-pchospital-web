@@ -69,9 +69,12 @@ export function toRepairView(
     photos: record.photos.map((photo) => ({
       id: photo.id,
       contentUrl: `/api/v1/repair-photos/${photo.id}/content`,
+      thumbnailUrl: `/api/v1/repair-photos/${photo.id}/content?variant=thumb`,
       originalName: photo.originalName,
       mimeType: photo.mimeType,
       sizeBytes: photo.sizeBytes,
+      width: photo.width,
+      height: photo.height,
       sortOrder: photo.sortOrder,
       createdAt: photo.createdAt.toISOString(),
     })),

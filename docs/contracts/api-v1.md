@@ -273,8 +273,9 @@ PR 中记录影响范围。不强制单独评审；但若影响其他模块，�
 请求头，服务端按成员自助提交同一套校验直接创建 **`PENDING`** 记录，不再先建草稿；同一幂等键
 重试返回原记录（并发同键也只落一条）。原记录若已被管理员删除，重试返回 **409
 `REPAIR_STATE_INVALID`** 并提示刷新后重新提交，不会把已删除记录当作成功结果下发。新建页在
-提交前不落库（非图片字段暂存本机 sessionStorage）；提交前没有记录可挂照片，提交后由记录本人在
-审核前到详情页补充（issue #226）。
+提交前不落库（非图片字段暂存本机 sessionStorage）；#319 起可在提交前选择照片，确认提交后
+先建单、再复用 `POST /api/v1/repairs/:id/photos` 批量上传；记录本人也可在审核前到详情页补充
+（issue #226）。
 编辑既有记录（`DRAFT` / `REJECTED`）携带 `version`；过期版本返回
 `REPAIR_VERSION_CONFLICT`。列表支持分页、成员、分类、状态、结果、日期、疑难、典型和关键词
 筛选；普通成员只能看到本人全部状态与他人的 `APPROVED` 记录。照片内容接口要求有效 Session，
@@ -562,6 +563,20 @@ DELETE     /api/v1/admin/comments/:id
   客户端据此在**选文件时**先拦超限项；服务端仍逐张复检，超限返回 413
   `REPAIR_PHOTO_TOO_LARGE`，消息带文件名与实际体积（`「xx.jpg」12.4 MB，超过单张 10 MB 的上限`）。
   `maxBytes` 是**单张**上限，不是本次合计。
+
+### 维修照片变体（issue #322）
+
+- 新上传不再保留原图：服务端按真实文件头确认格式后，自动纠正 EXIF 方向、移除 EXIF/GPS，
+  生成 **display 1280 长边 / thumb 320 长边** WebP（quality 80 / 75），随后只落这两个变体。
+- `RepairPhotoView` 增加 `thumbnailUrl`、`width`、`height`；`contentUrl` 继续表示 display，
+  `thumbnailUrl` 为 `...?variant=thumb`。历史照片回填前 `width/height` 为 null，
+  `thumbnailUrl` 回退到原图。
+- `GET /api/v1/repair-photos/:photoId/content` 支持 `variant=display|thumb`（缺省 display）；
+  仍要求有效 Session。响应使用 `Cache-Control: private, no-cache`、强 ETag 与
+  `If-None-Match` 304；内容变化时 ETag 变化。不提供原图 variant。
+- 历史记录在 P1b 回填前继续可读：`storage_key` 仍是原图，缩略图请求回退到它；回填完成后
+  `storage_key` 指向 display，删除原图并写入 `thumbnail_key`、`width`、`height`。
+- `POST /api/v1/repairs/:id/photos` 的批量语义、数量/体积限制、权限和审核窗口不变。
 
 ### 审核前补充照片（issue #226）
 
