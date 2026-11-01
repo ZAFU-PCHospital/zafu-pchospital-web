@@ -427,7 +427,7 @@ Warning 色相刻意偏琥珀（远离 accent 的信号黄 / 钴蓝），避免�
 | 组件                                                                                                         | 路径         | 使用位置                                                           |
 | ------------------------------------------------------------------------------------------------------------ | ------------ | ------------------------------------------------------------------ |
 | `Hero` / `Ticker` / `AboutSection` / `ServicesSection` / `ProcessSection` / `DocsSection` / `ContactSection` | `home/`      | 仅首页                                                             |
-| `DocList`                                                                                                    | `docs/`      | 首页文档区块与 `/docs` 页共用；`DocReadout` 保留但首页已不再挂载   |
+| `DocList` / `DocReadout`                                                                                     | `docs/`      | 组件保留；首页文档区已移除目录预览与仓库读数（issue #330）         |
 | `MemberSignup`                                                                                               | `join/`      | 仅 `/join`                                                         |
 | `MemberDashboard` / `MemberShortcuts` / `MemberUpcoming` / 工作台区块                                        | `member/`    | `/member` 工作台                                                   |
 | `RepairComments` / `FavoriteToggle` / `FavoriteList` / `NotificationInbox` / `RepairFlagControls`            | `community/` | 维修详情、工作台摘要、`/member/notifications`、`/member/favorites` |

@@ -299,7 +299,7 @@ test("首页首屏：Hero 维修读数 + 跑马灯贴底；第二屏收进 home-
 
   const docs = renderToStaticMarkup(React.createElement(DocsSection));
   assert.match(docs, /全套维修与排障文档/);
-  assert.doesNotMatch(docs, /仓库状态|目录条目|class="readout"/);
+  assert.doesNotMatch(docs, /仓库状态|目录条目|class="readout"|docpreview|src\/ ·/);
 
   f.policy.publicRepairStatsEnabled = false;
   f.policy.publicRankingsEnabled = false;

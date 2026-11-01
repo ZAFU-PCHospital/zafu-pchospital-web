@@ -4560,20 +4560,6 @@ html[data-theme="black-yellow"] {
   }
 
   /* -------------------------------------------------------------- 文档 */
-  .docs__grid {
-    display: grid;
-    gap: clamp(2rem, 5vw, 4rem);
-    align-items: start;
-    margin-bottom: var(--s-8);
-  }
-  /* issue #330：首页不再展示仓库读数，文档区改为单列。 */
-  .docs__grid.docs__grid--single {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .docs__grid .lead {
-    margin: 0 0 var(--s-6);
-  }
-
   .docpreview,
   .card {
     border: 1px solid var(--line);
@@ -4998,9 +4984,6 @@ html[data-theme="black-yellow"] {
     .about__lead {
       grid-template-columns: minmax(0, 1.35fr) minmax(0, 0.9fr);
       gap: clamp(2rem, 5vw, 5rem);
-    }
-    .docs__grid {
-      grid-template-columns: minmax(0, 1.3fr) minmax(220px, 0.7fr);
     }
     .hero__meta {
       display: block;
