@@ -129,4 +129,5 @@ sudo pnpm repair:photos:prune-originals \
 - 新照片上传、变体生成、内容接口：见 P1（#322）。
 - 客户端压缩、HEIC 提示与上传进度：P2。
 - 前端缩略图 / lightbox：P3。
-- 孤儿清理与磁盘告警：P3+。
+- 孤儿清理与存储/磁盘指标：见 [维修照片存储运维（P3+）](photo-storage-ops.md)（issue #326）；
+  容量告警沿用现有 `tools/backup` 的 `DISK_WARN_PCT` / `MIN_FREE_BYTES` / `ALERT_HOOK`，未另建一套。

@@ -33,6 +33,7 @@
     "retire:repair-drafts": "tsx --env-file=.env tools/retire-repair-drafts.ts",
     "repair:photos:backfill": "tsx --env-file=.env tools/repair-photo-backfill.ts",
     "repair:photos:prune-originals": "tsx --env-file=.env tools/repair-photo-prune-originals.ts",
+    "repair:photos:orphans": "tsx --env-file=.env tools/repair-photo-orphans.ts",
     "test": "tsx --test tests/**/*.test.ts",
     "test:unit": "tsx --test tests/unit/**/*.test.ts",
     "test:db": "tsx --env-file=.env --test --test-concurrency=1 tests/integration/**/*.test.ts"

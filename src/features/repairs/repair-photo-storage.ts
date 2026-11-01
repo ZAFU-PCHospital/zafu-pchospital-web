@@ -1,5 +1,5 @@
-import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
-import { extname, isAbsolute, posix, relative, resolve, sep } from "node:path";
+import { mkdir, readFile, readdir, unlink, writeFile } from "node:fs/promises";
+import { extname, isAbsolute, join, posix, relative, resolve, sep } from "node:path";
 import { randomUUID } from "node:crypto";
 import { AppError } from "@/lib/api/errors";
 
@@ -49,6 +49,27 @@ export const localRepairPhotoStorage: RepairPhotoStorage = {
     }
   },
 };
+
+/** 列出 `repairs/` 下所有普通文件键；不跟随符号链接，目录不存在时返回空。 */
+export async function listStoredRepairFiles(): Promise<string[]> {
+  const files: string[] = [];
+  await walk(join(uploadRoot(), "repairs"), "");
+  return files;
+
+  async function walk(dir: string, prefix: string): Promise<void> {
+    let entries;
+    try {
+      entries = await readdir(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const relativePath = prefix ? `${prefix}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) await walk(join(dir, entry.name), relativePath);
+      else if (entry.isFile()) files.push(`repairs/${relativePath}`);
+    }
+  }
+}
 
 /** 维修照片键必须是规范的 `repairs/...` 相对路径，拒绝 `.` / `..` 与空段。 */
 export function isRepairStorageKey(storageKey: string): boolean {
