@@ -28,8 +28,6 @@ const REQUIRED_FIELDS = [
   "db_bytes",
   "uploads_files",
   "uploads_bytes",
-  "sha256_db.sql.gz",
-  "sha256_uploads.tar.gz",
 ] as const;
 
 /**
@@ -61,8 +59,8 @@ export async function verifyBackupManifest(manifestPath: string): Promise<Verifi
   if (uploadsFiles <= 0) throw new Error("备份 uploads_files 为 0，拒绝作为照片删除的备份");
   if (uploadsBytes <= 0) throw new Error("备份 uploads_bytes 无效");
 
-  const dbSha256 = fields.get("sha256_db.sql.gz")!;
-  const uploadsSha256 = fields.get("sha256_uploads.tar.gz")!;
+  const dbSha256 = readSha256(fields, "db.sql.gz");
+  const uploadsSha256 = readSha256(fields, "uploads.tar.gz");
   for (const [name, digest] of [
     ["db", dbSha256],
     ["uploads", uploadsSha256],
@@ -127,6 +125,23 @@ export async function verifyUploadsArchiveContains(
   const missing = keys.filter((key) => !entries.has(`uploads/${key}`));
   if (missing.length)
     throw new Error(`备份 uploads.tar.gz 缺少 ${missing.length} 个待处理原图，拒绝执行`);
+}
+
+/**
+ * backup.sh 的 manifest 实际写成 `sha256_<备份目录>/db.sql.gz=...`；
+ * 早期夹具用 basename 形式。两种都接受，但必须能在清单里找到对应归档。
+ */
+function readSha256(fields: Map<string, string>, fileName: string): string {
+  const direct = fields.get(`sha256_${fileName}`);
+  if (direct) return direct;
+  for (const [key, value] of fields) {
+    if (
+      key.startsWith("sha256_") &&
+      (key.endsWith(`/${fileName}`) || key.endsWith("\\" + fileName))
+    )
+      return value;
+  }
+  throw new Error(`备份清单缺少 ${fileName} SHA256`);
 }
 
 function parseManifest(text: string): Map<string, string> {

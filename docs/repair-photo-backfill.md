@@ -62,10 +62,11 @@ sudo pnpm repair:photos:backfill --apply \
 结果清单 `photo-backfill-<runId>.json` 是后续删除原图的唯一依据，**保留它**。若一轮有失败项、
 修复后再次 apply，会把成功项写到多份清单；删除原图时可重复 `--manifest`，工具按 photoId 去重。
 
-## 3. 观察期
+## 3. 备份观察期
 
-- 回填完成到删除原图之间保留至少一个观察期（建议不少于 7 天，最终由负责人确认）。
-- 观察期内不要删除定时备份；发现展示异常时可用备份恢复数据库和 uploads。
+- 回填 apply 后完成全量验证（逐张检查 display / thumb），即可执行原图删除；删除前必须再跑一次备份。
+- 备份至少保留 7 天，观察期内不要删除备份；发现展示异常时用备份恢复数据库和 uploads。
+- 若要求保留单文件回滚能力，可以把原图删除推迟到观察期结束；这是可选的保守做法，不是默认流程。
 - 可以随时重跑 dry-run；已经回填的照片不会被重复处理。
 
 ## 4. 原图删除
@@ -93,7 +94,7 @@ sudo pnpm repair:photos:prune-originals \
   --json=/opt/zafu-pchospital-backups/photo-prune-result.json
 ```
 
-删除前建议再跑一次备份，确保备份包含回填后的数据库与**尚未删除的原图**。工具只调用
+删除前**必须**再跑一次备份，确保备份包含回填后的数据库与**尚未删除的原图**。工具只调用
 `repair_photos` 清单里的原图键；`repairs/` 之外的静态文件、清单外孤儿文件和备份目录都不会被碰。
 `--apply` 必须同时提供 `--json=<结果清单>`，作为不可逆删除的持久记录；每成功删除一张原图
 会写 `repair.photo.original.pruned` 审计（photoId、原图键、runId）。

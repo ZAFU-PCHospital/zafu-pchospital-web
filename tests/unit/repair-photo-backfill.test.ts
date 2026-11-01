@@ -238,6 +238,33 @@ test("上传归档必须包含清单中的原图", { skip: !hasTar() }, async ()
   );
 });
 
+test("备份清单兼容 backup.sh 的完整路径 SHA 字段", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "photo-backup-fullpath-"));
+  tempDirs.push(dir);
+  const db = Buffer.from("db-archive");
+  const uploads = Buffer.from("uploads-archive");
+  await writeFile(join(dir, "db.sql.gz"), db);
+  await writeFile(join(dir, "uploads.tar.gz"), uploads);
+  const key = (name: string) => `sha256_${join(dir, name).split("\\").join("/")}`;
+  await writeFile(
+    join(dir, "manifest.txt"),
+    [
+      "created_at=2026-11-01T00:00:00Z",
+      "db_tables=39",
+      "db_inserts=10",
+      `db_bytes=${db.byteLength}`,
+      "uploads_files=4",
+      `uploads_bytes=${uploads.byteLength}`,
+      `${key("db.sql.gz")}=${hash(db)}`,
+      `${key("uploads.tar.gz")}=${hash(uploads)}`,
+    ].join("\n"),
+  );
+
+  const info = await verifyBackupManifest(join(dir, "manifest.txt"));
+  assert.equal(info.dbSha256, hash(db));
+  assert.equal(info.uploadsSha256, hash(uploads));
+});
+
 test("备份清单：缺字段或表数不足拒绝", async () => {
   const dir = await mkdtemp(join(tmpdir(), "photo-backup-bad-"));
   tempDirs.push(dir);
