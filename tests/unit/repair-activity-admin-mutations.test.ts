@@ -5,6 +5,7 @@ import test, { type TestContext } from "node:test";
 import type { ReactElement, ReactNode } from "react";
 
 import { adminCopy } from "../../src/config/admin";
+import { clearAdminCache } from "../../src/features/admin/admin-client";
 import type * as client from "../../src/features/admin/admin-client";
 import { checkClientSession, invalidateClientSession } from "../../src/lib/auth/client-session";
 
@@ -46,8 +47,10 @@ async function mount(t: TestContext) {
   });
   const slots: unknown[] = [];
   let cursor = 0;
-  let mounted = false;
   const effects: (() => void)[] = [];
+  const sameDependencies = (before: readonly unknown[] | undefined, after: readonly unknown[]) =>
+    before?.length === after.length &&
+    before.every((value, index) => Object.is(value, after[index]));
   t.mock.method(React, "useState", <S>(initial: S) => {
     const index = cursor++;
     if (!(index in slots)) slots[index] = initial;
@@ -64,9 +67,18 @@ async function mount(t: TestContext) {
     if (!(index in slots)) slots[index] = { current: initial };
     return slots[index];
   });
-  t.mock.method(React, "useCallback", (fn: unknown) => fn);
-  t.mock.method(React, "useEffect", (fn: () => void) => {
-    if (!mounted) effects.push(fn);
+  t.mock.method(React, "useCallback", (fn: unknown, dependencies: readonly unknown[]) => {
+    const index = cursor++;
+    const previous = slots[index] as { fn: unknown; dependencies: readonly unknown[] } | undefined;
+    if (!sameDependencies(previous?.dependencies, dependencies))
+      slots[index] = { fn, dependencies };
+    return (slots[index] as { fn: unknown }).fn;
+  });
+  t.mock.method(React, "useEffect", (fn: () => void, dependencies: readonly unknown[]) => {
+    const index = cursor++;
+    if (!sameDependencies(slots[index] as readonly unknown[] | undefined, dependencies))
+      effects.push(fn);
+    slots[index] = dependencies;
   });
   const activity = {
     id: "a",
@@ -93,6 +105,8 @@ async function mount(t: TestContext) {
   };
   let mutation: () => Promise<client.AdminApiResult<unknown>> = async () => ok({ deleted: true });
   let readFailure: client.AdminApiResult<never> | undefined;
+  let emptyReads = false;
+  let readGate: Promise<void> | undefined;
   let mutations = 0;
   let reads = 0;
   const signals: (AbortSignal | undefined)[] = [];
@@ -121,7 +135,8 @@ async function mount(t: TestContext) {
     }
     if (path.endsWith("/registrations")) {
       reads++;
-      return response(readFailure ?? ok([structuredClone(registration)]));
+      await readGate;
+      return response(readFailure ?? ok(emptyReads ? [] : [structuredClone(registration)]));
     }
     return response(ok([activity]));
   });
@@ -136,13 +151,30 @@ async function mount(t: TestContext) {
   });
   const { RepairActivityAdminPanel } =
     await import("../../src/components/admin/RepairActivityAdminPanel");
+  const previousDocument = Object.getOwnPropertyDescriptor(globalThis, "document");
+  const outsideControl = {};
+  const insideControl = {};
+  const focusDocument = { body: { style: { overflow: "" } }, activeElement: outsideControl };
+  const focusCalls: (FocusOptions | undefined)[] = [];
+  const parentDialog = {
+    contains: (element: object) => element === parentDialog || element === insideControl,
+    focus(options?: FocusOptions) {
+      focusDocument.activeElement = parentDialog;
+      focusCalls.push(options);
+    },
+  };
+  Object.defineProperty(globalThis, "document", { configurable: true, value: focusDocument });
+  t.after(() => {
+    if (previousDocument) Object.defineProperty(globalThis, "document", previousDocument);
+    else Reflect.deleteProperty(globalThis, "document");
+  });
   const view = () => {
     cursor = 0;
     const node = RepairActivityAdminPanel();
-    if (!mounted) {
-      mounted = true;
-      effects.splice(0).forEach((fn) => fn());
-    }
+    const parent = find(node, (element) => element.props.title === copy.title);
+    const ref = parent?.props.dialogRef as { current: unknown } | undefined;
+    if (ref) ref.current = parentDialog;
+    effects.splice(0).forEach((fn) => fn());
     return node;
   };
   const button = (label: string) => {
@@ -169,12 +201,38 @@ async function mount(t: TestContext) {
     dialog,
     registration,
     signals,
+    focus: {
+      outside() {
+        focusDocument.activeElement = outsideControl;
+      },
+      inside() {
+        focusDocument.activeElement = insideControl;
+      },
+      isParent: () => focusDocument.activeElement === parentDialog,
+      isInsideControl: () => focusDocument.activeElement === insideControl,
+      scrollLock: () => focusDocument.body.style.overflow,
+      calls: focusCalls,
+    },
     counts: () => ({ mutations, reads }),
     setMutation(fn: typeof mutation) {
       mutation = fn;
     },
     failReads(result: client.AdminApiResult<never>) {
       readFailure = result;
+    },
+    emptyReads() {
+      emptyReads = true;
+    },
+    holdReads() {
+      clearAdminCache();
+      let release!: () => void;
+      readGate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      return release;
+    },
+    reopen() {
+      (button(copy.title).props.onClick as () => void)();
     },
     remove() {
       (button(copy.delete).props.onClick as () => void)();
@@ -213,6 +271,72 @@ test("正常删除成功后关闭确认窗并刷新名单", async (t) => {
   await app.confirm();
   assert.equal(app.dialog(copy.delete), undefined);
   assert.equal(app.counts().reads, 2);
+});
+
+test("删除最后一行且名单为空时，父弹窗仍接回焦点与滚动锁", async (t) => {
+  const app = await mount(t);
+  app.remove();
+  app.emptyReads();
+  app.focus.outside();
+  await app.confirm();
+  assert.equal(app.dialog(copy.delete), undefined);
+  assert.match(text(app.dialog(copy.title)), new RegExp(copy.empty));
+  assert.equal(app.focus.isParent(), true);
+  assert.equal(app.focus.scrollLock(), "hidden");
+  assert.deepEqual(app.focus.calls.at(-1), { preventScroll: true });
+});
+
+test("名单从 loading 到 ready 后恢复弹窗外的焦点，空名单同样适用", async (t) => {
+  const app = await mount(t);
+  app.emptyReads();
+  const release = app.holdReads();
+  app.reopen();
+  app.view();
+  app.focus.outside();
+  release();
+  await setImmediate();
+  app.view();
+  assert.equal(app.focus.isParent(), true);
+  assert.equal(app.focus.scrollLock(), "hidden");
+});
+
+test("名单加载失败时仍由父弹窗接回焦点", async (t) => {
+  const app = await mount(t);
+  const release = app.holdReads();
+  app.failReads(failure("NETWORK_ERROR"));
+  app.reopen();
+  app.view();
+  app.focus.outside();
+  release();
+  await setImmediate();
+  assert.match(text(app.dialog(copy.title)), /失败：NETWORK_ERROR/);
+  assert.equal(app.focus.isParent(), true);
+});
+
+test("名单加载完成不抢走弹窗内控件的焦点", async (t) => {
+  const app = await mount(t);
+  const release = app.holdReads();
+  app.reopen();
+  app.view();
+  app.focus.inside();
+  const before = app.focus.calls.length;
+  release();
+  await setImmediate();
+  app.view();
+  assert.equal(app.focus.isInsideControl(), true);
+  assert.equal(app.focus.calls.length, before);
+});
+
+test("删除返回 deleted false 时显示错误，保留确认窗并解除忙碌状态", async (t) => {
+  const app = await mount(t);
+  app.setMutation(async () => ok({ deleted: false }));
+  app.remove();
+  await app.confirm();
+  const dialog = app.dialog(copy.delete);
+  assert.ok(dialog);
+  assert.ok(text(dialog).includes(copy.deleteFailed));
+  assert.equal(dialog.props.busy, false);
+  assert.deepEqual(app.counts(), { mutations: 1, reads: 1 });
 });
 
 test("正常保存成功后关闭编辑窗并刷新整份名单", async (t) => {

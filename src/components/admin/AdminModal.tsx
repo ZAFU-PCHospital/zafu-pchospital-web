@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, type ReactNode } from "react";
+import { useEffect, useId, useRef, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 
 import { Button } from "@/components/ui/Button";
@@ -37,15 +37,19 @@ export function AdminModal({
   onClose,
   children,
   size = "default",
+  dialogRef,
 }: {
   title: string;
   subtitle?: string;
   onClose: () => void;
   children: ReactNode;
   size?: "default" | "compact";
+  /** 供嵌套窗口关闭后恢复焦点，不依赖正文是否有数据。 */
+  dialogRef?: RefObject<HTMLDivElement | null>;
 }) {
   const titleId = useId();
-  const windowRef = useRef<HTMLDivElement>(null);
+  const ownWindowRef = useRef<HTMLDivElement>(null);
+  const windowRef = dialogRef ?? ownWindowRef;
   /** 打开前的焦点位置：关闭后要还回去，否则键盘用户的焦点会掉到 `<body>` 上。 */
   const returnFocusRef = useRef<HTMLElement | null>(null);
 
@@ -61,7 +65,7 @@ export function AdminModal({
       // 焦点原本就在 `<body>` 上，`body.focus()` 是空操作，不需要特殊分支。
       returnFocusRef.current?.focus();
     };
-  }, []);
+  }, [windowRef]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {

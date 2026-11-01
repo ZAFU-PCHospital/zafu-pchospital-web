@@ -44,7 +44,7 @@ export function RepairActivityAdminPanel() {
   const [registrationProblem, setRegistrationProblem] = useState("");
   const [registrationMutationProblem, setRegistrationMutationProblem] = useState("");
   const registrationWriteRef = useRef(false);
-  const registrationListRef = useRef<HTMLParagraphElement>(null);
+  const registrationDialogRef = useRef<HTMLDivElement>(null);
   const [editingRegistration, setEditingRegistration] = useState<RegistrationAdminView | null>(
     null,
   );
@@ -75,8 +75,9 @@ export function RepairActivityAdminPanel() {
     if (!registrationActivity || editingRegistration || removingRegistration) return;
     // 子窗口关闭后仍在名单中：维持滚动锁，并把焦点交回仍存在的名单窗口。
     document.body.style.overflow = "hidden";
-    registrationListRef.current?.closest<HTMLElement>('[role="dialog"]')?.focus();
-  }, [registrationActivity, editingRegistration, removingRegistration]);
+    const dialog = registrationDialogRef.current;
+    if (dialog && !dialog.contains(document.activeElement)) dialog.focus({ preventScroll: true });
+  }, [registrationActivity, registrationState, editingRegistration, removingRegistration]);
 
   async function create(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -243,7 +244,9 @@ export function RepairActivityAdminPanel() {
         }
       }
       if (!deleted) {
-        if (!result.ok) setRegistrationMutationProblem(result.message);
+        setRegistrationMutationProblem(
+          result.ok ? copy.registrations.deleteFailed : result.message,
+        );
         return;
       }
       setRegistrations((items) =>
@@ -594,6 +597,7 @@ export function RepairActivityAdminPanel() {
 
       {registrationActivity ? (
         <AdminModal
+          dialogRef={registrationDialogRef}
           title={copy.registrations.title}
           subtitle={registrationActivity.title}
           onClose={() => {
@@ -614,7 +618,7 @@ export function RepairActivityAdminPanel() {
           ) : null}
           {registrationState === "ready" && registrations.length > 0 ? (
             <>
-              <p className="muted" ref={registrationListRef}>
+              <p className="muted">
                 {copy.registrations.activeCount.replace(
                   "{count}",
                   String(activeRegistrations.length),
