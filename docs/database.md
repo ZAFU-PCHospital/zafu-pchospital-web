@@ -183,6 +183,12 @@ M6 批次 2 的其余能力（技能标签库 CRUD、原评论管理、邀请码
 `20261023000000_member_department_index` 为成员部门列补索引（issue #210 列级筛选）。
 发布需先部署迁移再启用新版应用。
 
+照片上传幂等（issue #324）迁移 `20261101010000_repair_photo_upload_key`：`repair_photos`
+加可空 `upload_key VARCHAR(160)` 与 `(repair_record_id, upload_key)` 唯一索引。同一记录内
+同一键只落一行，客户端响应丢失后重试同一张照片会返回原行；单文件请求保存原键，批量请求
+按 `<key>:<index>` 保存派生键。历史行与不带键的旧客户端保持 `NULL`（唯一索引允许多个
+NULL），删除照片时释放键。不新增表、权限或回填。
+
 ```powershell
 pnpm db:health
 pnpm test

@@ -447,6 +447,8 @@ model RepairPhoto {
   /// display 变体的像素尺寸；历史记录回填前为空。
   width            Int?
   height           Int?
+  /// 上传幂等键（issue #324）：同一记录内唯一；响应丢失后客户端重试同一文件时复用原行。
+  uploadKey        String?      @map("upload_key") @db.VarChar(160)
   sortOrder        Int          @default(0) @map("sort_order")
   uploadedByUserId String       @map("uploaded_by_user_id") @db.Char(36)
   createdAt        DateTime     @map("created_at") @db.DateTime(3)
@@ -454,6 +456,7 @@ model RepairPhoto {
   record           RepairRecord @relation(fields: [repairRecordId], references: [id], onDelete: Restrict)
   uploader         User         @relation("RepairPhotoUploader", fields: [uploadedByUserId], references: [id], onDelete: Restrict)
 
+  @@unique([repairRecordId, uploadKey], map: "repair_photos_record_upload_key_uq")
   @@index([repairRecordId, deletedAt, sortOrder, createdAt], map: "repair_photos_record_sort_idx")
   @@map("repair_photos")
 }

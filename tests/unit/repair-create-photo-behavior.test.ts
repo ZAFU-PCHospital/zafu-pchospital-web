@@ -4,6 +4,9 @@ import { setImmediate } from "node:timers/promises";
 import test, { before, type TestContext } from "node:test";
 import type { ReactElement, ReactNode } from "react";
 
+import type { RepairDetailView, RepairPhotoView } from "../../src/types/contracts";
+import { repairEditorCopy } from "../../src/config/repairs";
+
 const require = createRequire(import.meta.url);
 const React = require("react") as typeof import("react");
 
@@ -47,7 +50,19 @@ function findButton(node: ReactNode, label: string) {
 const photoLimits = { maxBytes: 10 * 1024 * 1024, maxFiles: 9 };
 
 /** 复用既有客户端测试的 hook 存储方式；只驱动真实 JSX / effect，不启动 Next。 */
-async function mount(t: TestContext) {
+async function mount(
+  t: TestContext,
+  options: {
+    recordId?: string;
+    allowSaveDraft?: boolean;
+    prepare?: (file: File) => Promise<{
+      file: File;
+      compressed: boolean;
+      originalSize: number;
+      preparedSize: number;
+    }>;
+  } = {},
+) {
   t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-10-31T06:00:00Z") });
   (globalThis as unknown as { React: typeof React }).React = React;
   const originals = ["window", "document"].map(
@@ -139,9 +154,57 @@ async function mount(t: TestContext) {
       navigations.push(href);
     },
   };
+  const uploads: {
+    recordId: string;
+    file: File;
+    uploadKey?: string;
+    onProgress: (ratio: number) => void;
+    finish(ids: string[]): void;
+    fail(error: unknown): void;
+  }[] = [];
+  const prepareCalls: File[] = [];
+  const preparePhotoFn =
+    options.prepare ??
+    (async (file: File) => ({
+      file,
+      compressed: false,
+      originalSize: file.size,
+      preparedSize: file.size,
+    }));
+  const uploadPhotoFn = ({
+    recordId,
+    file,
+    uploadKey,
+    onProgress,
+  }: {
+    recordId: string;
+    file: File;
+    uploadKey?: string;
+    onProgress: (ratio: number) => void;
+  }) =>
+    new Promise<RepairPhotoView[]>((resolve, reject) => {
+      uploads.push({
+        recordId,
+        file,
+        uploadKey,
+        onProgress,
+        finish: (ids) => resolve(ids.map((id) => ({ id }) as RepairPhotoView)),
+        fail: reject,
+      });
+    });
   const view = () => {
     cursor = effectIndex = callbackIndex = 0;
-    const node = RepairEditorView({ allowSaveDraft: false, photoLimits, router });
+    const node = RepairEditorView({
+      recordId: options.recordId,
+      allowSaveDraft: options.allowSaveDraft ?? false,
+      photoLimits,
+      router,
+      preparePhotoFn: async (file) => {
+        prepareCalls.push(file);
+        return preparePhotoFn(file);
+      },
+      uploadPhotoFn,
+    });
     const queue = pendingEffects;
     pendingEffects = [];
     queue.forEach((run) => run());
@@ -164,7 +227,7 @@ async function mount(t: TestContext) {
   });
 
   view();
-  return { view, requests, finish, navigations };
+  return { view, requests, finish, navigations, uploads, prepareCalls };
 }
 
 type Ui = Awaited<ReturnType<typeof mount>>;
@@ -192,6 +255,88 @@ async function loadReady(ui: Ui) {
     data: [{ id: "member-2", name: "协作成员" }],
   });
   ui.view();
+}
+
+function editRecord(): RepairDetailView {
+  return {
+    id: "record-1",
+    member: { id: "member-1", name: "演示成员" },
+    participants: [{ id: "member-1", name: "演示成员" }],
+    repairDate: "2026-10-31",
+    durationMinutes: null,
+    category: {
+      id: "clean",
+      code: "clean",
+      name: "清灰保养",
+      description: null,
+      sortOrder: 1,
+      isActive: true,
+    },
+    deviceModel: null,
+    ownerName: null,
+    ownerPhone: null,
+    content: null,
+    result: "COMPLETED",
+    remark: null,
+    status: "DRAFT",
+    isDifficult: false,
+    isTypical: false,
+    version: 1,
+    submittedAt: null,
+    reviewedAt: null,
+    createdAt: "2026-10-31T06:00:00.000Z",
+    updatedAt: "2026-10-31T06:00:00.000Z",
+    photos: [],
+    reviews: [],
+    timeline: [],
+    canEdit: true,
+    canAttachPhotos: true,
+    canReview: false,
+    canFlag: false,
+    isFavorited: false,
+    photoLimits,
+  };
+}
+
+async function loadEditReady(ui: Ui) {
+  await ui.finish(0, { success: true, data: editRecord() });
+  await ui.finish(1, {
+    success: true,
+    data: [
+      {
+        id: "clean",
+        code: "clean",
+        name: "清灰保养",
+        description: null,
+        sortOrder: 1,
+        isActive: true,
+      },
+    ],
+  });
+  await ui.finish(2, { success: true, data: [{ id: "member-2", name: "协作成员" }] });
+  ui.view();
+}
+
+function addEditPhotos(ui: Ui) {
+  const picker = findElement(
+    ui.view(),
+    (element) => typeof element.props.onAdd === "function" && Array.isArray(element.props.photos),
+  );
+  assert.ok(picker);
+  (picker.props.onAdd as (files: File[]) => void)([
+    new File([new Uint8Array(4)], "before.png", { type: "image/png" }),
+    new File([new Uint8Array(4)], "after.png", { type: "image/png" }),
+  ]);
+  ui.view();
+}
+
+function summaryOf(ui: Ui) {
+  const summary = findElement(
+    ui.view(),
+    (element) => element.props.record !== undefined && Array.isArray(element.props.photos),
+  );
+  assert.ok(summary);
+  return summary;
 }
 
 function changeField(
@@ -244,139 +389,72 @@ function submitConfirm(ui: Ui) {
   (findButton(ui.view(), "确认提交")!.props.onClick as () => void)();
 }
 
-test("确认提交先建单再批量上传；失败重试不重复建单，上传中不可移除照片", async (t) => {
+test("逐张上传：单张失败只重试失败项，不重复建单，上传中不可移除照片", async (t) => {
   const ui = await mount(t);
-  await ui.finish(0, {
-    success: true,
-    data: [
-      {
-        id: "clean",
-        code: "clean",
-        name: "清灰保养",
-        description: null,
-        sortOrder: 1,
-        isActive: true,
-      },
-    ],
-  });
-  await ui.finish(1, {
-    success: true,
-    data: { memberProfileId: "member-1", displayName: "演示成员" },
-  });
-  await ui.finish(2, {
-    success: true,
-    data: [{ id: "member-2", name: "协作成员" }],
-  });
-  ui.view();
-
-  const change = (element: ReactElement<Record<string, unknown>>, value: string) =>
-    (element.props.onChange as (event: unknown) => void)({ target: { value } });
-  change(
-    findElement(
-      ui.view(),
-      (element) => element.props["aria-describedby"] === "repair-owner-name-hint",
-    )!,
-    "演示客户",
-  );
-  change(
-    findElement(
-      ui.view(),
-      (element) => element.props["aria-describedby"] === "repair-device-model-hint",
-    )!,
-    "联想小新 Pro 14",
-  );
-  change(
-    findElement(ui.view(), (element) => element.props.type === "number")!,
-    "45",
-  );
-  change(
-    findElement(ui.view(), (element) => element.props.type === "tel")!,
-    "13800000000",
-  );
-  change(
-    findElement(ui.view(), (element) => element.type === "select")!,
-    "clean",
-  );
-  ui.view();
-
-  const photoPicker = findElement(
-    ui.view(),
-    (element) => typeof element.props.onAdd === "function" && Array.isArray(element.props.photos),
-  );
-  assert.ok(photoPicker);
-  (photoPicker.props.onAdd as (files: File[]) => void)([
-    new File([new Uint8Array(4)], "before.png", { type: "image/png" }),
-    new File([new Uint8Array(4)], "after.png", { type: "image/png" }),
-  ]);
-  ui.view();
-  assert.equal(
-    (
-      findElement(
-        ui.view(),
-        (element) =>
-          typeof element.props.onAdd === "function" && Array.isArray(element.props.photos),
-      )!.props.photos as unknown[]
-    ).length,
-    2,
-  );
-
-  (findButton(ui.view(), "下一步")!.props.onClick as () => void)();
-  ui.view();
-  (findButton(ui.view(), "确认提交")!.props.onClick as () => void)();
+  await loadReady(ui);
+  fillRequired(ui);
+  addPhotos(ui);
+  goNext(ui);
+  submitConfirm(ui);
   await setImmediate();
 
   assert.equal(ui.requests[3].url, "/api/v1/repairs");
-  assert.equal(ui.requests[3].init.method, "POST");
   const createBody = JSON.parse(String(ui.requests[3].init.body)) as Record<string, unknown>;
   assert.equal(createBody.ownerName, "演示客户");
   assert.equal(createBody.deviceModel, "联想小新 Pro 14");
-  assert.equal(createBody.categoryId, "clean");
-  assert.equal(createBody.participantIds instanceof Array, true);
-
   await ui.finish(3, { success: true, data: { id: "record-1" } }, 201);
-  ui.view();
-  const summary = findElement(
+  await setImmediate();
+
+  assert.equal(ui.uploads.length, 1, "第一张先上传");
+  assert.equal(ui.uploads[0]!.recordId, "record-1");
+  assert.ok(ui.uploads[0]!.uploadKey, "每张照片带幂等键");
+  const during = findElement(
     ui.view(),
     (element) => element.props.record !== undefined && Array.isArray(element.props.photos),
   );
-  assert.ok(summary);
-  assert.equal(summary.props.onRemovePhoto, undefined, "上传在途时移除按钮不可用");
+  assert.equal(during?.props.onRemovePhoto, undefined, "上传在途不可移除");
+  assert.equal(during?.props.onRetryPhoto, undefined);
+  ui.uploads[0]!.onProgress(0.4);
+  const uploading = findElement(
+    ui.view(),
+    (element) => element.props.record !== undefined && Array.isArray(element.props.photos),
+  );
+  const uploadingPhotos = uploading?.props.photos as { status?: string; progress?: number }[];
+  assert.equal(uploadingPhotos[0]?.status, "uploading");
+  assert.equal(uploadingPhotos[0]?.progress, 0.4);
 
-  assert.equal(ui.requests[4].url, "/api/v1/repairs/record-1/photos");
-  assert.equal(ui.requests[4].init.method, "POST");
-  const uploaded = ui.requests[4].init.body as FormData;
-  assert.equal(uploaded.getAll("photos").length, 2, "一次批量上传两张");
-
-  await ui.finish(4, { success: false, error: { message: "照片保存失败，请重试" } }, 500);
+  ui.uploads[0]!.fail(new Error("网络异常，照片未上传，请重试"));
+  await setImmediate();
+  assert.equal(ui.uploads.length, 2, "一张失败不阻塞下一张");
+  ui.uploads[1]!.finish(["photo-2"]);
+  await setImmediate();
+  assert.equal(ui.requests[4].url, "/api/v1/repairs/record-1");
+  await ui.finish(4, { success: true, data: { photos: [] } });
   ui.view();
-  assert.ok(text(ui.view()).includes("记录已创建，但照片上传失败"));
+  assert.ok(text(ui.view()).includes("1 张照片上传失败"));
   const failedSummary = findElement(
     ui.view(),
     (element) => element.props.record !== undefined && Array.isArray(element.props.photos),
   );
   assert.ok(failedSummary);
   assert.equal(typeof failedSummary.props.onRemovePhoto, "function", "失败后允许移除");
-
-  const photosAfterFailure = failedSummary.props.photos as { id: string }[];
-  (failedSummary.props.onRemovePhoto as (id: string) => void)(photosAfterFailure[0]!.id);
-  ui.view();
-  const afterRemove = findElement(
-    ui.view(),
-    (element) => element.props.record !== undefined && Array.isArray(element.props.photos),
-  );
-  assert.equal((afterRemove!.props.photos as unknown[]).length, 1);
+  assert.equal(typeof failedSummary.props.onRetryPhoto, "function", "失败后允许单张重试");
 
   (findButton(ui.view(), "重试上传")!.props.onClick as () => void)();
   await setImmediate();
-  assert.equal(ui.requests[5].url, "/api/v1/repairs/record-1/photos");
-  assert.equal(ui.requests.filter((request) => request.url === "/api/v1/repairs").length, 1);
-  assert.equal((ui.requests[5].init.body as FormData).getAll("photos").length, 1);
-
-  await ui.finish(5, { success: false, error: { message: "照片保存失败，请重试" } }, 500);
+  assert.equal(ui.uploads.length, 3);
+  assert.equal(ui.uploads[2]!.uploadKey, ui.uploads[0]!.uploadKey, "重试复用原幂等键");
+  assert.equal(ui.uploads[2]!.file.name, "before.png");
+  ui.uploads[2]!.finish(["photo-1"]);
+  await setImmediate();
+  assert.equal(ui.requests[5].url, "/api/v1/repairs/record-1");
+  await ui.finish(5, { success: true, data: { photos: [] } });
+  ui.view();
+  assert.deepEqual(ui.navigations, ["/member/repairs/record-1"]);
   assert.equal(ui.requests.filter((request) => request.url === "/api/v1/repairs").length, 1);
 });
 
-test("上传成功后跳转记录详情，不重复建单", async (t) => {
+test("两张都成功后跳转记录详情，不重复建单", async (t) => {
   const ui = await mount(t);
   await loadReady(ui);
   fillRequired(ui);
@@ -387,11 +465,106 @@ test("上传成功后跳转记录详情，不重复建单", async (t) => {
 
   assert.equal(ui.requests[3].url, "/api/v1/repairs");
   await ui.finish(3, { success: true, data: { id: "record-1" } }, 201);
-  assert.equal(ui.requests[4].url, "/api/v1/repairs/record-1/photos");
-  await ui.finish(4, { success: true, data: [] }, 201);
+  await setImmediate();
+  assert.equal(ui.uploads.length, 1);
+  ui.uploads[0]!.finish(["photo-1"]);
+  await setImmediate();
+  assert.equal(ui.uploads.length, 2);
+  ui.uploads[1]!.finish(["photo-2"]);
+  await setImmediate();
+  assert.equal(ui.requests[4].url, "/api/v1/repairs/record-1");
+  await ui.finish(4, { success: true, data: { photos: [] } });
+  await setImmediate();
 
   assert.deepEqual(ui.navigations, ["/member/repairs/record-1"]);
   assert.equal(ui.requests.filter((request) => request.url === "/api/v1/repairs").length, 1);
+});
+
+test("上传前压缩：使用压缩后的文件并显示压缩前后体积", async (t) => {
+  const ui = await mount(t, {
+    prepare: async (file) => ({
+      file: new File([new Uint8Array(2)], file.name, { type: "image/webp" }),
+      compressed: true,
+      originalSize: 4096,
+      preparedSize: 1024,
+    }),
+  });
+  await loadReady(ui);
+  fillRequired(ui);
+  addPhotos(ui);
+  goNext(ui);
+  submitConfirm(ui);
+  await setImmediate();
+  await ui.finish(3, { success: true, data: { id: "record-1" } }, 201);
+  await setImmediate();
+
+  assert.equal(ui.prepareCalls.length, 1);
+  assert.equal(ui.uploads[0]!.file.type, "image/webp", "上传的是压缩后的文件");
+  ui.uploads[0]!.finish(["photo-1"]);
+  await setImmediate();
+  const compressed = findElement(
+    ui.view(),
+    (element) => element.props.record !== undefined && Array.isArray(element.props.photos),
+  );
+  const compressedPhotos = compressed?.props.photos as {
+    compressed?: boolean;
+    originalSize?: number;
+    preparedSize?: number;
+  }[];
+  assert.equal(compressedPhotos[0]?.compressed, true);
+  assert.equal(compressedPhotos[0]?.originalSize, 4);
+  assert.equal(compressedPhotos[0]?.preparedSize, 1024);
+
+  ui.uploads[1]!.finish(["photo-2"]);
+  await setImmediate();
+  await ui.finish(4, { success: true, data: { photos: [] } });
+  await setImmediate();
+  assert.deepEqual(ui.navigations, ["/member/repairs/record-1"]);
+});
+
+test("HEIC 在选择阶段明确拒绝，不进入上传或建单", async (t) => {
+  const ui = await mount(t);
+  await loadReady(ui);
+  fillRequired(ui);
+  const picker = findElement(
+    ui.view(),
+    (element) => typeof element.props.onAdd === "function" && Array.isArray(element.props.photos),
+  );
+  assert.ok(picker);
+  (picker.props.onAdd as (files: File[]) => void)([
+    new File([new Uint8Array(4)], "IMG_0001.HEIC", { type: "image/heic" }),
+  ]);
+  ui.view();
+  assert.ok(text(ui.view()).includes(repairEditorCopy.photoHeicUnsupported));
+  assert.equal(ui.requests.length, 3);
+  assert.equal(ui.uploads.length, 0);
+  const after = findElement(
+    ui.view(),
+    (element) => typeof element.props.onAdd === "function" && Array.isArray(element.props.photos),
+  );
+  assert.deepEqual(after!.props.photos, []);
+});
+
+test("重复选择同一文件被跳过并提示", async (t) => {
+  const ui = await mount(t);
+  await loadReady(ui);
+  const picker = findElement(
+    ui.view(),
+    (element) => typeof element.props.onAdd === "function" && Array.isArray(element.props.photos),
+  );
+  assert.ok(picker);
+  const same = new File([new Uint8Array(4)], "same.png", {
+    type: "image/png",
+    lastModified: 100,
+  });
+  (picker.props.onAdd as (files: File[]) => void)([same, same]);
+  ui.view();
+  assert.ok(text(ui.view()).includes("已跳过 1 张重复选择的照片"));
+  const after = findElement(
+    ui.view(),
+    (element) => typeof element.props.onAdd === "function" && Array.isArray(element.props.photos),
+  );
+  assert.equal((after!.props.photos as unknown[]).length, 1);
 });
 
 test("建单失败停留确认页，不发照片请求，可返回修改", async (t) => {
@@ -427,4 +600,89 @@ test("必填项缺失时停在填写页，不建单", async (t) => {
       (element) => element.props["aria-describedby"] === "repair-owner-name-hint",
     ),
   );
+});
+
+test("编辑页上传成功但列表刷新失败时提示刷新，不产生未处理异常", async (t) => {
+  const ui = await mount(t, { recordId: "record-1" });
+  await loadEditReady(ui);
+  addEditPhotos(ui);
+  await setImmediate();
+  assert.equal(ui.uploads.length, 1);
+
+  ui.uploads[0]!.finish(["photo-1"]);
+  await setImmediate();
+  assert.equal(ui.uploads.length, 2);
+  ui.uploads[1]!.finish(["photo-2"]);
+  await setImmediate();
+  assert.equal(ui.requests[3]!.url, "/api/v1/repairs/record-1");
+
+  // 刷新请求网络失败：不能把它当成上传失败，也不能留下未处理的 rejection。
+  ui.requests[3]!.fail(new Error("网络异常"));
+  await setImmediate();
+  assert.ok(text(ui.view()).includes(repairEditorCopy.photoRefreshFailed));
+  const picker = findElement(
+    ui.view(),
+    (element) => typeof element.props.onAdd === "function" && Array.isArray(element.props.photos),
+  );
+  assert.equal((picker!.props.photos as unknown[]).length, 0, "成功项已移出待上传队列");
+});
+
+test("建单后成功项不能被本地移除，只有失败项可移除", async (t) => {
+  const ui = await mount(t);
+  await loadReady(ui);
+  fillRequired(ui);
+  addPhotos(ui);
+  goNext(ui);
+  submitConfirm(ui);
+  await setImmediate();
+  await ui.finish(3, { success: true, data: { id: "record-1" } }, 201);
+  await setImmediate();
+
+  ui.uploads[0]!.fail(new Error("网络异常"));
+  await setImmediate();
+  ui.uploads[1]!.finish(["photo-2"]);
+  await setImmediate();
+  await ui.finish(4, { success: true, data: { photos: [] } });
+  ui.view();
+
+  const current = summaryOf(ui).props.photos as { id: string; status?: string }[];
+  const successId = current.find((photo) => photo.status === "success")!.id;
+  const failedId = current.find((photo) => photo.status === "error")!.id;
+  (summaryOf(ui).props.onRemovePhoto as (id: string) => void)(successId);
+  assert.equal((summaryOf(ui).props.photos as unknown[]).length, 2, "成功项不能被本地删除");
+  (summaryOf(ui).props.onRemovePhoto as (id: string) => void)(failedId);
+  assert.equal((summaryOf(ui).props.photos as unknown[]).length, 1);
+});
+
+test("确认页单张重试成功后刷新失败也不抛错并完成建单", async (t) => {
+  const ui = await mount(t);
+  await loadReady(ui);
+  fillRequired(ui);
+  addPhotos(ui);
+  goNext(ui);
+  submitConfirm(ui);
+  await setImmediate();
+  await ui.finish(3, { success: true, data: { id: "record-1" } }, 201);
+  await setImmediate();
+
+  ui.uploads[0]!.fail(new Error("网络异常"));
+  await setImmediate();
+  ui.uploads[1]!.finish(["photo-2"]);
+  await setImmediate();
+  await ui.finish(4, { success: true, data: { photos: [] } });
+  ui.view();
+
+  const failed = (summaryOf(ui).props.photos as { id: string; status?: string }[]).find(
+    (photo) => photo.status === "error",
+  )!;
+  (summaryOf(ui).props.onRetryPhoto as (id: string) => void)(failed.id);
+  await setImmediate();
+  assert.equal(ui.uploads.length, 3);
+  ui.uploads[2]!.finish(["photo-1"]);
+  await setImmediate();
+  assert.equal(ui.requests[5]!.url, "/api/v1/repairs/record-1");
+
+  ui.requests[5]!.fail(new Error("刷新失败"));
+  await setImmediate();
+  assert.deepEqual(ui.navigations, ["/member/repairs/record-1"]);
 });

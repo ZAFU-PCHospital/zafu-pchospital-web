@@ -62,7 +62,7 @@ test("文件选择一次接收多张照片并清空 input 以便重选", () => {
   );
   assert.ok(input);
   assert.equal(input.props.multiple, true);
-  assert.equal(input.props.accept, "image/jpeg,image/png,image/webp");
+  assert.equal(input.props.accept, "image/jpeg,image/png,image/webp,image/heic,image/heif");
   assert.ok(text(tree).includes("未选择照片"));
 
   const files = [
@@ -140,4 +140,95 @@ test("只读但允许移除时保留移除按钮，仍不显示文件输入", ()
   assert.ok(remove);
   (remove.props.onClick as () => void)();
   assert.equal(removed, "photo-1");
+});
+
+test("只读摘要只让失败项移除，成功项不提供本地移除", () => {
+  const removed: string[] = [];
+  const photos: PendingPhoto[] = [
+    { ...pendingPhoto(1), status: "success" },
+    { ...pendingPhoto(2), status: "error", error: "网络异常" },
+  ];
+  const tree = PendingPhotoPicker({
+    photos,
+    readOnly: true,
+    allowRemove: true,
+    canRemovePhoto: (photo) => photo.status === "error",
+    emptyLabel: "未选择照片",
+    onRemove: (id) => removed.push(id),
+    onRetry: () => {},
+  });
+  assert.equal(
+    findElement(tree, (element) => element.props["aria-label"] === "移除待上传照片 1"),
+    undefined,
+    "已上传成功的照片不能只删本地状态",
+  );
+  const remove = findElement(tree, (element) => element.props["aria-label"] === "移除待上传照片 2");
+  assert.ok(remove);
+  assert.equal(remove.props.type, "button", "原生按钮可键盘触发");
+  (remove.props.onClick as () => void)();
+  assert.deepEqual(removed, ["photo-2"]);
+});
+
+test("逐张状态：进度、压缩体积、失败原因与单张重试", () => {
+  let retried = "";
+  const photos: PendingPhoto[] = [
+    {
+      ...pendingPhoto(1),
+      status: "uploading",
+      progress: 0.42,
+      originalSize: 4096,
+      preparedSize: 1024,
+      compressed: true,
+    },
+    {
+      ...pendingPhoto(2),
+      status: "error",
+      error: "网络异常，照片未上传，请重试",
+      originalSize: 2048,
+    },
+  ];
+  const tree = PendingPhotoPicker({
+    photos,
+    emptyLabel: "未选择照片",
+    onRetry: (id) => {
+      retried = id;
+    },
+  });
+  const content = text(tree);
+  assert.ok(content.includes("上传中 42%"), "上传中要显示进度");
+  assert.ok(content.includes("已压缩 4 KB → 1 KB"), "压缩后显示前后体积");
+  assert.ok(content.includes("上传失败"));
+  assert.ok(content.includes("网络异常，照片未上传，请重试"));
+  const retry = findElement(tree, (element) => element.props["aria-label"] === "重试上传照片 2");
+  assert.ok(retry);
+  assert.equal(retry.props.type, "button", "重试也是原生按钮，可键盘触发");
+  (retry.props.onClick as () => void)();
+  assert.equal(retried, "photo-2");
+});
+
+test("选择器提供拖拽投放与拍照入口", () => {
+  let added: File[] = [];
+  const tree = PendingPhotoPicker({
+    photos: [],
+    emptyLabel: "未选择照片",
+    onAdd: (files) => {
+      added = files;
+    },
+  });
+  const camera = findElement(
+    tree,
+    (element) => element.type === "input" && element.props.capture === "environment",
+  );
+  assert.ok(camera, "手机端要有相机入口");
+  assert.equal(camera.props.accept, "image/jpeg,image/png,image/webp,image/heic,image/heif");
+
+  const dropzone = findElement(tree, (element) => element.props.className === "photo-dropzone");
+  assert.ok(dropzone, "要有拖拽投放区");
+  const file = new File([new Uint8Array(1)], "drop.png", { type: "image/png" });
+  (dropzone.props.onDrop as (event: unknown) => void)({
+    preventDefault: () => {},
+    currentTarget: { dataset: {} },
+    dataTransfer: { files: [file] },
+  });
+  assert.deepEqual(added, [file]);
 });
