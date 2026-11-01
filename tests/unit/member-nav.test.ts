@@ -82,7 +82,7 @@ test("窄屏底部标签栏：活动替代消息，消息仍保留在工作台�
     ],
   );
   assert.equal(
-    memberTabs.some((tab) => tab.href === "/member/notifications"),
+    (memberTabs as readonly { href: string }[]).some((tab) => tab.href === "/member/notifications"),
     false,
   );
   assert.deepEqual(

@@ -7,6 +7,7 @@
  * - 时长底层始终是整数分钟，展示时统一用下面的格式化函数。
  */
 
+import type { ShellTab } from "@/components/layout/ShellTabBar";
 import type { NavItem } from "@/config/navigation";
 
 /** 成员导航按任务分组。 */
@@ -124,22 +125,18 @@ export const memberNav: readonly MemberNavGroup[] = [
  *
  * 「活动」直接进入 `/member/repair-activities`，替代原「消息」标签；
  * 消息入口保留在工作台快捷操作与桌面侧栏，底部栏不再重复。
+ *
+ * MemberNav 必须直接消费此数组；组件层暂无渲染测试基建，改回组件内局部数组
+ * 时只能靠评审/注释把关。类型直接复用 ShellTab，ShellTab 增加必填字段会在这里
+ * 编译失败，避免配置漂移。
  */
-export type MemberTabItem = {
-  href: string;
-  label: string;
-  icon: NonNullable<NavItem["icon"]>;
-  exact?: boolean;
-  primary?: boolean;
-};
-
-export const memberTabs: readonly MemberTabItem[] = [
+export const memberTabs = [
   { href: "/member", label: "工作台", icon: "home", exact: true },
   { href: "/member/repairs", label: "维修", icon: "fileText" },
   { href: "/member/repairs/new", label: "新增", icon: "plus", primary: true },
   { href: "/member/repair-activities", label: "活动", icon: "calendar" },
   { href: "/member/profile", label: "我的", icon: "user" },
-];
+] as const satisfies readonly ShellTab[];
 
 export const memberCopy = {
   /** 成员壳品牌与导航无障碍名 */
