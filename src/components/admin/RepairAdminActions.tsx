@@ -1,11 +1,11 @@
 "use client";
 
-import Image from "next/image";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
 import { AdminModal } from "@/components/admin/AdminModal";
 import { AdminToast } from "@/components/admin/AdminToast";
 import type { AdminToastMessage, AdminToastTone } from "@/components/admin/AdminToast";
+import { RepairReviewPhotos } from "@/components/admin/RepairReviewPhotos";
 import { Button } from "@/components/ui/Button";
 import { RepairParticipantPicker } from "@/components/ui/RepairParticipantPicker";
 import { adminCopy, adminShared } from "@/config/admin";
@@ -54,8 +54,9 @@ export function RepairAdminActions({
   const [reason, setReason] = useState("");
   /** `null` = 还没取回来。照片不在列表接口的载荷里，打开窗口时单独取一次详情。 */
   const [photos, setPhotos] = useState<RepairPhotoView[] | null>(null);
-  /** 已经确定读不出字节的照片 id（文件被清理、存储路径变更等）。 */
-  const [brokenPhotos, setBrokenPhotos] = useState<string[]>([]);
+  /** 与空列表区分：读取失败（含无权限）要显式提示并允许重试，不能显示成「没有照片」。 */
+  const [photosError, setPhotosError] = useState("");
+  const [photosReload, setPhotosReload] = useState(0);
   /** 参与维修人员的候选名单：取不到时只少一个「添加」入口，不影响其余动作。 */
   const [memberOptions, setMemberOptions] = useState<RepairMemberOption[]>([]);
   /** 编辑字段与版本绑定同一快照；标记、审核或列表刷新不能替旧表单抬高版本。 */
@@ -70,16 +71,23 @@ export function RepairAdminActions({
 
   useEffect(() => {
     let cancelled = false;
+    setPhotos(null);
+    setPhotosError("");
     void (async () => {
       // 复用 M2 的记录详情接口（`repair:review` 可读任意记录），不为了照片去改列表契约。
       const result = await adminFetch<RepairDetailView>(`/api/v1/repairs/${record.id}`);
       if (cancelled) return;
-      setPhotos(result.ok ? result.data.photos : []);
+      if (!result.ok) {
+        setPhotos([]);
+        setPhotosError(result.message);
+        return;
+      }
+      setPhotos(result.data.photos);
     })();
     return () => {
       cancelled = true;
     };
-  }, [record.id]);
+  }, [record.id, photosReload]);
 
   useEffect(() => {
     let cancelled = false;
@@ -233,54 +241,11 @@ export function RepairAdminActions({
       ) : null}
 
       {/* 审核必须看得到照片：导出只给 URL，列表也不带照片，所以窗口里必须能看。 */}
-      <section className="admin-photos">
-        <h4 className="admin-panel__title">{copy.detail.photos}</h4>
-        {photos === null ? (
-          <p className="admin-note">{adminShared.loading}</p>
-        ) : photos.length === 0 ? (
-          <p className="admin-note">{copy.detail.photosEmpty}</p>
-        ) : (
-          <ul className="admin-photos__list">
-            {photos.map((photo, index) => {
-              const label = photo.originalName ?? `照片 ${index + 1}`;
-              // 记录还在、文件没了（例如集成测试写在临时目录里的夹具照片），
-              // 这时读字节会返回 REPAIR_PHOTO_STORAGE_FAILED：显示占位而不是裂图，
-              // 也不给「打开原图」的链接 —— 点进去只会看到一张 JSON 错误页。
-              if (brokenPhotos.includes(photo.id))
-                return (
-                  <li key={photo.id}>
-                    <div className="admin-photos__item">
-                      <span className="admin-photos__fallback">{copy.detail.photoUnavailable}</span>
-                      <span className="admin-photos__meta">{label}</span>
-                    </div>
-                  </li>
-                );
-              return (
-                <li key={photo.id}>
-                  <a
-                    className="admin-photos__item"
-                    href={photo.contentUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    <Image
-                      className="admin-photos__image"
-                      src={photo.contentUrl}
-                      alt={`维修照片 ${index + 1}`}
-                      width={480}
-                      height={360}
-                      unoptimized
-                      onError={() => setBrokenPhotos((current) => [...current, photo.id])}
-                    />
-                    <span className="admin-photos__meta">{label}</span>
-                    <span className="admin-photos__action">{copy.detail.photosOpen}</span>
-                  </a>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </section>
+      <RepairReviewPhotos
+        photos={photos}
+        error={photosError}
+        onRetry={() => setPhotosReload((value) => value + 1)}
+      />
 
       <div className="admin-actions">
         <Button

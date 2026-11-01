@@ -1,8 +1,8 @@
 "use client";
 
-import Image from "next/image";
 import { useEffect, useState } from "react";
 
+import { RepairPhotoGallery } from "@/components/repairs/RepairPhotoGallery";
 import { Button } from "@/components/ui/Button";
 import { formatBytes, repairCopy, repairEditorCopy } from "@/config/repairs";
 import { normalizePhotoViewOrder } from "@/components/repairs/photo-order";
@@ -154,39 +154,32 @@ export function RepairPhotoAttachments({ recordId, photos, limits, canAttach, on
         {message}
       </p>
       {items.length ? (
-        <div className="gap-s-4 grid md:grid-cols-2">
-          {items.map((photo, index) => (
-            <figure className="gap-s-2 grid" key={photo.id}>
-              <Image
-                className="rounded-mid border-line h-56 w-full border object-cover"
-                src={photo.contentUrl}
-                alt={`维修照片 ${index + 1}`}
-                width={720}
-                height={480}
-                unoptimized
-              />
-              {canAttach ? (
-                <figcaption className="gap-s-2 flex flex-wrap">
-                  <Button
-                    disabled={busy || index === 0}
-                    onClick={() => void reorder(photo.id, index - 1)}
-                  >
-                    前移
-                  </Button>
-                  <Button
-                    disabled={busy || index === items.length - 1}
-                    onClick={() => void reorder(photo.id, index + 1)}
-                  >
-                    后移
-                  </Button>
-                  <Button disabled={busy} onClick={() => void remove(photo.id)}>
-                    移除
-                  </Button>
-                </figcaption>
-              ) : null}
-            </figure>
-          ))}
-        </div>
+        <RepairPhotoGallery
+          photos={items}
+          renderActions={
+            canAttach
+              ? (photo, index) => (
+                  <>
+                    <Button
+                      disabled={busy || index === 0}
+                      onClick={() => void reorder(photo.id, index - 1)}
+                    >
+                      前移
+                    </Button>
+                    <Button
+                      disabled={busy || index === items.length - 1}
+                      onClick={() => void reorder(photo.id, index + 1)}
+                    >
+                      后移
+                    </Button>
+                    <Button disabled={busy} onClick={() => void remove(photo.id)}>
+                      移除
+                    </Button>
+                  </>
+                )
+              : undefined
+          }
+        />
       ) : (
         <p>{canAttach ? repairCopy.detail.pendingPhotoEmpty : repairCopy.detail.photoEmpty}</p>
       )}

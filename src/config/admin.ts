@@ -546,8 +546,7 @@ export const adminCopy = {
       title: "记录详情",
       photos: "维修照片",
       photosEmpty: "这条记录没有上传照片",
-      photosOpen: "在新标签打开原图",
-      photoUnavailable: "照片暂时不可读取",
+      photosLoadFailed: "照片加载失败",
     },
   },
   repairActivities: {

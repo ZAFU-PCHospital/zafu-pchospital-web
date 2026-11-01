@@ -6359,63 +6359,272 @@ html[data-theme="black-yellow"] {
     border-top: 1px solid var(--line-soft);
   }
 
-  /* 记录详情里的维修照片。
+  /* 记录详情与审核弹窗共用照片区。
      审核必须看得见照片，但列表接口只带记录摘要（导出也只输出 URL），
      因此窗口打开时单独取一次记录详情再渲染这一块。 */
   .admin-photos {
     display: grid;
     gap: var(--s-3);
   }
-  .admin-photos__list {
+
+  /* 照片缩略图网格：只请求 thumbnailUrl（320 长边），打开灯箱后才取 display。
+     容器固定 4:3，图片加载前后不改变占位高度。 */
+  .photo-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(min(100%, 11rem), 1fr));
+    gap: var(--s-3);
+  }
+  .photo-grid__list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 9rem), 1fr));
     gap: var(--s-3);
     margin: 0;
     padding: 0;
     list-style: none;
   }
-  .admin-photos__item {
+  .photo-grid__cell {
     display: grid;
+    align-content: start;
     gap: var(--s-2);
-    border: 1px solid var(--line);
-    border-radius: var(--r-base);
-    background: var(--bg);
-    overflow: hidden;
   }
-  .admin-photos__item:hover,
-  .admin-photos__item:focus-visible {
-    border-color: var(--line-strong);
-  }
-  .admin-photos__image {
+  .photo-grid__button {
     display: block;
     inline-size: 100%;
-    block-size: 8.5rem;
+    aspect-ratio: 4 / 3;
+    padding: 0;
+    border: 1px solid var(--line);
+    border-radius: var(--r-base);
+    background: var(--surface-2);
+    overflow: hidden;
+    cursor: zoom-in;
+    transition: border-color var(--d-fast) var(--ease-quart);
+  }
+  .photo-grid__button:hover,
+  .photo-grid__button:focus-visible {
+    border-color: var(--line-strong);
+  }
+  .photo-grid__image {
+    display: block;
+    inline-size: 100%;
+    block-size: 100%;
     object-fit: cover;
   }
-  /* 照片读不出来时的占位：不显示裂图，也不给「打开原图」的链接
-     （点进去只会看到一张 JSON 错误页）。 */
-  .admin-photos__fallback {
+  /* 照片读不出来时的占位：不显示裂图，也不提供会返回 JSON 错误页的原图链接。 */
+  .photo-grid__fallback {
     display: grid;
     place-items: center;
-    block-size: 8.5rem;
+    aspect-ratio: 4 / 3;
     padding: var(--s-3);
+    border: 1px solid var(--line);
+    border-radius: var(--r-base);
     background: var(--surface-2);
+    color: var(--ink-3);
     font-size: var(--t-micro);
     line-height: 1.6;
-    color: var(--ink-3);
     text-align: center;
   }
-  .admin-photos__meta {
-    padding-inline: var(--s-2);
+  .photo-grid__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s-2);
+  }
+  .photo-grid__meta {
     font-size: var(--t-micro);
     color: var(--ink-3);
     overflow-wrap: anywhere;
   }
-  .admin-photos__action {
-    padding: 0 var(--s-2) var(--s-2);
-    font-size: var(--t-micro);
-    font-weight: 700;
-    color: var(--accent-deep);
+
+  /* 照片灯箱：层级高于详情窗口（96）与反馈浮层（100）。
+     窗体内部分区滚动，遮罩沿用详情窗口的加深底色 + 92% 不透明度。 */
+  .photo-lightbox {
+    position: fixed;
+    inset: 0;
+    z-index: 110;
+    display: grid;
+    place-items: center;
+    padding: var(--s-4);
+  }
+  .photo-lightbox__veil {
+    position: absolute;
+    inset: 0;
+    background: var(--bg-deep);
+    opacity: 0.92;
+  }
+  .photo-lightbox__window {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    inline-size: min(72rem, 100%);
+    block-size: min(90dvh, 100%);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--r-mid);
+    background: var(--surface-1);
+    overflow: hidden;
+  }
+  .photo-lightbox__head,
+  .photo-lightbox__bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--s-3);
+    padding: var(--s-3) var(--s-4);
+  }
+  .photo-lightbox__head {
+    border-block-end: 1px solid var(--line);
+  }
+  .photo-lightbox__bar {
+    border-block-start: 1px solid var(--line);
+  }
+  .photo-lightbox__title {
+    margin: 0;
+    font-size: var(--t-lg);
+  }
+  .photo-lightbox__close,
+  .photo-lightbox__nav,
+  .photo-lightbox__zoom {
+    display: grid;
+    place-items: center;
+    min-block-size: 2.875rem;
+    padding: 0;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--r-base);
+    background: transparent;
+    color: var(--ink-2);
+    cursor: pointer;
+    transition:
+      color var(--d-fast) var(--ease-quart),
+      border-color var(--d-fast) var(--ease-quart),
+      background var(--d-mid) var(--ease-quart);
+  }
+  .photo-lightbox__close {
+    inline-size: 2.875rem;
+  }
+  .photo-lightbox__close svg,
+  .photo-lightbox__nav svg,
+  .photo-lightbox__zoom svg {
+    inline-size: 18px;
+    block-size: 18px;
+  }
+  .photo-lightbox__close:hover,
+  .photo-lightbox__nav:hover,
+  .photo-lightbox__zoom:hover {
+    color: var(--accent-on);
+    border-color: var(--accent);
+    background: var(--accent);
+  }
+  .photo-lightbox__stage {
+    position: relative;
+    display: grid;
+    place-items: center;
+    min-block-size: 0;
+    overflow: hidden;
+    background: var(--bg-deep);
+    /* 未放大时横滑 / 下滑交给灯箱判定，不触发浏览器返回或页面滚动。 */
+    touch-action: none;
+  }
+  .photo-lightbox__stage.is-zoomed {
+    overflow: auto;
+    touch-action: auto;
+  }
+  .photo-lightbox__canvas {
+    display: grid;
+    place-items: center;
+    inline-size: 100%;
+    block-size: 100%;
+    min-inline-size: 0;
+    min-block-size: 0;
+    padding: var(--s-3);
+  }
+  /* 适应模式把网格轨道压回容器：隐式 auto 行会被图片固有高度撑开，
+     高图 / 竖图会在 overflow: hidden 的舞台里被裁掉底部。 */
+  .photo-lightbox__stage:not(.is-zoomed) .photo-lightbox__canvas {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+  }
+  .photo-lightbox__stage.is-zoomed .photo-lightbox__canvas {
+    inline-size: max-content;
+    block-size: max-content;
+    min-inline-size: 100%;
+    min-block-size: 100%;
+  }
+  .photo-lightbox__img {
+    display: block;
+    max-inline-size: 100%;
+    max-block-size: 100%;
+    inline-size: auto;
+    block-size: auto;
+    object-fit: contain;
+    transition: opacity var(--d-fast) var(--ease-quart);
+  }
+  .photo-lightbox__img.is-loading {
+    opacity: 0;
+  }
+  /* 原始尺寸交给滚动容器平移；display 变体最长边 1280，足以看清细节。 */
+  .photo-lightbox__stage.is-zoomed .photo-lightbox__img {
+    max-inline-size: none;
+    max-block-size: none;
+  }
+  .photo-lightbox__nav {
+    position: absolute;
+    inset-block-start: 50%;
+    z-index: 1;
+    inline-size: 2.875rem;
+    background: var(--surface-1);
+    transform: translateY(-50%);
+  }
+  .photo-lightbox__nav--prev {
+    inset-inline-start: var(--s-3);
+  }
+  .photo-lightbox__nav--next {
+    inset-inline-end: var(--s-3);
+  }
+  .photo-lightbox__zoom {
+    grid-auto-flow: column;
+    gap: var(--s-2);
+    padding-inline: var(--s-3);
+  }
+  .photo-lightbox__counter {
+    font-size: var(--t-sm);
+    color: var(--ink-3);
+  }
+  .photo-lightbox__status {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    padding: var(--s-4);
+    background: var(--bg-deep);
+    color: var(--ink-3);
+    text-align: center;
+  }
+  .photo-lightbox__status--error {
+    align-content: center;
+    gap: var(--s-3);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .photo-lightbox__img {
+      transition: none;
+    }
+  }
+
+  @media (max-width: 759px) {
+    /* 窄屏灯箱铺满可用高度，与详情窗口同一套移动端规则。 */
+    .photo-lightbox {
+      padding: 0;
+    }
+    .photo-lightbox__window {
+      inline-size: 100%;
+      block-size: 100%;
+      border: 0;
+      border-radius: 0;
+    }
+    .photo-lightbox__head {
+      padding-block-start: max(var(--s-3), env(safe-area-inset-top));
+    }
+    .photo-lightbox__bar {
+      padding-block-end: max(var(--s-3), env(safe-area-inset-bottom));
+    }
   }
 
   @keyframes admin-modal-in {
