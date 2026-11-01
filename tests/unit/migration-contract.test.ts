@@ -22,6 +22,10 @@ const m6SettingsMigrationPath = new URL(
   "../../prisma/migrations/20260923100000_p2_m6_public_content_settings/migration.sql",
   import.meta.url,
 );
+const rankingRealNameMigrationPath = new URL(
+  "../../prisma/migrations/20261102000000_public_ranking_real_name_default/migration.sql",
+  import.meta.url,
+);
 
 test("初始 Migration 固定 GreatSQL 字符集、引擎与邀请码计数约束", async () => {
   const sql = await readFile(migrationPath, "utf8");
@@ -63,7 +67,12 @@ test("M2 Migration 建立维修核心、照片元数据、审核与时间线", a
 
 test("M4 Migration 建立评论、提及、收藏与通知且外键指向成员档案", async () => {
   const sql = await readFile(m4MigrationPath, "utf8");
-  for (const table of ["repair_comments", "comment_mentions", "repair_favorites", "notifications"]) {
+  for (const table of [
+    "repair_comments",
+    "comment_mentions",
+    "repair_favorites",
+    "notifications",
+  ]) {
     assert.match(sql, new RegExp("CREATE TABLE `" + table + "`"));
   }
   const createTables = sql.match(/CREATE TABLE/g) ?? [];
@@ -85,10 +94,7 @@ test("M6 批次 2 Migration 建立公开内容设置单行表并约束展示策�
   const sql = await readFile(m6SettingsMigrationPath, "utf8");
   assert.match(sql, /CREATE TABLE `public_content_settings`/);
   assert.match(sql, /PRIMARY KEY \(`id`\)/);
-  assert.match(
-    sql,
-    /CHECK \(`ranking_display_name` IN \('REAL_NAME', 'NICKNAME', 'HIDDEN'\)\)/,
-  );
+  assert.match(sql, /CHECK \(`ranking_display_name` IN \('REAL_NAME', 'NICKNAME', 'HIDDEN'\)\)/);
   assert.match(sql, /DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci ENGINE=InnoDB/);
   assert.match(sql, /REFERENCES `users`\(`id`\)/);
   // 单行表：只允许一个主键，不允许出现额外的唯一键或业务外键（策略不挂在成员身上）。
@@ -99,4 +105,18 @@ test("M6 批次 2 Migration 建立公开内容设置单行表并约束展示策�
     .filter((line) => !line.trim().startsWith("--"))
     .join("\n");
   assert.doesNotMatch(ddl, /qq|phone|student_id/i);
+});
+
+test("issue #330 Migration 把排行榜默认展示名改为真实姓名并保留旧行升级", async () => {
+  const sql = await readFile(rankingRealNameMigrationPath, "utf8");
+  assert.match(sql, /ALTER COLUMN `ranking_display_name` SET DEFAULT 'REAL_NAME'/);
+  assert.match(
+    sql,
+    /UPDATE `public_content_settings`[\s\S]*SET `ranking_display_name` = 'REAL_NAME'[\s\S]*WHERE `ranking_display_name` = 'NICKNAME'/,
+  );
+  const ddl = sql
+    .split("\n")
+    .filter((line) => !line.trim().startsWith("--"))
+    .join("\n");
+  assert.doesNotMatch(ddl, /HIDDEN/);
 });

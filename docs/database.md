@@ -135,6 +135,9 @@ M6 批次 2 引入 `public_content_settings`
 `REAL_NAME` / `NICKNAME` / `HIDDEN`；`updated_by_user_id` 指向 `users`，`ON DELETE RESTRICT`，
 用于回答「这份对外策略是谁在什么时候改的」。该表**不含**任何成员联系方式，
 也不挂 `member_profiles` / `repair_records` 外键 —— 它是全局策略，不属于任何成员或记录。
+issue #330 的迁移 `20261102000000_public_ranking_real_name_default` 把列默认值改为
+`REAL_NAME`，并把仍为旧默认 `NICKNAME` 的现有行升级为 `REAL_NAME`（`HIDDEN` 不覆盖）；
+后台仍保留实名 / 昵称 / 隐藏开关。
 M6 批次 2 的其余能力（技能标签库 CRUD、原评论管理、邀请码列表、审计查询、报名导出）
 全部建立在既有表上，没有新增表或列。
 

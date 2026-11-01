@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 /**
  * 首页
  *
- * 区块顺序：首屏 → 依策略公开的服务记录第二屏 → 跑马灯 → 近场活动 → 流程 → 文档 → 联系。
+ * 区块顺序：首屏（Hero + 跑马灯）→ 依策略公开的服务记录第二屏 → 近场活动 → 流程 → 文档 → 联系。
  * 文案数据来自 src/config/home.ts 与 src/config/site.ts。
  */
 
@@ -22,13 +22,20 @@ export default async function HomePage() {
   const hasAnalytics = Boolean(analytics.repairStats || analytics.rankings);
   return (
     <>
-      <Hero scrollTarget={hasAnalytics ? "#public-statistics" : "#home-content"} />
-      <HomePublicAnalytics data={analytics} />
-      <Ticker />
-      <HomeActivityPreview />
-      <ProcessSection />
-      <DocsSection />
-      <ContactSection />
+      <div className="home-first-screen">
+        <Hero
+          analytics={analytics}
+          scrollTarget={hasAnalytics ? "#public-statistics" : "#home-content"}
+        />
+        <Ticker />
+      </div>
+      <div id="home-content">
+        <HomePublicAnalytics data={analytics} />
+        <HomeActivityPreview />
+        <ProcessSection />
+        <DocsSection />
+        <ContactSection />
+      </div>
     </>
   );
 }

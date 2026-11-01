@@ -11,6 +11,8 @@ import { cn, revealIndex } from "@/lib/utils";
 export type ReadoutRow = {
   label: string;
   value: string;
+  /** 数值单位：按小一号字渲染，不占 label 的宽度。 */
+  unit?: string;
   /** 是否使用信号黄强调（用于最关键的单个数值） */
   accent?: boolean;
   /** 数值的字号是否强制缩小（用于时间戳这类长文本） */
@@ -44,6 +46,7 @@ export function Readout({ title, tag, rows, footnote, index = 0, className }: Re
             style={row.compact ? { fontSize: "0.8125rem" } : undefined}
           >
             {row.value}
+            {row.unit ? <small> {row.unit}</small> : null}
           </b>
         </div>
       ))}
