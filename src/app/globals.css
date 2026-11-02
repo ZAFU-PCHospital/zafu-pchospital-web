@@ -7661,6 +7661,161 @@ html[data-theme="black-yellow"] {
     background: var(--line);
   }
 
+  .admin-toolbar__browse,
+  .admin-batch-tools,
+  .admin-batch-tools__actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--s-2);
+  }
+  .admin-batch-tools__all {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--s-2);
+    cursor: pointer;
+  }
+  .admin-toolbar__mobile-only,
+  .btn.admin-toolbar__mobile-only,
+  .action-menu.admin-toolbar__mobile-only {
+    display: none;
+  }
+  .action-menu {
+    display: inline-flex;
+  }
+  .action-menu__panel {
+    position: fixed;
+    z-index: 94;
+    inset: auto;
+    margin: 0;
+    inline-size: 16rem;
+    max-inline-size: calc(100vw - var(--s-4));
+    max-block-size: min(24rem, calc(100dvh - 6rem));
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: var(--s-2);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--r-mid);
+    background: var(--surface-1);
+    color: var(--ink);
+  }
+  .action-menu__title {
+    margin: 0;
+    padding: var(--s-2) var(--s-3);
+    border-block-end: 1px solid var(--line-soft);
+    color: var(--ink-3);
+    font-size: var(--t-xs);
+  }
+  .action-menu__panel .btn {
+    display: flex;
+    inline-size: 100%;
+    min-block-size: 46px;
+    justify-content: start;
+    padding: var(--s-2) var(--s-3);
+    white-space: normal;
+  }
+
+  @media (max-width: 759px) {
+    .admin-toolbar__desktop-only {
+      display: none;
+    }
+    .admin-toolbar__mobile-only {
+      display: inline;
+    }
+    .btn.admin-toolbar__mobile-only,
+    .action-menu.admin-toolbar__mobile-only {
+      display: inline-flex;
+    }
+    .admin-toolbar {
+      min-block-size: 56px;
+      flex-wrap: nowrap;
+    }
+    .admin-toolbar__actions {
+      order: 1;
+      flex-shrink: 0;
+    }
+    .admin-toolbar__count {
+      min-inline-size: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .admin-toolbar__batch {
+      display: none;
+    }
+    .admin-toolbar__browse {
+      flex-wrap: nowrap;
+    }
+    .admin-toolbar .btn {
+      min-inline-size: 46px;
+      min-block-size: 46px;
+      padding: var(--s-1);
+      gap: var(--s-1);
+      letter-spacing: 0;
+      white-space: nowrap;
+    }
+    .admin-toolbar .btn--ghost::after {
+      left: var(--s-1);
+      right: var(--s-1);
+    }
+    .admin-toolbar--selecting {
+      background: var(--accent-wash);
+    }
+    .admin-toolbar--selecting .admin-toolbar__batch,
+    .admin-toolbar--selecting .admin-toolbar__actions {
+      display: block;
+      inline-size: 100%;
+      min-inline-size: 0;
+    }
+    .admin-toolbar--selecting .admin-toolbar__browse,
+    .admin-toolbar--selecting .admin-toolbar__count {
+      display: none;
+    }
+    .admin-batch-tools {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto auto;
+      grid-template-areas: "count all cancel" "actions actions actions";
+      gap: var(--s-2);
+    }
+    .admin-batch-tools > .admin-toolbar__sep {
+      display: none;
+    }
+    .admin-batch-tools__all {
+      grid-area: all;
+      min-block-size: 46px;
+      font-size: var(--t-xs);
+      white-space: nowrap;
+    }
+    .admin-batch-tools__count {
+      grid-area: count;
+      font-size: var(--t-sm);
+      white-space: nowrap;
+    }
+    .admin-batch-tools__cancel-mobile {
+      grid-area: cancel;
+    }
+    .admin-batch-tools__actions {
+      grid-area: actions;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .admin-batch-tools__actions .btn {
+      justify-content: center;
+    }
+    .admin-workspace__header.admin-workspace__header--member-actions {
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: var(--s-2);
+    }
+    .admin-workspace__header.admin-workspace__header--member-actions > .btn {
+      inline-size: auto;
+      width: auto;
+      padding-inline: var(--s-3);
+    }
+    .admin-workspace__header--member-actions .admin-workspace__title {
+      font-size: var(--t-lg);
+    }
+  }
+
   /* 列表末尾：已加载条数 + 兜底的「加载更多」 */
   .admin-listend {
     display: flex;

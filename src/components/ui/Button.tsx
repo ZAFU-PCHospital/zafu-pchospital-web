@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { MouseEventHandler, ReactNode } from "react";
+import type { ComponentPropsWithRef, ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
 
@@ -37,13 +37,8 @@ export type LinkButtonProps = BaseProps & {
   external?: boolean;
 };
 
-export type NativeButtonProps = BaseProps & {
-  href?: never;
-  type?: "button" | "submit" | "reset";
-  disabled?: boolean;
-  onClick?: MouseEventHandler<HTMLButtonElement>;
-  "aria-label"?: string;
-};
+export type NativeButtonProps = BaseProps &
+  Omit<ComponentPropsWithRef<"button">, keyof BaseProps> & { href?: never };
 
 export type ButtonProps = LinkButtonProps | NativeButtonProps;
 
@@ -54,7 +49,7 @@ const variantClass: Record<ButtonVariant, string> = {
 };
 
 export function Button(props: ButtonProps) {
-  const { variant = "outline", icon, trailingIcon, className, children } = props;
+  const { variant = "outline", icon, trailingIcon, className, children, ...elementProps } = props;
   const classes = cn("btn", variantClass[variant], className);
 
   const content = (
@@ -83,17 +78,10 @@ export function Button(props: ButtonProps) {
     );
   }
 
-  const { type = "button", disabled, onClick } = props;
-  const ariaLabel = props["aria-label"];
+  const nativeProps = elementProps as Omit<NativeButtonProps, keyof BaseProps>;
 
   return (
-    <button
-      className={classes}
-      type={type}
-      disabled={disabled}
-      onClick={onClick}
-      aria-label={ariaLabel}
-    >
+    <button {...nativeProps} className={classes} type={nativeProps.type ?? "button"}>
       {content}
     </button>
   );
