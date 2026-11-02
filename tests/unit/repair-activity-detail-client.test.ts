@@ -804,6 +804,75 @@ test("查询到本人有效报名时突出你已报名成功并保留改类型",
   assert.equal(editSelect?.props.disabled, false, "有效报名仍可修改故障类型");
 });
 
+test("查询到有效报名时可在活动开始前二次确认取消，成功后释放表单", async (t) => {
+  const copy = repairActivitiesPage.detail;
+  const ui = await mount(t);
+  await ui.finish(0, { ...activity, status: "OPEN", activityAt: "2026-10-24T10:00:00Z" });
+  ui.requestLookup("13800000000");
+  ui.requests[1].finish(Response.json({ success: true, data: lookupRegistration }));
+  await setImmediate();
+
+  const cancelButton = findElement(
+    ui.view(),
+    (element) =>
+      element.props.children === copy.cancelSignup && typeof element.props.onClick === "function",
+  );
+  assert.ok(cancelButton, "有效报名应提供取消入口");
+  (cancelButton.props.onClick as () => void)();
+  ui.view();
+
+  const dialog = findElement(
+    ui.view(),
+    (element) =>
+      element.props.title === copy.cancelConfirmTitle &&
+      typeof element.props.onConfirm === "function",
+  );
+  assert.ok(dialog, "取消应经过二次确认");
+  (dialog.props.onConfirm as () => void)();
+  assert.equal(ui.requests[2].url, "/api/v1/repair-activities/a/registrations/r1/cancel");
+  assert.equal(ui.requests[2].init.method, "POST");
+  assert.deepEqual(JSON.parse(ui.requests[2].init.body as string), {
+    name: registration.name,
+    phone: "13800000000",
+    editToken: lookupRegistration.editToken,
+  });
+  ui.requests[2].finish(Response.json({ success: true, data: { cancelled: true } }));
+  await setImmediate();
+
+  assert.equal(text(ui.view()).includes(copy.lookupRegisteredTitle), false);
+  assert.equal(ui.requests[3].url, "/api/v1/repair-activities/a", "取消后刷新名额");
+  assert.ok(
+    findElement(ui.view(), (element) => element.props["aria-label"] === copy.signupTitle),
+    "同一设备取消后重新显示报名表单",
+  );
+  await ui.finish(3, { ...activity, status: "OPEN", registeredCount: 1, remaining: 9 });
+});
+
+test("活动开始后仍可查询，但自助取消入口收起并提示联系管理员", async (t) => {
+  const copy = repairActivitiesPage.detail;
+  const ui = await mount(t);
+  await ui.finish(0, {
+    ...activity,
+    status: "CLOSED",
+    registeredCount: 1,
+    remaining: 9,
+    activityAt: "2026-10-24T03:00:00Z",
+  });
+  ui.requestLookup("13800000000");
+  ui.requests[1].finish(Response.json({ success: true, data: lookupRegistration }));
+  await setImmediate();
+
+  assert.equal(
+    findElement(
+      ui.view(),
+      (element) =>
+        element.props.children === copy.cancelSignup && typeof element.props.onClick === "function",
+    ),
+    undefined,
+  );
+  assert.ok(text(ui.view()).includes(copy.cancelStarted));
+});
+
 test("查询到已签到记录时状态用中文且不再提供改类型", async (t) => {
   const ui = await mount(t);
   await ui.finish(0, { ...activity, status: "CLOSED", registeredCount: 3, remaining: 7 });

@@ -16,6 +16,7 @@ import {
   assertValidIssueType,
   assertValidRegistrantName,
   assertValidTitle,
+  canCancelRegistration,
   canEditIssueType,
   deriveRepairActivityStatus,
   EFFECTIVE_REGISTRATION_STATUSES,
@@ -1001,6 +1002,77 @@ export const repairActivityService = {
         status: updated.status,
         createdAt: updated.createdAt.toISOString(),
       };
+    });
+  },
+
+  /**
+   * 客户自助取消（issue #345）：活动开始前、报名尚未签到/接待时可取消。
+   * 软删释放名额；姓名/手机号/改类型 token 三者都必须匹配，避免拿错凭证取消他人报名。
+   */
+  async cancelRegistration(
+    activityId: string,
+    registrationId: string,
+    input: { name: string; phone: string; editToken: string },
+    context: PublicRequestContext,
+  ): Promise<{ cancelled: true }> {
+    const name = assertValidRegistrantName(input.name);
+    const phone = normalizePhone(input.phone);
+    if (typeof input.editToken !== "string" || !input.editToken.trim()) {
+      throw new AppError("ACTIVITY_EDIT_TOKEN_INVALID", "查询凭证无效或已过期");
+    }
+    verifyRegistrationEditToken(input.editToken.trim(), { registrationId, activityId });
+
+    return inSerializableTransaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM repair_activities WHERE id = ${activityId} FOR UPDATE`;
+      const activity = await tx.repairActivity.findUnique({ where: { id: activityId } });
+      if (!activity || activity.deletedAt) {
+        throw new AppError("ACTIVITY_NOT_FOUND", "活动不存在");
+      }
+      const now = new Date();
+      const reg = await tx.repairActivityRegistration.findFirst({
+        where: { id: registrationId, activityId, deletedAt: null },
+      });
+      if (!reg || reg.name !== name || reg.phone !== phone) {
+        throw new AppError("ACTIVITY_REGISTRATION_NOT_FOUND", "报名记录不存在或信息不匹配");
+      }
+      if (reg.status !== "REGISTERED") {
+        throw new AppError(
+          "ACTIVITY_REGISTRATION_STATE_INVALID",
+          "已签到或已接待的报名不能自助取消，请联系活动管理员",
+        );
+      }
+      if (
+        !canCancelRegistration({
+          registrationStatus: reg.status,
+          activityAt: activity.activityAt,
+          now,
+        })
+      ) {
+        throw new AppError(
+          "ACTIVITY_REGISTRATION_STATE_INVALID",
+          "活动已开始，不能自助取消，请联系活动管理员",
+        );
+      }
+
+      await tx.repairActivityRegistration.update({
+        where: { id: registrationId },
+        data: { deletedAt: now },
+      });
+      await appendAuditLog(tx, {
+        actor: context,
+        actorType: "SYSTEM",
+        action: "repair_activity.registration_cancelled",
+        targetType: "RepairActivityRegistration",
+        targetId: registrationId,
+        result: "SUCCESS",
+        before: {
+          activityId,
+          status: reg.status,
+          phoneMasked: maskActivityPhone(phone),
+        },
+        after: { activityId, deletedAt: now.toISOString() },
+      });
+      return { cancelled: true as const };
     });
   },
 };

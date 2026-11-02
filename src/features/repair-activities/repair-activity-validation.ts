@@ -193,6 +193,24 @@ export function canEditIssueType(params: {
   return params.registrationStatus === "REGISTERED" && params.activityStatus !== "ENDED";
 }
 
+/**
+ * 自助取消：只允许报名成功且还没到活动开始时刻。
+ * 报名截止后仍可取消（截止与开始之间是客户最后的退出窗口）。
+ */
+export function canCancelRegistration(params: {
+  registrationStatus: string;
+  activityAt: Date | string;
+  now?: Date;
+}): boolean {
+  const activityAt = new Date(params.activityAt);
+  const now = params.now ?? new Date();
+  return (
+    params.registrationStatus === "REGISTERED" &&
+    !Number.isNaN(activityAt.getTime()) &&
+    now.getTime() < activityAt.getTime()
+  );
+}
+
 export function assertValidCapacity(capacity: number): void {
   if (!Number.isInteger(capacity) || capacity < REPAIR_ACTIVITY_CAPACITY_MIN || capacity > 10_000) {
     throw new AppError("VALIDATION_FAILED", "人数上限须为 1–10000 的整数", {
