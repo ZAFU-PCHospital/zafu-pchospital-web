@@ -20,7 +20,6 @@ import { repairActivitiesPage } from "@/config/repair-activities";
 import {
   activityEndExclusive,
   canAcceptNewRegistration,
-  canCancelRegistration,
   canShowPublicQueue,
   REPAIR_ACTIVITY_DEVICE_MODEL_MAX_LENGTH,
   repairActivityIssueTypeLabels,
@@ -102,6 +101,8 @@ export function RepairActivityDetail({ activityId }: Props) {
   const deviceAttemptRef = useRef(0);
   /** 防止连点在 busy 重新渲染前发出第二个 POST。 */
   const submittingRef = useRef(false);
+  /** 取消确认按钮同帧连点保护：cancelBusy 要等下一轮渲染才生效。 */
+  const cancelSubmittingRef = useRef(false);
   /** 换活动后丢弃旧报名的迟到响应。 */
   const signupAttemptRef = useRef(0);
   /** 换活动后丢弃旧查询的迟到响应，并中止在途请求。 */
@@ -167,6 +168,7 @@ export function RepairActivityDetail({ activityId }: Props) {
     lookupAbortRef.current?.abort();
     lookupAbortRef.current = null;
     submittingRef.current = false;
+    cancelSubmittingRef.current = false;
     setState("loading");
     setActivity(null);
     setSignupSucceeded(false);
@@ -686,7 +688,8 @@ export function RepairActivityDetail({ activityId }: Props) {
 
   /** 活动开始前自助取消：软删报名、释放名额；成功后本设备可重新报名。 */
   async function cancelRegistration() {
-    if (!lookup || cancelBusy) return;
+    if (!lookup || cancelBusy || cancelSubmittingRef.current) return;
+    cancelSubmittingRef.current = true;
     const target = lookup;
     const attempt = ++lookupAttemptRef.current;
     setCancelBusy(true);
@@ -721,6 +724,8 @@ export function RepairActivityDetail({ activityId }: Props) {
       setLookupPhone("");
       setLookupPhoneError("");
       setLookupNameError("");
+      // 让在途设备状态查询作废：迟到响应不能把刚取消的报名重新写回面板。
+      deviceAttemptRef.current += 1;
       // 同一设备取消后立即解锁报名表单；其它设备上的报名状态不动。
       if (deviceRegistration?.id === target.id) setDeviceRegistration(null);
       setDeviceStatusResolved(true);
@@ -734,6 +739,7 @@ export function RepairActivityDetail({ activityId }: Props) {
         void load(true);
       }
     } finally {
+      cancelSubmittingRef.current = false;
       if (lookupAttemptRef.current === attempt) setCancelBusy(false);
     }
   }
@@ -1246,11 +1252,7 @@ export function RepairActivityDetail({ activityId }: Props) {
                       <Button type="submit" variant="solid" disabled={busy}>
                         {copy.submitUpdate}
                       </Button>
-                      {cancelWindowOpen &&
-                      canCancelRegistration({
-                        registrationStatus: lookup.status,
-                        activityAt: activity.activityAt,
-                      }) ? (
+                      {cancelWindowOpen ? (
                         <Button
                           type="button"
                           variant="outline"

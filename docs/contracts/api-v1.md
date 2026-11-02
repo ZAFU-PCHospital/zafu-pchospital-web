@@ -1276,6 +1276,8 @@ body `{ name, phone, editToken }`，同源、统一信封 / requestId，沿用�
   已签到 / 已接待或活动已开始返回 409 `ACTIVITY_REGISTRATION_STATE_INVALID`。
 - 取消把该报名软删（`deletedAt`），释放名额；写 SYSTEM 审计
   `repair_activity.registration_cancelled`（只含活动 ID、旧状态与脱敏手机号）。
+  已软删报名使用同一 token/姓名/手机号重试返回 200（幂等成功），不重复写审计；
+  用于取消响应丢失后的安全重试。token 失败统一提示「查询凭证无效或已过期，请重新查询」。
 - 该设备签名 cookie 指向的报名被软删后，设备状态接口返回 `submitted=false`，可重新报名；
   取消后同一手机号也按正常名额规则重新校验。
 - 管理员既有删除报名入口不变；本端点不处理维修记录、照片或 no-show 事件。无 Schema /

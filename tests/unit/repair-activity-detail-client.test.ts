@@ -829,6 +829,12 @@ test("查询到有效报名时可在活动开始前二次确认取消，成功�
   );
   assert.ok(dialog, "取消应经过二次确认");
   (dialog.props.onConfirm as () => void)();
+  (dialog.props.onConfirm as () => void)();
+  assert.equal(
+    ui.requests.filter((request) => request.url.endsWith("/cancel")).length,
+    1,
+    "同帧连点只发一个取消请求",
+  );
   assert.equal(ui.requests[2].url, "/api/v1/repair-activities/a/registrations/r1/cancel");
   assert.equal(ui.requests[2].init.method, "POST");
   assert.deepEqual(JSON.parse(ui.requests[2].init.body as string), {
@@ -846,6 +852,105 @@ test("查询到有效报名时可在活动开始前二次确认取消，成功�
     "同一设备取消后重新显示报名表单",
   );
   await ui.finish(3, { ...activity, status: "OPEN", registeredCount: 1, remaining: 9 });
+});
+
+test("取消网络失败时保留查询结果并提示重试", async (t) => {
+  const copy = repairActivitiesPage.detail;
+  const ui = await mount(t);
+  await ui.finish(0, { ...activity, status: "OPEN" });
+  ui.requestLookup("13800000000");
+  ui.requests[1].finish(Response.json({ success: true, data: lookupRegistration }));
+  await setImmediate();
+  const cancelButton = findElement(
+    ui.view(),
+    (element) =>
+      element.props.children === copy.cancelSignup && typeof element.props.onClick === "function",
+  );
+  assert.ok(cancelButton);
+  (cancelButton.props.onClick as () => void)();
+  const dialog = findElement(
+    ui.view(),
+    (element) =>
+      element.props.title === copy.cancelConfirmTitle &&
+      typeof element.props.onConfirm === "function",
+  );
+  (dialog!.props.onConfirm as () => void)();
+  ui.requests[2].fail(new Error("network"));
+  await setImmediate();
+
+  const content = text(ui.view());
+  assert.ok(content.includes("网络异常，请稍后重试"));
+  assert.ok(content.includes(copy.lookupRegisteredTitle), "失败时保留查询结果以便重试");
+  assert.equal(ui.requests[3].url, "/api/v1/repair-activities/a");
+  await ui.finish(3, { ...activity, status: "OPEN" });
+});
+
+test("取消服务端状态拒绝时保留查询结果并展示原因", async (t) => {
+  const copy = repairActivitiesPage.detail;
+  const ui = await mount(t);
+  await ui.finish(0, { ...activity, status: "OPEN" });
+  ui.requestLookup("13800000000");
+  ui.requests[1].finish(Response.json({ success: true, data: lookupRegistration }));
+  await setImmediate();
+  const cancelButton = findElement(
+    ui.view(),
+    (element) =>
+      element.props.children === copy.cancelSignup && typeof element.props.onClick === "function",
+  );
+  assert.ok(cancelButton);
+  (cancelButton.props.onClick as () => void)();
+  const dialog = findElement(
+    ui.view(),
+    (element) =>
+      element.props.title === copy.cancelConfirmTitle &&
+      typeof element.props.onConfirm === "function",
+  );
+  (dialog!.props.onConfirm as () => void)();
+  ui.requests[2].finish(
+    Response.json(
+      { success: false, error: { message: "活动已开始，不能自助取消，请联系活动管理员" } },
+      { status: 409 },
+    ),
+  );
+  await setImmediate();
+
+  const content = text(ui.view());
+  assert.ok(content.includes("活动已开始，不能自助取消"));
+  assert.ok(content.includes(copy.lookupRegisteredTitle));
+  await ui.finish(3, { ...activity, status: "OPEN" });
+});
+
+test("迟到的设备状态不能把刚取消的报名写回并重新收起表单", async (t) => {
+  const copy = repairActivitiesPage.detail;
+  const ui = await mount(t, { device: "pending" });
+  await ui.finish(0, { ...activity, status: "OPEN" });
+  ui.requestLookup("13800000000");
+  ui.requests[1].finish(Response.json({ success: true, data: lookupRegistration }));
+  await setImmediate();
+  const cancelButton = findElement(
+    ui.view(),
+    (element) =>
+      element.props.children === copy.cancelSignup && typeof element.props.onClick === "function",
+  );
+  assert.ok(cancelButton);
+  (cancelButton.props.onClick as () => void)();
+  const dialog = findElement(
+    ui.view(),
+    (element) =>
+      element.props.title === copy.cancelConfirmTitle &&
+      typeof element.props.onConfirm === "function",
+  );
+  (dialog!.props.onConfirm as () => void)();
+  ui.requests[2].finish(Response.json({ success: true, data: { cancelled: true } }));
+  await setImmediate();
+  assert.equal(ui.devicePendingCount(), 1);
+  ui.resolveDevice(0, { submitted: true, registration });
+  await setImmediate();
+  assert.ok(
+    findElement(ui.view(), (element) => element.props["aria-label"] === copy.signupTitle),
+    "取消成功后迟到的设备状态不能重新收起报名表单",
+  );
+  await ui.finish(3, { ...activity, status: "OPEN" });
 });
 
 test("活动开始后仍可查询，但自助取消入口收起并提示联系管理员", async (t) => {

@@ -858,7 +858,7 @@ export const repairActivityService = {
     context: PublicRequestContext,
   ): Promise<RegistrationLookupView> {
     // 姓名 + 手机号都对才返回记录（issue #304）：既避免填错联系方式后误以为没报上，
-    // 也让单凭手机号枚举姓名 / 拿改类型 token 的路径消失。
+    // 也让单凭手机号枚举姓名 / 拿查询 token 的路径消失。
     const name = assertValidRegistrantName(input.name);
     const phone = normalizePhone(input.phone);
     const activity = await getDb().repairActivity.findFirst({
@@ -942,7 +942,7 @@ export const repairActivityService = {
     const issueType = assertValidIssueType(input.issueType);
     normalizePhone(input.phone);
     if (typeof input.editToken !== "string" || !input.editToken.trim()) {
-      throw new AppError("ACTIVITY_EDIT_TOKEN_INVALID", "改类型凭证无效或已过期");
+      throw new AppError("ACTIVITY_EDIT_TOKEN_INVALID", "查询凭证无效或已过期，请重新查询");
     }
     verifyRegistrationEditToken(input.editToken.trim(), { registrationId, activityId });
 
@@ -1007,7 +1007,7 @@ export const repairActivityService = {
 
   /**
    * 客户自助取消（issue #345）：活动开始前、报名尚未签到/接待时可取消。
-   * 软删释放名额；姓名/手机号/改类型 token 三者都必须匹配，避免拿错凭证取消他人报名。
+   * 软删释放名额；姓名/手机号/查询 token 三者都必须匹配，避免拿错凭证取消他人报名。
    */
   async cancelRegistration(
     activityId: string,
@@ -1018,7 +1018,7 @@ export const repairActivityService = {
     const name = assertValidRegistrantName(input.name);
     const phone = normalizePhone(input.phone);
     if (typeof input.editToken !== "string" || !input.editToken.trim()) {
-      throw new AppError("ACTIVITY_EDIT_TOKEN_INVALID", "查询凭证无效或已过期");
+      throw new AppError("ACTIVITY_EDIT_TOKEN_INVALID", "查询凭证无效或已过期，请重新查询");
     }
     verifyRegistrationEditToken(input.editToken.trim(), { registrationId, activityId });
 
@@ -1029,12 +1029,14 @@ export const repairActivityService = {
         throw new AppError("ACTIVITY_NOT_FOUND", "活动不存在");
       }
       const now = new Date();
+      // 包含已软删行：取消响应丢失后客户端重试应幂等成功，而不是被迫刷新页面。
       const reg = await tx.repairActivityRegistration.findFirst({
-        where: { id: registrationId, activityId, deletedAt: null },
+        where: { id: registrationId, activityId },
       });
       if (!reg || reg.name !== name || reg.phone !== phone) {
         throw new AppError("ACTIVITY_REGISTRATION_NOT_FOUND", "报名记录不存在或信息不匹配");
       }
+      if (reg.deletedAt) return { cancelled: true as const };
       if (reg.status !== "REGISTERED") {
         throw new AppError(
           "ACTIVITY_REGISTRATION_STATE_INVALID",
