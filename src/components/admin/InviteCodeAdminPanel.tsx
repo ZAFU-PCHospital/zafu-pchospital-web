@@ -2,7 +2,6 @@
 
 import { useTableQuery } from "@/components/admin/useTableQuery";
 import { tableQueryOptions } from "@/config/table-queries";
-import { tableCopy } from "@/config/admin-tables";
 
 import { useCallback, useState, type FormEvent } from "react";
 import { AdminTableQuery } from "@/components/admin/AdminTableQuery";
@@ -272,12 +271,9 @@ export function InviteCodeAdminPanel() {
       {state === "ready" ? (
         <div className="admin-list">
           <AdminListToolbar
-            count={(list.refreshing
-              ? tableCopy.updating
-              : list.problem
-                ? tableCopy.previousCount
-                : tableCopy.count
-            ).replace("{count}", String(pagination?.total ?? items.length))}
+            count={pagination?.total ?? items.length}
+            refreshing={list.refreshing}
+            previous={Boolean(list.problem)}
           />
           {/* 列定义由 spec 提供，跨列编辑行由 renderRow 接管。 */}
           <AdminTable

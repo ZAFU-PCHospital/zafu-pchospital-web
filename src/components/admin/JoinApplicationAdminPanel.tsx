@@ -2,7 +2,6 @@
 
 import { useTableQuery } from "@/components/admin/useTableQuery";
 import { tableQueryOptions } from "@/config/table-queries";
-import { tableCopy } from "@/config/admin-tables";
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { AdminTableExport } from "@/components/admin/AdminTableExport";
@@ -206,17 +205,19 @@ export function JoinApplicationAdminPanel() {
       {state === "ready" ? (
         <div className="admin-list">
           <AdminListToolbar
-            count={(list.refreshing
-              ? tableCopy.updating
-              : list.problem
-                ? tableCopy.previousCount
-                : tableCopy.count
-            ).replace("{count}", String(pagination?.total ?? items.length))}
+            count={pagination?.total ?? items.length}
+            refreshing={list.refreshing}
+            previous={Boolean(list.problem)}
           >
             <AdminTableExport
               path="/api/v1/admin/join-applications/export"
               params={() => query.params(1)}
-              disabled={busy || list.refreshing}
+              disabled={
+                busy ||
+                list.refreshing ||
+                Boolean(list.problem) ||
+                (pagination?.total ?? items.length) === 0
+              }
               onError={setProblem}
               onDone={(text) => setToast({ text, tone: "success" })}
             />

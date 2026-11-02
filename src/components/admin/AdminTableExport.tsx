@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
+import { ActionMenu } from "@/components/ui/ActionMenu";
 import { tableCopy } from "@/config/admin-tables";
 
 export function AdminTableExport({
@@ -20,7 +21,7 @@ export function AdminTableExport({
   const [busy, setBusy] = useState(false);
   const inFlight = useRef(false);
   async function download(format: "csv" | "xlsx") {
-    if (inFlight.current) return;
+    if (disabled || inFlight.current) return;
     inFlight.current = true;
     setBusy(true);
     onError("");
@@ -66,9 +67,10 @@ export function AdminTableExport({
     }
   }
   return (
-    <span className="admin-actions">
+    <span className="admin-actions admin-table-export">
       {(["csv", "xlsx"] as const).map((format) => (
         <Button
+          className="admin-toolbar__desktop-only"
           key={format}
           icon="download"
           disabled={disabled || busy}
@@ -77,6 +79,17 @@ export function AdminTableExport({
           {tableCopy.exportCurrent} {format.toUpperCase()}
         </Button>
       ))}
+      <ActionMenu
+        className="admin-toolbar__mobile-only"
+        label={tableCopy.exportShort}
+        title={tableCopy.exportScope}
+        disabled={disabled || busy}
+        items={(["csv", "xlsx"] as const).map((format) => ({
+          label: format.toUpperCase(),
+          icon: "download",
+          onSelect: () => void download(format),
+        }))}
+      />
     </span>
   );
 }
