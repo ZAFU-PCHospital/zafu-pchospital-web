@@ -12,7 +12,7 @@ type EditTokenPayload = {
 };
 
 /**
- * lookup 签发的短期改类型 token（HMAC-SHA256，约 10 分钟）。
+ * lookup 签发的短期查询 / 改类型 / 取消 token（HMAC-SHA256，约 10 分钟）。
  * 格式：`base64url(payloadJson).base64url(sig)`
  */
 export function issueRegistrationEditToken(
@@ -37,29 +37,29 @@ export function verifyRegistrationEditToken(
 ): void {
   const parts = token.split(".");
   if (parts.length !== 2 || !parts[0] || !parts[1]) {
-    throw new AppError("ACTIVITY_EDIT_TOKEN_INVALID", "改类型凭证无效或已过期");
+    throw new AppError("ACTIVITY_EDIT_TOKEN_INVALID", "查询凭证无效或已过期，请重新查询");
   }
   const [body, sig] = parts;
   const expectedSig = sign(body);
   const a = Buffer.from(sig);
   const b = Buffer.from(expectedSig);
   if (a.length !== b.length || !timingSafeEqual(a, b)) {
-    throw new AppError("ACTIVITY_EDIT_TOKEN_INVALID", "改类型凭证无效或已过期");
+    throw new AppError("ACTIVITY_EDIT_TOKEN_INVALID", "查询凭证无效或已过期，请重新查询");
   }
   let payload: EditTokenPayload;
   try {
     payload = JSON.parse(Buffer.from(body, "base64url").toString("utf8")) as EditTokenPayload;
   } catch {
-    throw new AppError("ACTIVITY_EDIT_TOKEN_INVALID", "改类型凭证无效或已过期");
+    throw new AppError("ACTIVITY_EDIT_TOKEN_INVALID", "查询凭证无效或已过期，请重新查询");
   }
   if (
     payload.registrationId !== expected.registrationId ||
     payload.activityId !== expected.activityId
   ) {
-    throw new AppError("ACTIVITY_EDIT_TOKEN_INVALID", "改类型凭证无效或已过期");
+    throw new AppError("ACTIVITY_EDIT_TOKEN_INVALID", "查询凭证无效或已过期，请重新查询");
   }
   if (typeof payload.exp !== "number" || now.getTime() > payload.exp) {
-    throw new AppError("ACTIVITY_EDIT_TOKEN_INVALID", "改类型凭证无效或已过期");
+    throw new AppError("ACTIVITY_EDIT_TOKEN_INVALID", "查询凭证无效或已过期，请重新查询");
   }
 }
 

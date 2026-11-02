@@ -76,6 +76,10 @@ export function RepairActivityDetail({ activityId }: Props) {
   const [lookupPhone, setLookupPhone] = useState("");
   const [lookupPhoneError, setLookupPhoneError] = useState("");
   const [lookupNameError, setLookupNameError] = useState("");
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelBusy, setCancelBusy] = useState(false);
+  /** 活动开始后不再展示自助取消；服务端仍会按同一时刻兜底。 */
+  const [cancelWindowOpen, setCancelWindowOpen] = useState(true);
   /** 本设备已提交的报名（服务端签名 cookie）：有值时收起报名表单，只留查询入口。 */
   const [deviceRegistration, setDeviceRegistration] = useState<RegistrationPublicView | null>(null);
   /** 设备状态是否已有结论：未 resolve 前不渲染报名表单，避免「先在表单里输入、随后被收起」。 */
@@ -97,6 +101,8 @@ export function RepairActivityDetail({ activityId }: Props) {
   const deviceAttemptRef = useRef(0);
   /** 防止连点在 busy 重新渲染前发出第二个 POST。 */
   const submittingRef = useRef(false);
+  /** 取消确认按钮同帧连点保护：cancelBusy 要等下一轮渲染才生效。 */
+  const cancelSubmittingRef = useRef(false);
   /** 换活动后丢弃旧报名的迟到响应。 */
   const signupAttemptRef = useRef(0);
   /** 换活动后丢弃旧查询的迟到响应，并中止在途请求。 */
@@ -162,6 +168,7 @@ export function RepairActivityDetail({ activityId }: Props) {
     lookupAbortRef.current?.abort();
     lookupAbortRef.current = null;
     submittingRef.current = false;
+    cancelSubmittingRef.current = false;
     setState("loading");
     setActivity(null);
     setSignupSucceeded(false);
@@ -175,6 +182,9 @@ export function RepairActivityDetail({ activityId }: Props) {
     setLookupPhone("");
     setLookupPhoneError("");
     setLookupNameError("");
+    setCancelOpen(false);
+    setCancelBusy(false);
+    setCancelWindowOpen(true);
     setDeviceRegistration(null);
     setDeviceStatusResolved(false);
     setDeviceRechecking(false);
@@ -250,6 +260,17 @@ export function RepairActivityDetail({ activityId }: Props) {
       if (deviceAttemptRef.current === attempt) setDeviceRechecking(false);
     }
   }
+
+  /** 自助取消截止到活动开始；页面长开时也要在开始后收起按钮。 */
+  useEffect(() => {
+    if (!activity) return;
+    const deadline = Date.parse(activity.activityAt);
+    if (!Number.isFinite(deadline)) return;
+    const update = () => setCancelWindowOpen(Date.now() + serverOffsetMs < deadline);
+    update();
+    const timer = window.setInterval(update, 30_000);
+    return () => window.clearInterval(timer);
+  }, [activity, serverOffsetMs]);
 
   /** 报名未开始时每秒走一格倒计时；状态一旦离开 UPCOMING 就停表。 */
   useEffect(() => {
@@ -662,6 +683,64 @@ export function RepairActivityDetail({ activityId }: Props) {
       if (lookupAttemptRef.current === attempt) setProblem("网络异常，请稍后重试");
     } finally {
       if (lookupAttemptRef.current === attempt) setBusy(false);
+    }
+  }
+
+  /** 活动开始前自助取消：软删报名、释放名额；成功后本设备可重新报名。 */
+  async function cancelRegistration() {
+    if (!lookup || cancelBusy || cancelSubmittingRef.current) return;
+    cancelSubmittingRef.current = true;
+    const target = lookup;
+    const attempt = ++lookupAttemptRef.current;
+    setCancelBusy(true);
+    setProblem("");
+    try {
+      const response = await fetch(
+        `/api/v1/repair-activities/${activityId}/registrations/${target.id}/cancel`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: target.name,
+            phone: lookupPhone,
+            editToken: target.editToken,
+          }),
+          signal: AbortSignal.timeout(LOOKUP_REQUEST_TIMEOUT_MS),
+        },
+      );
+      const json = (await response.json()) as {
+        success: boolean;
+        error?: { message?: string };
+      };
+      if (lookupAttemptRef.current !== attempt) return;
+      if (!json.success) {
+        setCancelOpen(false);
+        setProblem(json.error?.message ?? "取消失败，请稍后重试");
+        void load(true);
+        return;
+      }
+      setCancelOpen(false);
+      setLookup(null);
+      setLookupPhone("");
+      setLookupPhoneError("");
+      setLookupNameError("");
+      // 让在途设备状态查询作废：迟到响应不能把刚取消的报名重新写回面板。
+      deviceAttemptRef.current += 1;
+      // 同一设备取消后立即解锁报名表单；其它设备上的报名状态不动。
+      if (deviceRegistration?.id === target.id) setDeviceRegistration(null);
+      setDeviceStatusResolved(true);
+      setNotice({ text: copy.cancelSuccess, tone: "success" });
+      void load(true);
+      window.setTimeout(() => lookupNameInputRef.current?.focus({ preventScroll: true }), 0);
+    } catch {
+      if (lookupAttemptRef.current === attempt) {
+        setCancelOpen(false);
+        setProblem("网络异常，请稍后重试");
+        void load(true);
+      }
+    } finally {
+      cancelSubmittingRef.current = false;
+      if (lookupAttemptRef.current === attempt) setCancelBusy(false);
     }
   }
 
@@ -1173,7 +1252,22 @@ export function RepairActivityDetail({ activityId }: Props) {
                       <Button type="submit" variant="solid" disabled={busy}>
                         {copy.submitUpdate}
                       </Button>
+                      {cancelWindowOpen && lookup.status === "REGISTERED" ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          disabled={busy || cancelBusy}
+                          onClick={() => {
+                            setNotice(null);
+                            setProblem("");
+                            setCancelOpen(true);
+                          }}
+                        >
+                          {copy.cancelSignup}
+                        </Button>
+                      ) : null}
                     </div>
+                    {!cancelWindowOpen ? <p className="muted">{copy.cancelStarted}</p> : null}
                   </>
                 )}
               </form>
@@ -1182,6 +1276,25 @@ export function RepairActivityDetail({ activityId }: Props) {
           </section>
         </div>
       </div>
+
+      {cancelOpen && lookup ? (
+        <ConfirmDialog
+          title={copy.cancelConfirmTitle}
+          confirmLabel={cancelBusy ? copy.cancelling : copy.cancelConfirm}
+          cancelLabel={copy.cancelKeep}
+          busy={cancelBusy}
+          confirmVariant="outline"
+          onConfirm={() => void cancelRegistration()}
+          onClose={() => {
+            if (!cancelBusy) setCancelOpen(false);
+          }}
+        >
+          <p>{copy.cancelConfirmHint}</p>
+          <p className="muted">
+            {lookup.name} · {lookup.phoneMasked}
+          </p>
+        </ConfirmDialog>
+      ) : null}
 
       {/* 提交前确认完整声明，成功后在同一弹层展示到场准备。
           服务端同样强制同意，绕开确认直接打接口会拿到 400。 */}

@@ -6,6 +6,7 @@ import {
   assertActivityTimeRules,
   assertValidIssueType,
   canAcceptNewRegistration,
+  canCancelRegistration,
   canEditIssueType,
   canShowPublicQueue,
   deriveRepairActivityStatus,
@@ -370,6 +371,38 @@ test("软删除有效报名后，活动窗口内 FULL 恢复为 OPEN；成员撤
     deriveRepairActivityStatus({ ...base, capacity: 2, now, effectiveRegistrationCount: 1 }),
     "OPEN",
   );
+});
+
+test("自助取消只允许活动开始前的 REGISTERED 报名", () => {
+  const activityAt = "2026-10-24T10:00:00.000Z";
+  assert.equal(
+    canCancelRegistration({
+      registrationStatus: "REGISTERED",
+      activityAt,
+      now: new Date("2026-10-24T09:59:59.999Z"),
+    }),
+    true,
+  );
+  assert.equal(
+    canCancelRegistration({
+      registrationStatus: "REGISTERED",
+      activityAt,
+      now: new Date("2026-10-24T10:00:00.000Z"),
+    }),
+    false,
+    "活动开始时刻起不可再自助取消",
+  );
+  for (const registrationStatus of ["CHECKED_IN", "SERVED"]) {
+    assert.equal(
+      canCancelRegistration({
+        registrationStatus,
+        activityAt,
+        now: new Date("2026-10-24T04:00:00.000Z"),
+      }),
+      false,
+      registrationStatus,
+    );
+  }
 });
 
 test("管理报名 PATCH 使用同一 issueType 白名单", () => {

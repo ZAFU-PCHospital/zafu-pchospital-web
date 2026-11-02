@@ -53,7 +53,7 @@ export const repairActivitiesPage = {
     category: "校园志愿服务",
     signupTitle: "报名参加",
     lookupTitle: "已经报名？",
-    lookupHint: "使用报名时的姓名与手机号查询或修改故障类型",
+    lookupHint: "使用报名时的姓名与手机号查询、修改故障类型或取消报名",
     lookupPhonePlaceholder: "报名时使用的手机号",
     lookupNamePlaceholder: "报名时填写的姓名",
     lookupNotFound: "未找到报名记录，请核对姓名与电话，或联系管理员",
@@ -115,7 +115,7 @@ export const repairActivitiesPage = {
     fullPrecautions: "完整报名须知与免责声明 · {count} 条",
     serviceTitle: "服务说明",
     serviceHint: "社团提供免费志愿服务。能否修复、维修时长以现场检查为准；特殊拆机需求请提前咨询",
-    cancelHint: "如需取消报名，请联系 QQ 群管理员",
+    cancelHint: "活动开始前可在上方查询报名后自助取消；活动开始后请联系 QQ 群管理员",
     preparation: [
       { icon: "hardDrive", title: "备份数据", description: "送修前自行备份重要文件" },
       { icon: "plug", title: "携带电源", description: "请带上设备的电源适配器" },
@@ -142,6 +142,14 @@ export const repairActivitiesPage = {
     fullDisabled: "新报名名额已满",
     fullLookupHint: "已报名者请使用下方「已经报名？」查询本人记录",
     notEditable: "当前状态不可修改故障类型（可能已签到或已接待）",
+    cancelSignup: "取消报名",
+    cancelConfirmTitle: "确认取消报名？",
+    cancelConfirmHint: "取消后本场名额会释放，报名记录删除；活动开始前可重新报名。",
+    cancelConfirm: "确认取消",
+    cancelKeep: "保留报名",
+    cancelling: "取消中…",
+    cancelSuccess: "报名已取消，名额已释放",
+    cancelStarted: "活动已开始，不能自助取消，请联系 QQ 群管理员",
     /** 报名前的免责声明：必须点「我已阅读并同意」才能提交，服务端同样强制。 */
     consent: {
       title: "报名须知与免责声明",
