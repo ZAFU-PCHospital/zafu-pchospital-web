@@ -186,6 +186,7 @@ export function RepairActivityCustomerBlacklistPanel() {
                     <th>{copy.status}</th>
                     <th>{copy.blockedUntil}</th>
                     <th>{copy.source}</th>
+                    <th>{copy.reason}</th>
                     <th>{copy.actions}</th>
                   </tr>
                 </thead>
@@ -212,12 +213,21 @@ export function RepairActivityCustomerBlacklistPanel() {
                       <td data-label={copy.source}>
                         {block.source === "AUTO" ? copy.auto : copy.manual}
                       </td>
+                      <td data-label={copy.reason}>
+                        {block.reason}
+                        {block.liftedReason ? (
+                          <span className="muted"> · {block.liftedReason}</span>
+                        ) : null}
+                      </td>
                       <td data-label={copy.actions}>
                         <div className="admin-row-actions">
                           <Button
                             variant="ghost"
                             disabled={busy || block.status !== "ACTIVE"}
-                            onClick={() => setLiftTarget(block)}
+                            onClick={() => {
+                              setProblem("");
+                              setLiftTarget(block);
+                            }}
                           >
                             {copy.lift}
                           </Button>
@@ -274,7 +284,10 @@ export function RepairActivityCustomerBlacklistPanel() {
                           <Button
                             variant="ghost"
                             disabled={busy || event.state === "EXCUSED"}
-                            onClick={() => setExemptTarget(event)}
+                            onClick={() => {
+                              setProblem("");
+                              setExemptTarget(event);
+                            }}
                           >
                             {copy.exempt}
                           </Button>
@@ -304,6 +317,11 @@ export function RepairActivityCustomerBlacklistPanel() {
           <p className="muted">
             {liftTarget.name} · {liftTarget.phone}
           </p>
+          {problem ? (
+            <p className="admin-status admin-status--error" role="alert">
+              {problem}
+            </p>
+          ) : null}
         </ConfirmDialog>
       ) : null}
 
@@ -322,6 +340,11 @@ export function RepairActivityCustomerBlacklistPanel() {
           <p className="muted">
             {exemptTarget.name} · {exemptTarget.phone} · {exemptTarget.activityTitle}
           </p>
+          {problem ? (
+            <p className="admin-status admin-status--error" role="alert">
+              {problem}
+            </p>
+          ) : null}
         </ConfirmDialog>
       ) : null}
     </Card>

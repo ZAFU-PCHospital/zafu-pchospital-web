@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import type { Prisma } from "@/generated/prisma/client";
+import { Prisma } from "@/generated/prisma/client";
 import { shanghaiAcademicYearRange } from "@/lib/academic-term";
 import { AppError } from "@/lib/api/errors";
 import { appendAuditLog } from "@/lib/audit/audit-service";
@@ -87,7 +87,6 @@ export async function syncCurrentYearNoShows(options: SyncOptions = {}): Promise
   const ended = activities.filter(
     (activity) => activityEndExclusive(activity.activityAt).getTime() <= now.getTime(),
   );
-  if (ended.length === 0) return;
 
   const endByActivity = new Map(
     ended.map((activity) => [activity.id, activityEndExclusive(activity.activityAt)] as const),
@@ -107,27 +106,75 @@ export async function syncCurrentYearNoShows(options: SyncOptions = {}): Promise
       deletedAt: true,
     },
   });
-  const candidates = registrations.filter((registration) => {
-    if (
-      options.customer &&
-      (normalizeCustomerName(registration.name) !== options.customer.nameNormalized ||
-        registration.activityId === options.customer.excludeActivityId)
-    )
-      return false;
-    const activityEnd = endByActivity.get(registration.activityId);
-    return Boolean(
-      activityEnd &&
-      isNoShowCandidate({
-        status: "REGISTERED",
-        deletedAt: registration.deletedAt,
-        activityEnd,
-      }),
-    );
-  });
-  if (candidates.length === 0) return;
+  const candidateIds = registrations
+    .filter((registration) => {
+      if (
+        options.customer &&
+        (normalizeCustomerName(registration.name) !== options.customer.nameNormalized ||
+          registration.activityId === options.customer.excludeActivityId)
+      )
+        return false;
+      const activityEnd = endByActivity.get(registration.activityId);
+      return Boolean(
+        activityEnd &&
+        isNoShowCandidate({
+          status: "REGISTERED",
+          deletedAt: registration.deletedAt,
+          activityEnd,
+        }),
+      );
+    })
+    .map((registration) => registration.id);
 
   await inSerializableTransaction(async (tx) => {
-    for (const registration of candidates) {
+    // 事务外读到的候选只作为初筛；进入事务后重新锁活动与报名并复核，
+    // 避免“候选已读出、管理员随即软删/签到”之间把已取消的报名记成 no-show。
+    const activityIds = [...endByActivity.keys()];
+    if (activityIds.length > 0) {
+      await tx.$queryRaw`SELECT id FROM repair_activities WHERE id IN (${Prisma.join(activityIds)}) FOR UPDATE`;
+    }
+    const lockedActivities = await tx.repairActivity.findMany({
+      where: {
+        id: { in: activityIds },
+        deletedAt: null,
+        activityAt: { gte: year.startInclusive, lt: year.endExclusive },
+      },
+      select: { id: true, activityAt: true },
+    });
+    const lockedEndByActivity = new Map(
+      lockedActivities.map(
+        (activity) => [activity.id, activityEndExclusive(activity.activityAt)] as const,
+      ),
+    );
+    if (candidateIds.length > 0) {
+      await tx.$queryRaw`SELECT id FROM repair_activity_registrations WHERE id IN (${Prisma.join(candidateIds)}) FOR UPDATE`;
+    }
+    const lockedRegistrations = await tx.repairActivityRegistration.findMany({
+      where: { id: { in: candidateIds } },
+      select: {
+        id: true,
+        activityId: true,
+        status: true,
+        name: true,
+        phone: true,
+        phoneLast4: true,
+        deletedAt: true,
+      },
+    });
+    const lockedCandidates = lockedRegistrations.filter((registration) => {
+      const activityEnd = lockedEndByActivity.get(registration.activityId);
+      return Boolean(
+        activityEnd &&
+        activityEnd.getTime() <= now.getTime() &&
+        isNoShowCandidate({
+          status: registration.status,
+          deletedAt: registration.deletedAt,
+          activityEnd,
+        }),
+      );
+    });
+
+    for (const registration of lockedCandidates) {
       await tx.repairActivityNoShowEvent.upsert({
         where: { registrationId: registration.id },
         create: {
@@ -152,7 +199,7 @@ export async function syncCurrentYearNoShows(options: SyncOptions = {}): Promise
     const confirmedEvents = await tx.repairActivityNoShowEvent.findMany({
       where: {
         state: "CONFIRMED",
-        activityId: { in: [...endByActivity.keys()] },
+        activityId: { in: [...lockedEndByActivity.keys()] },
         ...(options.customer
           ? {
               phone: options.customer.phone,
@@ -231,9 +278,18 @@ export async function syncCurrentYearNoShows(options: SyncOptions = {}): Promise
       };
       const saved = block
         ? await tx.repairActivityCustomerBlock.update({ where: { id: block.id }, data })
-        : await tx.repairActivityCustomerBlock.create({
-            data: { id: randomUUID(), ...data, createdAt: now },
+        : await tx.repairActivityCustomerBlock.upsert({
+            where: {
+              nameNormalized_phone: {
+                nameNormalized: customer.nameNormalized,
+                phone: customer.phone,
+              },
+            },
+            create: { id: randomUUID(), ...data, createdAt: now },
+            // 并发 sync 已创建同一客户时保留先写入的那条（可能是人工封锁）。
+            update: {},
           });
+      if (!block && saved.source === "MANUAL") continue;
       await appendAuditLog(tx, {
         actor: { requestId: `repair-activity-no-show:${randomUUID()}` },
         actorType: "SYSTEM",
@@ -266,7 +322,13 @@ export async function syncCurrentYearNoShows(options: SyncOptions = {}): Promise
             }
           : {}),
       },
-      select: { id: true, nameNormalized: true, phone: true },
+      select: {
+        id: true,
+        name: true,
+        nameNormalized: true,
+        phone: true,
+        blockedUntil: true,
+      },
     });
     for (const block of autoBlocks) {
       if (byCustomer.has(`${block.nameNormalized}\u0000${block.phone}`)) continue;
@@ -277,6 +339,21 @@ export async function syncCurrentYearNoShows(options: SyncOptions = {}): Promise
           liftedReason: "当前学年没有有效未到场记录",
           updatedAt: now,
         },
+      });
+      await appendAuditLog(tx, {
+        actor: { requestId: `repair-activity-no-show:${randomUUID()}` },
+        actorType: "SYSTEM",
+        action: "repair_activity.customer_unblocked",
+        targetType: "RepairActivityCustomerBlock",
+        targetId: block.id,
+        result: "SUCCESS",
+        before: {
+          name: block.name,
+          phoneMasked: maskActivityPhone(block.phone),
+          source: "AUTO",
+          blockedUntil: block.blockedUntil.toISOString(),
+        },
+        after: { liftedAt: now.toISOString(), reason: "当前学年没有有效未到场记录" },
       });
     }
   });
@@ -554,6 +631,25 @@ export const repairActivityCustomerService = {
               liftedByUserId: actor.userId ?? null,
               liftedReason: text || "未到场记录已豁免",
               updatedAt: now,
+            },
+          });
+          await appendAuditLog(tx, {
+            actor,
+            actorType: "USER",
+            actorUserId: actor.userId,
+            action: "repair_activity.customer_unblocked",
+            targetType: "RepairActivityCustomerBlock",
+            targetId: block.id,
+            result: "SUCCESS",
+            before: {
+              name: block.name,
+              phoneMasked: maskActivityPhone(block.phone),
+              source: "AUTO",
+              blockedUntil: block.blockedUntil.toISOString(),
+            },
+            after: {
+              liftedAt: now.toISOString(),
+              reason: text || "未到场记录已豁免",
             },
           });
         }

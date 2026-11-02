@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { after, before, test } from "node:test";
+import { after, before, beforeEach, test } from "node:test";
 
 import { shanghaiAcademicYearRange } from "../../src/lib/academic-term";
 import { permissionsForRoles } from "../../src/lib/auth/permissions";
@@ -87,6 +87,17 @@ async function createRegistration(
   return id;
 }
 
+async function clearNoShowTables() {
+  const db = getDb();
+  await db.auditLog.deleteMany({
+    where: {
+      targetType: { in: ["RepairActivityCustomerBlock", "RepairActivityNoShowEvent"] },
+    },
+  });
+  await db.repairActivityNoShowEvent.deleteMany({});
+  await db.repairActivityCustomerBlock.deleteMany({});
+}
+
 async function createEndedActivity() {
   const activityAt = new Date(NOW.getTime() - 3 * 24 * 60 * 60 * 1000);
   return createActivity({
@@ -116,23 +127,20 @@ before(async () => {
     permissions: permissionsForRoles(["ADMIN"]),
     requestId: "req_no_show_335",
   };
+  await clearNoShowTables();
+});
+
+beforeEach(async () => {
+  if (!enabled) return;
+  await clearNoShowTables();
 });
 
 after(async () => {
   if (!enabled) return;
   try {
     const db = getDb();
-    await db.auditLog.deleteMany({
-      where: {
-        OR: [
-          { actorUserId: adminId },
-          { targetType: "RepairActivityCustomerBlock" },
-          { targetType: "RepairActivityNoShowEvent" },
-        ],
-      },
-    });
-    await db.repairActivityNoShowEvent.deleteMany({ where: { activityId: { in: activityIds } } });
-    await db.repairActivityCustomerBlock.deleteMany({ where: { phone: { in: phones } } });
+    await clearNoShowTables();
+    await db.auditLog.deleteMany({ where: { actorUserId: adminId } });
     await db.repairActivityRegistration.deleteMany({ where: { activityId: { in: activityIds } } });
     await db.repairActivity.deleteMany({ where: { id: { in: activityIds } } });
     await db.user.deleteMany({ where: { id: adminId } });
@@ -215,8 +223,11 @@ dbTest("历史 no-show：只计入结束且未签到，软删口径与身份键�
   assert.ok(blocks.every((block) => block.source === "AUTO"));
 
   const list = await repairActivityCustomerService.list(actor, NOW);
-  assert.equal(list.blocks.filter((block) => block.status === "ACTIVE").length, 3);
-  assert.equal(list.events.length, 3);
+  assert.equal(
+    list.blocks.filter((block) => phones.includes(block.phone) && block.status === "ACTIVE").length,
+    3,
+  );
+  assert.equal(list.events.filter((event) => activityIds.includes(event.activityId)).length, 3);
 });
 
 dbTest("豁免会解除自动封锁；再次未到场会重新封锁", async () => {
@@ -251,6 +262,132 @@ dbTest("豁免会解除自动封锁；再次未到场会重新封锁", async () 
   await syncCurrentYearNoShows({ now: later });
   block = await getDb().repairActivityCustomerBlock.findUniqueOrThrow({ where: { id: block.id } });
   assert.equal(block.liftedAt, null, "新 no-show 应重新激活封锁");
+});
+
+dbTest("并发 sync 首次封锁不会撞唯一键", async () => {
+  const activityId = await createEndedActivity();
+  const customer = { name: "并发客户", phone: phone(10) };
+  await createRegistration(activityId, { ...customer, status: "REGISTERED" });
+
+  await Promise.all([syncCurrentYearNoShows({ now: NOW }), syncCurrentYearNoShows({ now: NOW })]);
+  const blocks = await getDb().repairActivityCustomerBlock.findMany({
+    where: { phone: customer.phone },
+  });
+  assert.equal(blocks.length, 1);
+  assert.equal(
+    await getDb().repairActivityNoShowEvent.count({
+      where: { activityId, phone: customer.phone, state: "CONFIRMED" },
+    }),
+    1,
+  );
+});
+
+dbTest("活动软删后 sync 会解除没有可见事件的 AUTO 封锁", async () => {
+  const activityId = await createEndedActivity();
+  const customer = { name: "软删活动客户", phone: phone(11) };
+  await createRegistration(activityId, { ...customer, status: "REGISTERED" });
+  await syncCurrentYearNoShows({ now: NOW });
+  let block = await getDb().repairActivityCustomerBlock.findUniqueOrThrow({
+    where: { nameNormalized_phone: { nameNormalized: customer.name, phone: customer.phone } },
+  });
+  assert.equal(block.liftedAt, null);
+
+  await getDb().repairActivity.update({ where: { id: activityId }, data: { deletedAt: NOW } });
+  await syncCurrentYearNoShows({ now: NOW });
+  block = await getDb().repairActivityCustomerBlock.findUniqueOrThrow({ where: { id: block.id } });
+  assert.ok(block.liftedAt, "活动软删后不应留下无可见事件的自动封锁");
+  assert.equal(
+    await getDb().auditLog.count({
+      where: {
+        action: "repair_activity.customer_unblocked",
+        targetType: "RepairActivityCustomerBlock",
+        targetId: block.id,
+      },
+    }),
+    1,
+  );
+});
+
+dbTest("sync 与结束前软删并发时，事务内复核不会生成 no-show", async () => {
+  const activityId = await createEndedActivity();
+  const registrationId = await createRegistration(activityId, {
+    name: "并发软删客户",
+    phone: phone(12),
+    status: "REGISTERED",
+  });
+  const activity = await getDb().repairActivity.findUniqueOrThrow({ where: { id: activityId } });
+  const activityEnd = activityEndExclusive(activity.activityAt);
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let locked!: () => void;
+  const lockAcquired = new Promise<void>((resolve) => {
+    locked = resolve;
+  });
+  const holder = getDb().$transaction(
+    async (tx) => {
+      await tx.$queryRaw`SELECT id FROM repair_activity_registrations WHERE id = ${registrationId} FOR UPDATE`;
+      locked();
+      await gate;
+      await tx.repairActivityRegistration.update({
+        where: { id: registrationId },
+        data: { deletedAt: new Date(activityEnd.getTime() - 60_000) },
+      });
+    },
+    { timeout: 10_000 },
+  );
+  await lockAcquired;
+  const syncPromise = syncCurrentYearNoShows({ now: NOW });
+  await new Promise((resolve) => setTimeout(resolve, 80));
+  release();
+  await holder;
+  await syncPromise;
+  assert.equal(
+    await getDb().repairActivityNoShowEvent.count({ where: { registrationId } }),
+    0,
+    "事务内复核到结束前软删后不得落事件",
+  );
+});
+
+dbTest("sync 与结束前签到并发时，事务内复核不会生成 no-show", async () => {
+  const activityId = await createEndedActivity();
+  const registrationId = await createRegistration(activityId, {
+    name: "并发签到客户",
+    phone: phone(13),
+    status: "REGISTERED",
+  });
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let locked!: () => void;
+  const lockAcquired = new Promise<void>((resolve) => {
+    locked = resolve;
+  });
+  const holder = getDb().$transaction(
+    async (tx) => {
+      await tx.$queryRaw`SELECT id FROM repair_activity_registrations WHERE id = ${registrationId} FOR UPDATE`;
+      locked();
+      await gate;
+      await tx.repairActivityRegistration.update({
+        where: { id: registrationId },
+        data: { status: "CHECKED_IN", checkedInAt: NOW },
+      });
+    },
+    { timeout: 10_000 },
+  );
+  await lockAcquired;
+  const syncPromise = syncCurrentYearNoShows({ now: NOW });
+  await new Promise((resolve) => setTimeout(resolve, 80));
+  release();
+  await holder;
+  await syncPromise;
+  assert.equal(
+    await getDb().repairActivityNoShowEvent.count({ where: { registrationId } }),
+    0,
+    "事务内复核到已签到后不得落事件",
+  );
 });
 
 dbTest("管理员人工加入/解除；新报名被拦，解除后放行；全部写审计", async () => {
