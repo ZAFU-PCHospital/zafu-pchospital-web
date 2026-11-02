@@ -8430,6 +8430,22 @@ html[data-theme="black-yellow"] {
   border-color: var(--line);
   transform: none;
 }
+/* 成员端：CLOSED 是「可出勤」窗口，沿用强调色脊线；
+   已结束仍可进工作台，保持与可点卡片一致的反馈与不透明度。 */
+.member-activity-workspace .activity-list--ticket .activity-card--stub.activity-card--closed {
+  --spine: var(--accent);
+}
+.member-activity-workspace .activity-list--ticket .activity-card--stub.activity-card--ended {
+  opacity: 1;
+}
+.member-activity-workspace .activity-list--ticket .activity-card__link:hover .activity-card--stub,
+.member-activity-workspace
+  .activity-list--ticket
+  .activity-card__link:focus-visible
+  .activity-card--stub {
+  border-color: var(--accent-line);
+  transform: translateY(-1px);
+}
 .activity-list--ticket .activity-card--stub .activity-card__spine {
   position: absolute;
   inset-block-start: 0;
