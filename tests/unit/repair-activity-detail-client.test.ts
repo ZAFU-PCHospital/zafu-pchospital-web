@@ -978,7 +978,8 @@ test("活动开始后仍可查询，但自助取消入口收起并提示联系�
   assert.ok(text(ui.view()).includes(copy.cancelStarted));
 });
 
-test("查询到已签到记录时状态用中文且不再提供改类型", async (t) => {
+test("活动开始前已签到/已接待时仍不显示取消按钮", async (t) => {
+  const copy = repairActivitiesPage.detail;
   const ui = await mount(t);
   await ui.finish(0, { ...activity, status: "CLOSED", registeredCount: 3, remaining: 7 });
   ui.requestLookup("13800000000");
@@ -987,22 +988,41 @@ test("查询到已签到记录时状态用中文且不再提供改类型", async
   );
   await setImmediate();
   const content = text(ui.view());
-  assert.ok(
-    content.includes(repairActivitiesPage.detail.lookupStatusLabel.replace("{status}", "已签到")),
+  assert.ok(content.includes(copy.lookupStatusLabel.replace("{status}", "已签到")));
+  assert.ok(content.includes(copy.notEditable));
+  const assertNoCancel = () => {
+    const lookupSection = findElement(
+      ui.view(),
+      (element) => element.props["aria-labelledby"] === "repair-activity-lookup-title",
+    );
+    assert.ok(lookupSection);
+    assert.equal(
+      findElement(
+        lookupSection,
+        (element) => element.type === "select" && element.props.name === "issueType",
+      ),
+      undefined,
+    );
+    assert.equal(
+      findElement(
+        lookupSection,
+        (element) =>
+          element.props.children === copy.cancelSignup &&
+          typeof element.props.onClick === "function",
+      ),
+      undefined,
+      "已签到/已接待即使活动尚未开始也不能显示自助取消",
+    );
+  };
+  assertNoCancel();
+
+  ui.requestLookup("13800000000");
+  ui.requests[2].finish(
+    Response.json({ success: true, data: { ...lookupRegistration, status: "SERVED" } }),
   );
-  assert.ok(content.includes(repairActivitiesPage.detail.notEditable));
-  const lookupSection = findElement(
-    ui.view(),
-    (element) => element.props["aria-labelledby"] === "repair-activity-lookup-title",
-  );
-  assert.ok(lookupSection);
-  assert.equal(
-    findElement(
-      lookupSection,
-      (element) => element.type === "select" && element.props.name === "issueType",
-    ),
-    undefined,
-  );
+  await setImmediate();
+  assert.ok(text(ui.view()).includes(copy.lookupStatusLabel.replace("{status}", "已接待")));
+  assertNoCancel();
 });
 
 test("报名失败只显示错误，保留输入以便重试，不显示成功提醒", async (t) => {

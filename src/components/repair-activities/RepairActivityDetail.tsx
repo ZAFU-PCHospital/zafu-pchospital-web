@@ -1252,7 +1252,7 @@ export function RepairActivityDetail({ activityId }: Props) {
                       <Button type="submit" variant="solid" disabled={busy}>
                         {copy.submitUpdate}
                       </Button>
-                      {cancelWindowOpen ? (
+                      {cancelWindowOpen && lookup.status === "REGISTERED" ? (
                         <Button
                           type="button"
                           variant="outline"
