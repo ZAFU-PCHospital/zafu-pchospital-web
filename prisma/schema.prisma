@@ -34,6 +34,9 @@ model User {
   skillsCreated      Skill[]                 @relation("SkillCreator")
   publicSettings     PublicContentSetting[]  @relation("PublicContentSettingUpdater")
   repairActivities   RepairActivity[]        @relation("RepairActivityCreator")
+  noShowEventsExcused RepairActivityNoShowEvent[] @relation("RepairActivityNoShowExcusedBy")
+  customerBlocksCreated RepairActivityCustomerBlock[] @relation("RepairActivityCustomerBlockCreatedBy")
+  customerBlocksLifted RepairActivityCustomerBlock[] @relation("RepairActivityCustomerBlockLiftedBy")
   emailAssistances EmailAssistance[] @relation("EmailAssistanceTarget")
   emailAssistancesCreated EmailAssistance[] @relation("EmailAssistanceCreator")
   emailExemptions EmailExemption[] @relation("EmailExemptionTarget")
@@ -636,6 +639,7 @@ model RepairActivity {
   creator        User?                         @relation("RepairActivityCreator", fields: [createdBy], references: [id], onDelete: Restrict)
   registrations  RepairActivityRegistration[]
   attendances    RepairActivityAttendance[]
+  noShowEvents   RepairActivityNoShowEvent[]
 
   @@index([deletedAt, activityAt], map: "repair_activities_deleted_activity_idx")
   @@index([signupOpensAt, signupClosesAt], map: "repair_activities_signup_window_idx")
@@ -666,10 +670,12 @@ model RepairActivityRegistration {
   activity                RepairActivity @relation(fields: [activityId], references: [id], onDelete: Restrict)
   servedBy                MemberProfile? @relation("RepairActivityServedBy", fields: [servedByMemberProfileId], references: [id], onDelete: Restrict)
   repairRecord            RepairRecord?  @relation(fields: [repairRecordId], references: [id], onDelete: Restrict)
+  noShowEvent             RepairActivityNoShowEvent?
 
   @@index([activityId, phone], map: "repair_activity_regs_activity_phone_idx")
   @@index([activityId, status, checkedInAt], map: "repair_activity_regs_activity_status_checked_idx")
   @@index([activityId, deletedAt], map: "repair_activity_regs_activity_deleted_idx")
+  @@index([phone, status, activityId], map: "repair_activity_regs_phone_status_idx")
   @@map("repair_activity_registrations")
 }
 
@@ -685,6 +691,66 @@ model RepairActivityAttendance {
   @@unique([activityId, memberProfileId], map: "repair_activity_attendance_activity_member_uq")
   @@index([memberProfileId], map: "repair_activity_attendance_member_idx")
   @@map("repair_activity_attendances")
+}
+
+/// 客户未到场事件（issue #335）：一个报名最多一条，保存报名时的姓名/手机快照。
+/// 只有活动上海自然日结束、报名仍为 REGISTERED（未签到）时才生成；
+/// 管理员的豁免只改事件状态，不删除历史。
+model RepairActivityNoShowEvent {
+  id               String   @id @db.Char(36)
+  registrationId   String   @unique(map: "repair_activity_no_show_events_registration_uq") @map("registration_id") @db.Char(36)
+  activityId       String   @map("activity_id") @db.Char(36)
+  name             String   @db.VarChar(40)
+  nameNormalized   String   @map("name_normalized") @db.VarChar(80)
+  phone            String   @db.VarChar(11)
+  phoneLast4       String   @map("phone_last4") @db.VarChar(4)
+  /// CANDIDATE / CONFIRMED / EXCUSED；当前自动检测直接写 CONFIRMED，保留 CANDIDATE 供人工复核扩展。
+  state            String   @db.VarChar(16)
+  /// AUTO / HISTORICAL / MANUAL
+  source           String   @db.VarChar(16)
+  detectedAt       DateTime @map("detected_at") @db.DateTime(3)
+  confirmedAt      DateTime? @map("confirmed_at") @db.DateTime(3)
+  excusedAt        DateTime? @map("excused_at") @db.DateTime(3)
+  excusedByUserId  String?  @map("excused_by_user_id") @db.Char(36)
+  note             String?  @db.VarChar(500)
+  createdAt        DateTime @map("created_at") @db.DateTime(3)
+  updatedAt        DateTime @updatedAt @map("updated_at") @db.DateTime(3)
+
+  registration RepairActivityRegistration @relation(fields: [registrationId], references: [id], onDelete: Restrict)
+  activity     RepairActivity              @relation(fields: [activityId], references: [id], onDelete: Restrict)
+  excusedBy    User?                       @relation("RepairActivityNoShowExcusedBy", fields: [excusedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([nameNormalized, phone, state], map: "repair_activity_no_show_customer_state_idx")
+  @@index([activityId, state], map: "repair_activity_no_show_activity_state_idx")
+  @@map("repair_activity_no_show_events")
+}
+
+/// 客户封锁（issue #335）：按规范化姓名+手机号唯一，不关联成员/用户身份。
+/// 自动封锁封到本学年结束；管理员可人工加入、解除或豁免事件，全部写审计。
+model RepairActivityCustomerBlock {
+  id                 String    @id @db.Char(36)
+  name               String    @db.VarChar(40)
+  nameNormalized     String    @map("name_normalized") @db.VarChar(80)
+  phone              String    @db.VarChar(11)
+  phoneLast4         String    @map("phone_last4") @db.VarChar(4)
+  reason             String    @db.VarChar(500)
+  /// AUTO / MANUAL
+  source             String    @db.VarChar(16)
+  /// 本学年结束时刻（Asia/Shanghai 次年 9/1 00:00 对应的 UTC）。
+  blockedUntil       DateTime  @map("blocked_until") @db.DateTime(3)
+  liftedAt           DateTime? @map("lifted_at") @db.DateTime(3)
+  liftedByUserId     String?   @map("lifted_by_user_id") @db.Char(36)
+  liftedReason       String?   @map("lifted_reason") @db.VarChar(500)
+  createdByUserId    String?   @map("created_by_user_id") @db.Char(36)
+  createdAt          DateTime  @map("created_at") @db.DateTime(3)
+  updatedAt          DateTime  @updatedAt @map("updated_at") @db.DateTime(3)
+
+  createdBy User? @relation("RepairActivityCustomerBlockCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  liftedBy  User? @relation("RepairActivityCustomerBlockLiftedBy", fields: [liftedByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([nameNormalized, phone], map: "repair_activity_customer_blocks_customer_uq")
+  @@index([blockedUntil, liftedAt], map: "repair_activity_customer_blocks_status_idx")
+  @@map("repair_activity_customer_blocks")
 }
 
 /// 邮箱验证码挑战（issue #146）。只存带独立密钥的 HMAC 摘要，明文验证码

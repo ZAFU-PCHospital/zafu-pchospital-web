@@ -154,6 +154,12 @@ M6 批次 2 的其余能力（技能标签库 CRUD、原评论管理、邀请码
   `owner_phone VARCHAR(11) NULL`（issue #79 第 6 项）。接待落单自动带自报名，手工建单由成员
   填写；历史记录不回填，保持 `NULL`（旧数据没有该信息）。不建外键；可见性收口在视图层
   （`ownerPhone` 仅归属人与 `repair:review` 可读），详见 `docs/contracts/data-contract.md`。
+- `20261102010000_repair_activity_customer_blacklist`（issue #335）：新增
+  `repair_activity_no_show_events`（一个报名最多一条，快照姓名/手机、`state` 与
+  `source`，状态 CHECK 限定 `CANDIDATE / CONFIRMED / EXCUSED`）与
+  `repair_activity_customer_blocks`（规范化姓名+手机号唯一，封到本学年结束，
+  `AUTO / MANUAL`，可人工解除/豁免）。报名表补 `(phone, status, activity_id)` 索引供
+  客户同步查询；不改变报名状态机，不关联成员/用户身份。
 - `20261016000000_join_application_student_fields`：`join_applications` 加
   `student_id VARCHAR(32) NULL` 与 `class_name VARCHAR(80) NULL`（issue #147），
   字段名与长度和 `member_profiles` 同名列一致。历史报名保持 `NULL`、不批量回填，
