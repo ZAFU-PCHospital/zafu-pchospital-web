@@ -70,6 +70,7 @@ export function RepairAdminPanel() {
   const sortRules = query.value.sort;
   const setSortRules = query.setSort;
   const [selected, setSelected] = useState<string[]>([]);
+  const [completedBatch, setCompletedBatch] = useState(0);
   const [activeId, setActiveId] = useState<string | null>(null);
   /** 表头排序（三态循环由内核算好；空数组 = 服务端默认顺序：维修日期倒序）。 */
   const resize = useColumnResize({ storageKey: COLUMN_STORAGE_KEY, columns: COLUMNS });
@@ -166,6 +167,7 @@ export function RepairAdminPanel() {
     setRejectNote("");
     setRejecting(false);
     await load();
+    if (result.data.failed.length === 0) setCompletedBatch((value) => value + 1);
   }
 
   const allSelected = items.length > 0 && items.every((item) => selected.includes(item.id));
@@ -248,6 +250,7 @@ export function RepairAdminPanel() {
             previous={Boolean(list.problem)}
             selection={{
               count: selected.length,
+              completed: completedBatch,
               disabled: busy || list.refreshing,
               onClear: () => setSelected([]),
               renderTools: (onCancel) => (

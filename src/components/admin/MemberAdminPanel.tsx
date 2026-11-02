@@ -75,6 +75,7 @@ export function MemberAdminPanel() {
   const sortRules = query.value.sort;
   const setSortRules = query.setSort;
   const [selected, setSelected] = useState<string[]>([]);
+  const [completedBatch, setCompletedBatch] = useState(0);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [emailOpen, setEmailOpen] = useState(false);
@@ -211,6 +212,7 @@ export function MemberAdminPanel() {
       );
     }
     await load();
+    if (result.data.failed.length === 0) setCompletedBatch((value) => value + 1);
   }
 
   /* 「重置密码」仍然只在成员详情窗口里做（先看到人、再重置；列表里再放一个等于
@@ -299,6 +301,7 @@ export function MemberAdminPanel() {
             previous={Boolean(list.problem)}
             selection={{
               count: selected.length,
+              completed: completedBatch,
               disabled: busy || list.refreshing,
               onClear: () => setSelected([]),
               renderTools: (onCancel) => (
