@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { AdminListToolbar } from "@/components/admin/AdminListToolbar";
-import { tableCopy } from "@/config/admin-tables";
 
 import { AdminTable } from "@/components/admin/AdminTable";
 import { AdminToast } from "@/components/admin/AdminToast";
@@ -244,7 +243,7 @@ export function CategoryAdminPanel() {
             {copy.usageNote} {copy.orderNote}
           </p>
           {/* 列定义由 spec 提供，跨列编辑行由 renderRow 接管。 */}
-          <AdminListToolbar count={tableCopy.count.replace("{count}", String(items.length))} />
+          <AdminListToolbar count={items.length} />
           <AdminTable
             spec={categoryTableSpec}
             items={items}

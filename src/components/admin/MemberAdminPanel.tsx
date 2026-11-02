@@ -30,6 +30,7 @@ import { AdminAccountEmailDialog } from "@/components/admin/AdminAccountEmailPan
 import { accountEmailCopy } from "@/config/account-email";
 import { MemberDetailPanel } from "@/components/admin/MemberDetailPanel";
 import { Button } from "@/components/ui/Button";
+import { ActionMenu } from "@/components/ui/ActionMenu";
 import { Card } from "@/components/ui/Card";
 import { adminCopy, adminShared, memberRoleLabels, memberStatusLabels } from "@/config/admin";
 import { adminFetch } from "@/features/admin/admin-client";
@@ -101,7 +102,7 @@ export function MemberAdminPanel() {
     ids: items.map((item) => item.id),
     selected,
     onChange: (ids) => {
-      if (!list.refreshing) setSelected(ids);
+      if (!busy && !list.refreshing) setSelected(ids);
     },
   });
   /* 拖动排序：六点手柄是整张表里唯一可拖的元素（`useRowDragSort`，与技能 / 分类同一套）。
@@ -221,12 +222,20 @@ export function MemberAdminPanel() {
 
   return (
     <div className="admin-workspace__content">
-      <div className="admin-workspace__header">
+      <div className="admin-workspace__header admin-workspace__header--member-actions">
         <div>
           <h1 className="admin-workspace__title" id="admin-members-title">
             {copy.title}
           </h1>
         </div>
+        <Button
+          className="admin-toolbar__mobile-only"
+          variant="solid"
+          icon="plus"
+          onClick={() => setCreating(true)}
+        >
+          {copy.create.title}
+        </Button>
       </div>
 
       <AdminToast toast={toast} onDismiss={() => setToast(null)} />
@@ -285,56 +294,85 @@ export function MemberAdminPanel() {
       {state === "ready" ? (
         <div className="admin-list">
           <AdminListToolbar
-            count={(list.refreshing
-              ? tableCopy.updating
-              : list.problem
-                ? tableCopy.previousCount
-                : tableCopy.count
-            ).replace("{count}", String(pagination?.total ?? items.length))}
+            count={pagination?.total ?? items.length}
+            refreshing={list.refreshing}
+            previous={Boolean(list.problem)}
+            selection={{
+              count: selected.length,
+              disabled: busy || list.refreshing,
+              onClear: () => setSelected([]),
+              renderTools: (onCancel) => (
+                <AdminBatchTools
+                  allSelected={allSelected}
+                  selectAllLabel={copy.table.selectAll}
+                  onSelectAll={(checked) => {
+                    if (!busy && !list.refreshing)
+                      setSelected(checked ? items.map((item) => item.id) : []);
+                  }}
+                  count={selected.length}
+                  selectedLabel={copy.batch.selected}
+                  noneLabel={copy.batch.none}
+                  clearLabel={copy.batch.clear}
+                  onClear={onCancel}
+                  disabled={busy || list.refreshing}
+                  empty={items.length === 0}
+                  actions={
+                    <>
+                      <Button
+                        disabled={busy || list.refreshing || selected.length === 0}
+                        onClick={() => void runBatch(true)}
+                      >
+                        {copy.batch.enable}
+                      </Button>
+                      <Button
+                        disabled={busy || list.refreshing || selected.length === 0}
+                        onClick={() => void runBatch(false)}
+                      >
+                        {copy.batch.disable}
+                      </Button>
+                    </>
+                  }
+                />
+              ),
+            }}
           >
-            <AdminBatchTools
-              allSelected={allSelected}
-              selectAllLabel={copy.table.selectAll}
-              onSelectAll={(checked) => {
-                if (!list.refreshing) setSelected(checked ? items.map((item) => item.id) : []);
-              }}
-              count={selected.length}
-              selectedLabel={copy.batch.selected}
-              noneLabel={copy.batch.none}
-              clearLabel={copy.batch.clear}
-              onClear={() => setSelected([])}
-              actions={
-                <>
-                  <Button
-                    disabled={busy || list.refreshing || selected.length === 0}
-                    onClick={() => void runBatch(true)}
-                  >
-                    {copy.batch.enable}
-                  </Button>
-                  <Button
-                    disabled={busy || list.refreshing || selected.length === 0}
-                    onClick={() => void runBatch(false)}
-                  >
-                    {copy.batch.disable}
-                  </Button>
-                </>
-              }
-            />
-            <span className="admin-toolbar__sep" aria-hidden="true" />
             <AdminTableExport
               path="/api/v1/admin/members/export"
               params={() => query.params(1)}
-              disabled={busy || !query.ready || list.refreshing || Boolean(list.problem)}
+              disabled={
+                busy ||
+                !query.ready ||
+                list.refreshing ||
+                Boolean(list.problem) ||
+                (pagination?.total ?? items.length) === 0
+              }
               onError={setProblem}
               onDone={(text) => setToast({ text, tone: "success" })}
             />
-            {/* 列级筛选常驻在工具栏里（与批量动作同一排）：它不因「有没有条件」出现或消失，
-                计数槽位宽度固定，因此数字变化时右边的按钮不会横移。 */}
-            <Button onClick={() => setEmailOpen(true)}>{accountEmailCopy.adminTitle}</Button>
-            <Button icon="key" onClick={() => setRecovering(true)}>
+            <ActionMenu
+              className="admin-toolbar__mobile-only"
+              label={tableCopy.moreActions}
+              items={[
+                { label: accountEmailCopy.adminTitle, onSelect: () => setEmailOpen(true) },
+                { label: copy.account.action, icon: "key", onSelect: () => setRecovering(true) },
+              ]}
+            />
+            <Button className="admin-toolbar__desktop-only" onClick={() => setEmailOpen(true)}>
+              {accountEmailCopy.adminTitle}
+            </Button>
+            <Button
+              className="admin-toolbar__desktop-only"
+              icon="key"
+              onClick={() => setRecovering(true)}
+            >
               {copy.account.action}
             </Button>
-            <Button variant="solid" icon="plus" onClick={() => setCreating(true)}>
+            <Button
+              className="admin-toolbar__desktop-only"
+              variant="solid"
+              icon="plus"
+              onClick={() => setCreating(true)}
+            >
               {copy.create.title}
             </Button>
           </AdminListToolbar>

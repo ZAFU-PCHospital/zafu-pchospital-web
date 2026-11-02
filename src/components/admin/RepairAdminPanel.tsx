@@ -2,7 +2,6 @@
 
 import { useTableQuery } from "@/components/admin/useTableQuery";
 import { tableQueryOptions } from "@/config/table-queries";
-import { tableCopy } from "@/config/admin-tables";
 
 import { useCallback, useEffect, useState } from "react";
 import { AdminTableExport } from "@/components/admin/AdminTableExport";
@@ -110,7 +109,7 @@ export function RepairAdminPanel() {
   const repairContext: RepairTableContext = {
     selected,
     onToggleSelected: (recordId, checked) => {
-      if (list.refreshing) return;
+      if (busy || list.refreshing) return;
       setSelected((current) =>
         checked ? [...current, recordId] : current.filter((id) => id !== recordId),
       );
@@ -244,46 +243,58 @@ export function RepairAdminPanel() {
       {state === "ready" ? (
         <div className="admin-list">
           <AdminListToolbar
-            count={(list.refreshing
-              ? tableCopy.updating
-              : list.problem
-                ? tableCopy.previousCount
-                : tableCopy.count
-            ).replace("{count}", String(pagination?.total ?? items.length))}
+            count={pagination?.total ?? items.length}
+            refreshing={list.refreshing}
+            previous={Boolean(list.problem)}
+            selection={{
+              count: selected.length,
+              disabled: busy || list.refreshing,
+              onClear: () => setSelected([]),
+              renderTools: (onCancel) => (
+                <AdminBatchTools
+                  allSelected={allSelected}
+                  selectAllLabel={copy.table.selectAll}
+                  onSelectAll={(checked) => {
+                    if (!busy && !list.refreshing)
+                      setSelected(checked ? items.map((item) => item.id) : []);
+                  }}
+                  count={selected.length}
+                  selectedLabel={copy.batch.selected}
+                  noneLabel={copy.batch.none}
+                  clearLabel={copy.batch.clear}
+                  onClear={onCancel}
+                  disabled={busy || list.refreshing}
+                  empty={items.length === 0}
+                  actions={
+                    <>
+                      <Button
+                        disabled={busy || list.refreshing || selected.length === 0}
+                        icon="check"
+                        onClick={() => void runBatch("APPROVED")}
+                      >
+                        {copy.batch.approve}
+                      </Button>
+                      <Button
+                        disabled={busy || list.refreshing || selected.length === 0}
+                        onClick={() => setRejecting(true)}
+                      >
+                        {copy.batch.reject}
+                      </Button>
+                    </>
+                  }
+                />
+              ),
+            }}
           >
-            <AdminBatchTools
-              allSelected={allSelected}
-              selectAllLabel={copy.table.selectAll}
-              onSelectAll={(checked) => {
-                if (!list.refreshing) setSelected(checked ? items.map((item) => item.id) : []);
-              }}
-              count={selected.length}
-              selectedLabel={copy.batch.selected}
-              noneLabel={copy.batch.none}
-              clearLabel={copy.batch.clear}
-              onClear={() => setSelected([])}
-              actions={
-                <>
-                  <Button
-                    disabled={busy || list.refreshing || selected.length === 0}
-                    icon="check"
-                    onClick={() => void runBatch("APPROVED")}
-                  >
-                    {copy.batch.approve}
-                  </Button>
-                  <Button
-                    disabled={busy || list.refreshing || selected.length === 0}
-                    onClick={() => setRejecting(true)}
-                  >
-                    {copy.batch.reject}
-                  </Button>
-                </>
-              }
-            />
             <AdminTableExport
               path="/api/v1/admin/repairs/export"
               params={() => query.params(1)}
-              disabled={busy || list.refreshing}
+              disabled={
+                busy ||
+                list.refreshing ||
+                Boolean(list.problem) ||
+                (pagination?.total ?? items.length) === 0
+              }
               onError={setProblem}
               onDone={(text) => setToast({ text, tone: "success" })}
             />
@@ -343,7 +354,9 @@ export function RepairAdminPanel() {
         <AdminModal
           title={copy.review.rejectTitle}
           subtitle={copy.batch.selected.replace("{count}", String(selected.length))}
-          onClose={() => setRejecting(false)}
+          onClose={() => {
+            if (!busy) setRejecting(false);
+          }}
         >
           <p className="admin-note">{copy.review.rejectHint}</p>
           <label className="field">
@@ -352,7 +365,7 @@ export function RepairAdminPanel() {
               className="field__input"
               value={rejectNote}
               maxLength={2000}
-              autoFocus
+              disabled={busy}
               placeholder={copy.review.notePlaceholder}
               onChange={(event) => setRejectNote(event.currentTarget.value)}
             />
@@ -365,7 +378,7 @@ export function RepairAdminPanel() {
             >
               {busy ? adminShared.submitting : copy.batch.rejectSubmit}
             </Button>
-            <Button variant="ghost" onClick={() => setRejecting(false)}>
+            <Button variant="ghost" disabled={busy} onClick={() => setRejecting(false)}>
               {copy.review.cancel}
             </Button>
           </div>
