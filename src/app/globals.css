@@ -7685,6 +7685,7 @@ html[data-theme="black-yellow"] {
   }
   .action-menu__panel {
     position: fixed;
+    z-index: 94;
     inset: auto;
     margin: 0;
     inline-size: 16rem;
