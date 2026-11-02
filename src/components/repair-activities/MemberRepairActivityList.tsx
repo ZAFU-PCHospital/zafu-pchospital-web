@@ -2,15 +2,9 @@
 
 import { useEffect, useState } from "react";
 
-import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
-import {
-  memberRepairActivitiesCopy,
-  memberRepairActivityStatusLabels,
-} from "@/config/repair-activities";
+import { MemberRepairActivityTicketCard } from "@/components/repair-activities/MemberRepairActivityTicketCard";
+import { memberRepairActivitiesCopy } from "@/config/repair-activities";
 import type { StaffActivityListItem } from "@/features/repair-activities/repair-activity-staff-service";
-import { formatShanghaiDateTime } from "@/components/repair-activities/activity-format";
-import { memberRepairActivityStatusBadgeClass } from "@/components/repair-activities/activity-status-badge";
 
 export function MemberRepairActivityList() {
   const copy = memberRepairActivitiesCopy.list;
@@ -67,46 +61,10 @@ export function MemberRepairActivityList() {
   }
 
   return (
-    <ul className="activity-list">
+    <ul className="activity-list activity-list--ticket">
       {items.map((item) => (
         <li key={item.id}>
-          <Card className="activity-card repair-panel">
-            <div className="activity-card__head">
-              <h2 className="activity-card__title">{item.title}</h2>
-              <span className={memberRepairActivityStatusBadgeClass(item.status)}>
-                {memberRepairActivityStatusLabels[item.status]}
-              </span>
-            </div>
-            <dl className="activity-card__meta">
-              <div>
-                <dt>{copy.activityAt}</dt>
-                <dd>{formatShanghaiDateTime(item.activityAt)}</dd>
-              </div>
-              <div>
-                <dt>名额</dt>
-                <dd>
-                  {copy.capacity
-                    .replace("{registered}", String(item.registeredCount))
-                    .replace("{capacity}", String(item.capacity))}
-                </dd>
-              </div>
-              <div>
-                <dt>出勤</dt>
-                <dd>{item.attended ? copy.attended : copy.notAttended}</dd>
-              </div>
-            </dl>
-            <div className="activity-card__footer">
-              <Button
-                href={`/member/repair-activities/${item.id}`}
-                trailingIcon="arrowUpRight"
-                className={`border-line-strong before:hidden ${
-                  item.status === "CLOSED" ? "bg-accent-wash text-accent-deep" : "text-ink"
-                }`}
-              >
-                {copy.openBoard}
-              </Button>
-            </div>
-          </Card>
+          <MemberRepairActivityTicketCard activity={item} />
         </li>
       ))}
     </ul>
