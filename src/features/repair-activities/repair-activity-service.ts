@@ -23,6 +23,10 @@ import {
   type RepairActivityIssueType,
   type RepairActivityStatus,
 } from "@/features/repair-activities/repair-activity-validation";
+import {
+  assertCustomerNotBlocked,
+  syncCustomerForRegistration,
+} from "@/features/repair-activities/repair-activity-customer-service";
 import { pickNonEndedRepairActivitiesForHomePreview } from "@/features/repair-activities/repair-activity-sort";
 import { startOfShanghaiDay } from "@/lib/academic-term";
 import { AppError } from "@/lib/api/errors";
@@ -744,6 +748,8 @@ export const repairActivityService = {
     if (input.consentAccepted !== true) {
       throw new AppError("ACTIVITY_CONSENT_REQUIRED", "请先阅读并同意报名须知与免责声明");
     }
+    // 历史 no-show 按需补齐，避免另造定时任务；随后在事务内复核封锁，防止并发人工封禁。
+    await syncCustomerForRegistration(name, phone, activityId);
 
     return inSerializableTransaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM repair_activities WHERE id = ${activityId} FOR UPDATE`;
@@ -787,6 +793,7 @@ export const repairActivityService = {
       if (status === "CLOSED") {
         throw new AppError("ACTIVITY_NOT_OPEN", "报名已截止");
       }
+      await assertCustomerNotBlocked(tx, name, phone, now);
       const duplicate = await tx.repairActivityRegistration.findFirst({
         where: { activityId, phone, deletedAt: null },
       });

@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 import { AdminModal } from "@/components/admin/AdminModal";
 import { AdminToast } from "@/components/admin/AdminToast";
 import type { AdminToastMessage } from "@/components/admin/AdminToast";
+import { RepairActivityCustomerBlacklistPanel } from "@/components/admin/RepairActivityCustomerBlacklistPanel";
 import { repairActivityStatusBadgeClass } from "@/components/repair-activities/activity-status-badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -36,6 +37,7 @@ export function RepairActivityAdminPanel() {
   const [editing, setEditing] = useState<RepairActivityAdminView | null>(null);
   const [removing, setRemoving] = useState<RepairActivityAdminView | null>(null);
   const [busy, setBusy] = useState(false);
+  const [showCustomerBlacklist, setShowCustomerBlacklist] = useState(false);
   const [registrationActivity, setRegistrationActivity] = useState<RepairActivityAdminView | null>(
     null,
   );
@@ -379,6 +381,9 @@ export function RepairActivityAdminPanel() {
             {copy.title}
           </h1>
         </div>
+        <Button variant="ghost" onClick={() => setShowCustomerBlacklist((current) => !current)}>
+          {showCustomerBlacklist ? copy.customerBlacklist.hide : copy.customerBlacklist.toggle}
+        </Button>
       </div>
 
       <AdminToast toast={toast} onDismiss={() => setToast(null)} />
@@ -525,6 +530,8 @@ export function RepairActivityAdminPanel() {
           </div>
         ) : null}
       </Card>
+
+      {showCustomerBlacklist ? <RepairActivityCustomerBlacklistPanel /> : null}
 
       {editing ? (
         <AdminModal title={copy.edit.title} onClose={() => setEditing(null)}>

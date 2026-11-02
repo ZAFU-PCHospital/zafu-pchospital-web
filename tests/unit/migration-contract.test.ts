@@ -26,6 +26,10 @@ const rankingRealNameMigrationPath = new URL(
   "../../prisma/migrations/20261102000000_public_ranking_real_name_default/migration.sql",
   import.meta.url,
 );
+const customerBlacklistMigrationPath = new URL(
+  "../../prisma/migrations/20261102010000_repair_activity_customer_blacklist/migration.sql",
+  import.meta.url,
+);
 
 test("初始 Migration 固定 GreatSQL 字符集、引擎与邀请码计数约束", async () => {
   const sql = await readFile(migrationPath, "utf8");
@@ -119,4 +123,15 @@ test("issue #330 Migration 把排行榜默认展示名改为真实姓名并保�
     .filter((line) => !line.trim().startsWith("--"))
     .join("\n");
   assert.doesNotMatch(ddl, /HIDDEN/);
+});
+
+test("issue #335 Migration 建立 no-show 事件与客户封锁表，并加报名查询索引", async () => {
+  const sql = await readFile(customerBlacklistMigrationPath, "utf8");
+  for (const table of ["repair_activity_no_show_events", "repair_activity_customer_blocks"])
+    assert.match(sql, new RegExp("CREATE TABLE `" + table + "`"));
+  assert.match(sql, /repair_activity_no_show_events_registration_uq/);
+  assert.match(sql, /repair_activity_customer_blocks_customer_uq/);
+  assert.match(sql, /CHECK \(`state` IN \('CANDIDATE', 'CONFIRMED', 'EXCUSED'\)\)/);
+  assert.match(sql, /repair_activity_regs_phone_status_idx/);
+  assert.match(sql, /DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci ENGINE=InnoDB/g);
 });

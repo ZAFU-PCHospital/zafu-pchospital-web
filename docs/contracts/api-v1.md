@@ -458,24 +458,28 @@ DELETE     /api/v1/admin/comments/:id
 同样要求 `ADMIN` 角色对应的权限码，未登录 401、普通成员 403。列表型端点一律返回标准分页信封
 （条目在 `data`，分页在 `meta.pagination`）。
 
-| 端点                                                        | 权限                     | 说明                                                                                                  |
-| ----------------------------------------------------------- | ------------------------ | ----------------------------------------------------------------------------------------------------- |
-| `GET /api/v1/admin/skills`                                  | `skill:manage`           | 技能标签列表：**含已停用**，并带当前生效的成员关联计数 `usedByMemberCount`                            |
-| `POST /api/v1/admin/skills`                                 | `skill:manage`           | 新增：`{code,name,description?,sortOrder?}`；重复 code 409 `SKILL_CODE_CONFLICT`                      |
-| `PATCH /api/v1/admin/skills/:id`                            | `skill:manage`           | 修改 `name` / `description` / `sortOrder`；`code` 不可改                                              |
-| `POST /api/v1/admin/skills/:id/deactivate`（或 `activate`） | `skill:manage`           | 停用 / 重新启用。**不提供删除**：标签被 `user_skills` 引用                                            |
-| `POST /api/v1/admin/skills/:id/reorder`                     | `skill:manage`           | 上移 / 下移一格：`{direction:"UP"\|"DOWN"}`；已在首末位时**幂等成功**，不报错、不写审计               |
-| `POST /api/v1/admin/skills/:id/move`                        | `skill:manage`           | 拖动排序：`{beforeId: string\|null}`（`null` = 拖到末尾）；落点没变时幂等成功                         |
-| `POST /api/v1/admin/repair-categories/:id/reorder`          | `repair:category:manage` | 同上，上移 / 下移一格                                                                                 |
-| `POST /api/v1/admin/repair-categories/:id/move`             | `repair:category:manage` | 同上，拖动排序（`{beforeId}`）                                                                        |
-| `GET /api/v1/admin/comments`                                | —（已退役）              | 认证 / 账号访问检查后统一 404 `RESOURCE_NOT_FOUND`，不查询评论。                                      |
-| `DELETE /api/v1/admin/comments/:id`                         | —（已退役）              | 同源 / 认证 / 账号访问检查后统一 404，不删除历史行。                                                  |
-| `GET /api/v1/admin/invite-codes`                            | `invite:read`            | 分页 + `status`（**生效状态**）+ `query`（明文前缀 / 绑定 QQ / 手机号，精确匹配）；绑定信息只给脱敏值 |
-| `GET /api/v1/admin/audit-logs`                              | `audit:read`             | 审计查询：`action`、`result`、`actorUserId`、`targetType`、`targetId`、`requestId`、日期区间          |
-| `GET /api/v1/admin/audit-logs/actions`                      | `audit:read`             | 动作清单（带出现次数，降序），供筛选下拉使用                                                          |
-| `GET /api/v1/admin/settings/public-content`                 | `settings:manage`        | 读取公开内容与展示策略（单行配置，缺行时返回契约默认值）                                              |
-| `PUT /api/v1/admin/settings/public-content`                 | `settings:manage`        | 整体替换四个字段；缺字段 400 `VALIDATION_FAILED`，非法展示名 400 `PUBLIC_SETTINGS_INVALID`            |
-| `GET /api/v1/admin/join-applications/export`                | `data:export`            | 报名导出：`format=csv\|xlsx` + 与报名列表同源的筛选参数；返回附件流                                   |
+| 端点                                                                    | 权限                     | 说明                                                                                                    |
+| ----------------------------------------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------- |
+| `GET /api/v1/admin/skills`                                              | `skill:manage`           | 技能标签列表：**含已停用**，并带当前生效的成员关联计数 `usedByMemberCount`                              |
+| `POST /api/v1/admin/skills`                                             | `skill:manage`           | 新增：`{code,name,description?,sortOrder?}`；重复 code 409 `SKILL_CODE_CONFLICT`                        |
+| `PATCH /api/v1/admin/skills/:id`                                        | `skill:manage`           | 修改 `name` / `description` / `sortOrder`；`code` 不可改                                                |
+| `POST /api/v1/admin/skills/:id/deactivate`（或 `activate`）             | `skill:manage`           | 停用 / 重新启用。**不提供删除**：标签被 `user_skills` 引用                                              |
+| `POST /api/v1/admin/skills/:id/reorder`                                 | `skill:manage`           | 上移 / 下移一格：`{direction:"UP"\|"DOWN"}`；已在首末位时**幂等成功**，不报错、不写审计                 |
+| `POST /api/v1/admin/skills/:id/move`                                    | `skill:manage`           | 拖动排序：`{beforeId: string\|null}`（`null` = 拖到末尾）；落点没变时幂等成功                           |
+| `POST /api/v1/admin/repair-categories/:id/reorder`                      | `repair:category:manage` | 同上，上移 / 下移一格                                                                                   |
+| `POST /api/v1/admin/repair-categories/:id/move`                         | `repair:category:manage` | 同上，拖动排序（`{beforeId}`）                                                                          |
+| `GET /api/v1/admin/comments`                                            | —（已退役）              | 认证 / 账号访问检查后统一 404 `RESOURCE_NOT_FOUND`，不查询评论。                                        |
+| `DELETE /api/v1/admin/comments/:id`                                     | —（已退役）              | 同源 / 认证 / 账号访问检查后统一 404，不删除历史行。                                                    |
+| `GET /api/v1/admin/invite-codes`                                        | `invite:read`            | 分页 + `status`（**生效状态**）+ `query`（明文前缀 / 绑定 QQ / 手机号，精确匹配）；绑定信息只给脱敏值   |
+| `GET /api/v1/admin/audit-logs`                                          | `audit:read`             | 审计查询：`action`、`result`、`actorUserId`、`targetType`、`targetId`、`requestId`、日期区间            |
+| `GET /api/v1/admin/audit-logs/actions`                                  | `audit:read`             | 动作清单（带出现次数，降序），供筛选下拉使用                                                            |
+| `GET /api/v1/admin/settings/public-content`                             | `settings:manage`        | 读取公开内容与展示策略（单行配置，缺行时返回契约默认值）                                                |
+| `PUT /api/v1/admin/settings/public-content`                             | `settings:manage`        | 整体替换四个字段；缺字段 400 `VALIDATION_FAILED`，非法展示名 400 `PUBLIC_SETTINGS_INVALID`              |
+| `GET /api/v1/admin/repair-activities/customer-blacklist`                | `activity:admin`         | 本学年 no-show 事件与客户封锁；**读取有写副作用**（按需补齐当前学年历史与自动封锁），手机号仅管理员可见 |
+| `POST /api/v1/admin/repair-activities/customer-blacklist`               | `activity:admin`         | `{name, phone, reason}` 人工加入黑名单，封到本学年结束，写审计                                          |
+| `POST /api/v1/admin/repair-activities/customer-blacklist/:blockId/lift` | `activity:admin`         | `{reason?}` 解除封锁；已解除幂等，写审计                                                                |
+| `POST /api/v1/admin/repair-activities/no-show-events/:eventId/exempt`   | `activity:admin`         | `{note?}` 豁免单次 no-show；无其它确认事件时自动解除自动封锁，写审计                                    |
+| `GET /api/v1/admin/join-applications/export`                            | `data:export`            | 报名导出：`format=csv\|xlsx` + 与报名列表同源的筛选参数；返回附件流                                     |
 
 批次 2 的约定：
 
@@ -949,6 +953,30 @@ DELETE     /api/v1/admin/comments/:id
   不记录请求正文、姓名或完整手机号。
 - 不改 Schema / Migration / 新端点 / 权限；`ACTIVITY_REGISTRATION_DUPLICATE` 与
   `ACTIVITY_FULL` 的 HTTP 状态保持 409。
+
+## 客户 no-show 黑名单（issue #335）
+
+- **判定口径**：活动上海自然日结束（`activityEndExclusive`）时，非删除活动、非删除报名且仍为
+  `REGISTERED`（未签到）的报名生成 no-show 事件；`CHECKED_IN` / `SERVED` 都算到场，
+  签到未接待不计。活动结束前软删 = 取消不计；结束后才软删仍计；活动软删不产生。
+- **学年与阈值**：统计窗口复用 `shanghaiAcademicYearRange`；本学年 **1 次**确认 no-show
+  即自动封锁到本学年结束（`endExclusive`，次年 9/1 00:00），不新建学年工具。
+- **客户身份**：规范化姓名（NFKC、去空白、大小写归一）+ 规范化手机号精确匹配；
+  同名不同手机、同手机不同名不自动合并；不关联 `users` / `member_profiles`。
+- **历史数据**：当前学年已结束活动的未签到记录在首次报名 / 活动管理打开黑名单时按需补齐；
+  与新增 no-show 使用同一规则，不再额外要求人工确认。**`GET` 列表因此有写副作用**：
+  它会补齐事件、创建/解除 AUTO 封锁并写审计；只读调用方不要把它当纯查询缓存。
+- **拦截范围**：`POST /api/v1/repair-activities/:id/registrations` 只拦新报名，命中返回
+  403 `ACTIVITY_CUSTOMER_BLOCKED`；已有报名仍可签到/接待。
+- **管理端**：活动管理内提供封锁记录与本学年未到场记录；管理员可人工加入、解除、豁免，
+  全部写 `repair_activity.customer_blocked` / `customer_unblocked` / `no_show.excused` 审计；
+  手机号只写掩码，完整号码仅在管理端响应。
+- **列表规模**：`GET` 一次返回全部封锁记录与本学年事件，暂不分页；该集合按学年/客户去重后
+  规模很小，管理端需要同屏对照。若后续记录量增长，再以兼容字段补 cursor/limit 分页。
+- **数据表**：`repair_activity_no_show_events`（一个报名最多一条，状态
+  `CANDIDATE` / `CONFIRMED` / `EXCUSED`）与 `repair_activity_customer_blocks`
+  （规范化姓名+手机号唯一，`AUTO` / `MANUAL`，封到学年结束）。不修改报名状态机。
+- **不在本 issue 范围**：客户自助取消，另见 issue #345。
 
 ## 成员工作台出勤成员名单（issue #107）
 
