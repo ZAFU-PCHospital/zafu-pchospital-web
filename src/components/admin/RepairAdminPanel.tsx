@@ -23,6 +23,7 @@ import { AdminToast } from "@/components/admin/AdminToast";
 import type { AdminToastMessage } from "@/components/admin/AdminToast";
 import { AdminModal } from "@/components/admin/AdminModal";
 import { RepairAdminActions } from "@/components/admin/RepairAdminActions";
+import { RepairReviewDialog } from "@/components/admin/RepairReviewDialog";
 import type { RepairBatchReviewResult, RepairCategoryView, RepairView } from "@/types/contracts";
 
 type Filters = {
@@ -58,7 +59,7 @@ const COLUMN_STORAGE_KEY = "zafu-pchospital:admin-columns:repairs:v1";
  * 批量操作走 `POST /api/v1/admin/repairs/batch-reviews`，服务端逐条复用单条审核路径，
  * 因此允许部分成功 —— 这里必须把逐条结果展示出来，不能只报一句「批量失败」。
  */
-export function RepairAdminPanel() {
+export function RepairAdminPanel({ canReview = false }: { canReview?: boolean } = {}) {
   const copy = adminCopy.repairs;
   /** 批量逐条失败明细要留在页面上，不能自动消失。 */
   const [message, setMessage] = useState("");
@@ -72,8 +73,16 @@ export function RepairAdminPanel() {
   const [selected, setSelected] = useState<string[]>([]);
   const [completedBatch, setCompletedBatch] = useState(0);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [reviewTarget, setReviewTarget] = useState<{
+    record: RepairView;
+    decision: "APPROVED" | "REJECTED";
+  } | null>(null);
   /** 表头排序（三态循环由内核算好；空数组 = 服务端默认顺序：维修日期倒序）。 */
-  const resize = useColumnResize({ storageKey: COLUMN_STORAGE_KEY, columns: COLUMNS });
+  const resize = useColumnResize({
+    storageKey: COLUMN_STORAGE_KEY,
+    columns: COLUMNS,
+    lastColumnMinWidth: 176,
+  });
   const [rejectNote, setRejectNote] = useState("");
   /** 批量退回的原因填在弹层里（顶栏只放动作按钮）。 */
   const [rejecting, setRejecting] = useState(false);
@@ -116,6 +125,12 @@ export function RepairAdminPanel() {
       );
     },
     onDetail: setActiveId,
+    canReview,
+    reviewDisabled: busy || list.refreshing,
+    onReview: (record, decision) => {
+      if (canReview && !busy && !list.refreshing && record.status === "PENDING")
+        setReviewTarget({ record, decision });
+    },
   };
 
   const load = useCallback(async () => {
@@ -337,6 +352,27 @@ export function RepairAdminPanel() {
             labels={adminShared.listEnd}
           />
         </div>
+      ) : null}
+
+      {reviewTarget ? (
+        <RepairReviewDialog
+          record={reviewTarget.record}
+          decision={reviewTarget.decision}
+          onClose={() => setReviewTarget(null)}
+          onReviewed={(saved) => {
+            list.patch(saved.id, saved);
+            setSelected((current) => current.filter((id) => id !== saved.id));
+            setToast({
+              text: saved.status === "APPROVED" ? copy.review.approved : copy.review.rejected,
+              tone: saved.status === "APPROVED" ? "success" : "neutral",
+            });
+            setReviewTarget(null);
+            // 审核按钮成功后置灰，焦点交还同一行仍可操作的详情入口。
+            requestAnimationFrame(() =>
+              document.getElementById(`repair-detail-${saved.id}`)?.focus(),
+            );
+          }}
+        />
       ) : null}
 
       {activeId

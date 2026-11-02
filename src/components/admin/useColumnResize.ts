@@ -23,12 +23,16 @@ export function useColumnResize({
   storageKey,
   columns,
   minWidth = 48,
+  lastColumnMinWidth = minWidth,
 }: {
   storageKey: string;
   /** 列定义，顺序必须与 `<colgroup>` / 表头一致。 */
   columns: ColumnSpec[];
   minWidth?: number;
+  /** 最后一列承载行内动作时，保留其可操作宽度；其余列仍使用 minWidth。 */
+  lastColumnMinWidth?: number;
 }) {
+  const lastMinWidth = Math.max(minWidth, lastColumnMinWidth);
   const defaults = useMemo(() => columns.map((column) => column.width), [columns]);
   const [widths, setWidths] = useState<number[]>(defaults);
   const [dragging, setDragging] = useState<string | null>(null);
@@ -66,6 +70,35 @@ export function useColumnResize({
   /** 把总宽补齐到容器宽：差额交给最后一列；兜不住时整列等比缩（并保留最小宽度）。 */
   const fill = useCallback(
     (next: number[], container: number) => {
+      if (lastMinWidth > minWidth && next.length > 0) {
+        const last = next.length - 1;
+        const normalized = next.map((width, index) =>
+          Math.max(index === last ? lastMinWidth : minWidth, width),
+        );
+        const total = normalized.reduce((sum, width) => sum + width, 0);
+        const tail = normalized[last] + Math.round(container - total);
+        if (tail >= lastMinWidth) {
+          normalized[last] = tail;
+        } else {
+          normalized[last] = lastMinWidth;
+          const extraBudget = Math.max(0, Math.round(container) - lastMinWidth - last * minWidth);
+          const extraTotal = normalized
+            .slice(0, last)
+            .reduce((sum, width) => sum + width - minWidth, 0);
+          let remaining = extraBudget;
+          for (let index = 0; index < last; index++) {
+            const extra =
+              index === last - 1
+                ? remaining
+                : extraTotal > 0
+                  ? Math.floor((extraBudget * (normalized[index] - minWidth)) / extraTotal)
+                  : 0;
+            normalized[index] = minWidth + extra;
+            remaining -= extra;
+          }
+        }
+        return normalized.every((width, index) => width === next[index]) ? next : normalized;
+      }
       const total = next.reduce((sum, width) => sum + width, 0);
       const diff = Math.round(container - total);
       if (diff === 0) return next;
@@ -80,7 +113,7 @@ export function useColumnResize({
       const scaled = next.map((width) => Math.max(minWidth, Math.round(width * scale)));
       return scaled.every((width, index) => width === next[index]) ? next : scaled;
     },
-    [minWidth],
+    [lastMinWidth, minWidth],
   );
 
   // 挂载后读一次列宽偏好，并把总宽对齐到容器宽；容器尺寸变化时重新对齐。
@@ -152,15 +185,15 @@ export function useColumnResize({
 
   /**
    * 被拖那一列的**行程上限**：差额由最后一列出，所以它能给出多少，这一列就能长多少。
-   * 拖最后一条竖线时，最后一列就是右邻列，两个说法是同一个（`base[last] − minWidth`）。
+   * 拖最后一条竖线时，最后一列就是右邻列，供体均需保留最后一列的最小宽度。
    */
   const budget = useCallback(
     (base: number[], index: number) => {
       const last = base.length - 1;
       const donor = index === last - 1 ? base[index + 1] : base[last];
-      return Math.max(0, donor - minWidth);
+      return Math.max(0, donor - lastMinWidth);
     },
-    [minWidth],
+    [lastMinWidth],
   );
 
   /** 拖动中的每一帧：这一列跟着指针长，差额从最后一列扣（总和不变）。 */
@@ -311,7 +344,7 @@ export function useColumnResize({
       table?.tHead && window.getComputedStyle(table.tHead).display !== "none"
         ? table.parentElement?.clientWidth
         : undefined;
-    commit(container ? fill([...defaults], container) : [...defaults]);
+    commit(fill([...defaults], container ?? defaults.reduce((sum, width) => sum + width, 0)));
   }, [commit, defaults, fill, table]);
   return { widths, tableRef, colRefs, boundaries, lineProps, dragging, reset };
 }

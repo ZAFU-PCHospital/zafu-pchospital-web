@@ -25,6 +25,9 @@ export type RepairTableContext = {
   onToggleSelected: (recordId: string, checked: boolean) => void;
   /** 打开这一行的详情窗口。 */
   onDetail: (recordId: string) => void;
+  canReview: boolean;
+  reviewDisabled: boolean;
+  onReview: (record: RepairView, decision: "APPROVED" | "REJECTED") => void;
 };
 
 const copy = adminCopy.repairs;
@@ -144,11 +147,33 @@ export const repairTableSpec: TableViewSpec<RepairView, RepairTableContext> = {
       key: "actions",
       label: copy.table.actions,
       kind: "readonly",
-      width: 150,
+      width: 240,
       sortable: false,
-      render: (record, _index, { onDetail }) => (
+      render: (record, _index, { onDetail, canReview, reviewDisabled, onReview }) => (
         <span className="admin-actions">
-          <Button variant="ghost" onClick={() => onDetail(record.id)}>
+          {canReview ? (
+            <>
+              <Button
+                variant="ghost"
+                disabled={reviewDisabled || record.status !== "PENDING"}
+                onClick={() => onReview(record, "APPROVED")}
+              >
+                {copy.action.approve}
+              </Button>
+              <Button
+                variant="ghost"
+                disabled={reviewDisabled || record.status !== "PENDING"}
+                onClick={() => onReview(record, "REJECTED")}
+              >
+                {copy.action.reject}
+              </Button>
+            </>
+          ) : null}
+          <Button
+            id={`repair-detail-${record.id}`}
+            variant="ghost"
+            onClick={() => onDetail(record.id)}
+          >
             {copy.action.detail}
           </Button>
         </span>
