@@ -162,6 +162,13 @@ export async function syncCurrentYearNoShows(options: SyncOptions = {}): Promise
       },
     });
     const lockedCandidates = lockedRegistrations.filter((registration) => {
+      if (
+        options.customer &&
+        (normalizeCustomerName(registration.name) !== options.customer.nameNormalized ||
+          registration.phone !== options.customer.phone ||
+          registration.activityId === options.customer.excludeActivityId)
+      )
+        return false;
       const activityEnd = lockedEndByActivity.get(registration.activityId);
       return Boolean(
         activityEnd &&
@@ -276,6 +283,7 @@ export async function syncCurrentYearNoShows(options: SyncOptions = {}): Promise
         liftedReason: null,
         updatedAt: now,
       };
+      const createId = randomUUID();
       const saved = block
         ? await tx.repairActivityCustomerBlock.update({ where: { id: block.id }, data })
         : await tx.repairActivityCustomerBlock.upsert({
@@ -285,11 +293,12 @@ export async function syncCurrentYearNoShows(options: SyncOptions = {}): Promise
                 phone: customer.phone,
               },
             },
-            create: { id: randomUUID(), ...data, createdAt: now },
+            create: { id: createId, ...data, createdAt: now },
             // 并发 sync 已创建同一客户时保留先写入的那条（可能是人工封锁）。
             update: {},
           });
-      if (!block && saved.source === "MANUAL") continue;
+      // 只有本次真正创建才写审计；并发 upsert 命中已有行时由创建方负责。
+      if (!block && (saved.id !== createId || saved.source === "MANUAL")) continue;
       await appendAuditLog(tx, {
         actor: { requestId: `repair-activity-no-show:${randomUUID()}` },
         actorType: "SYSTEM",

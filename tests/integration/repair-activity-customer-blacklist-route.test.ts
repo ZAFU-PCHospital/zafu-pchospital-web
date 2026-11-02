@@ -28,20 +28,46 @@ const phone = "13933500999";
 
 async function cleanup() {
   const db = getDb();
-  await db.auditLog.deleteMany({
+  const staleActivities = await db.repairActivity.findMany({
     where: {
-      OR: [
-        { actorUserId: adminId },
-        { targetType: "RepairActivityCustomerBlock" },
-        { targetType: "RepairActivityNoShowEvent" },
-      ],
+      OR: [{ title: { startsWith: PREFIX } }, ...(activityId ? [{ id: activityId }] : [])],
     },
+    select: { id: true },
   });
-  await db.repairActivityNoShowEvent.deleteMany({});
-  await db.repairActivityCustomerBlock.deleteMany({});
-  if (activityId) {
-    await db.repairActivityRegistration.deleteMany({ where: { activityId } });
-    await db.repairActivity.deleteMany({ where: { id: activityId } });
+  const staleActivityIds = staleActivities.map((activity) => activity.id);
+  const events = staleActivityIds.length
+    ? await db.repairActivityNoShowEvent.findMany({
+        where: { activityId: { in: staleActivityIds } },
+        select: { id: true },
+      })
+    : [];
+  const blocks = await db.repairActivityCustomerBlock.findMany({
+    where: { phone },
+    select: { id: true },
+  });
+  const targetIds = [...events, ...blocks].map((row) => row.id);
+  if (targetIds.length > 0) {
+    await db.auditLog.deleteMany({
+      where: {
+        targetType: { in: ["RepairActivityCustomerBlock", "RepairActivityNoShowEvent"] },
+        targetId: { in: targetIds },
+      },
+    });
+  }
+  if (adminId) {
+    await db.auditLog.deleteMany({ where: { actorUserId: adminId } });
+  }
+  if (events.length > 0) {
+    await db.repairActivityNoShowEvent.deleteMany({
+      where: { id: { in: events.map((event) => event.id) } },
+    });
+  }
+  await db.repairActivityCustomerBlock.deleteMany({ where: { phone } });
+  if (staleActivityIds.length > 0) {
+    await db.repairActivityRegistration.deleteMany({
+      where: { activityId: { in: staleActivityIds } },
+    });
+    await db.repairActivity.deleteMany({ where: { id: { in: staleActivityIds } } });
   }
   for (const userId of [adminId, memberId]) {
     if (!userId) continue;
@@ -176,4 +202,72 @@ dbTest("黑名单路由：人工加入、解除、豁免的状态码与响应", 
   });
   assert.equal(lifted.status, 200);
   assert.equal(lifted.json.success, true);
+});
+
+dbTest("黑名单路由：成员写操作 403、缺字段 400、不存在资源 404", async () => {
+  const memberBlockId = randomUUID();
+  const memberLift = await callRoute(
+    liftRoute,
+    `${BASE}/customer-blacklist/${memberBlockId}/lift`,
+    {
+      method: "POST",
+      headers: { cookie: memberCookie },
+      body: { reason: "成员越权" },
+      params: { blockId: memberBlockId },
+    },
+  );
+  assert.equal(memberLift.status, 403);
+
+  const memberEventId = randomUUID();
+  const memberExempt = await callRoute(
+    exemptRoute,
+    `${BASE}/no-show-events/${memberEventId}/exempt`,
+    {
+      method: "POST",
+      headers: { cookie: memberCookie },
+      body: { note: "成员越权" },
+      params: { eventId: memberEventId },
+    },
+  );
+  assert.equal(memberExempt.status, 403);
+
+  for (const body of [
+    { phone, reason: "缺姓名" },
+    { name: "缺手机客户", reason: "缺手机" },
+    { name: "缺原因客户", phone },
+  ]) {
+    const missing = await callRoute(blockRoute, `${BASE}/customer-blacklist`, {
+      method: "POST",
+      headers: { cookie: adminCookie },
+      body,
+    });
+    assert.equal(missing.status, 400);
+    assert.equal(missing.json.success, false);
+  }
+
+  const missingBlockId = randomUUID();
+  const missingBlock = await callRoute(
+    liftRoute,
+    `${BASE}/customer-blacklist/${missingBlockId}/lift`,
+    {
+      method: "POST",
+      headers: { cookie: adminCookie },
+      body: { reason: "不存在" },
+      params: { blockId: missingBlockId },
+    },
+  );
+  assert.equal(missingBlock.status, 404);
+
+  const missingEventId = randomUUID();
+  const missingEvent = await callRoute(
+    exemptRoute,
+    `${BASE}/no-show-events/${missingEventId}/exempt`,
+    {
+      method: "POST",
+      headers: { cookie: adminCookie },
+      body: { note: "不存在" },
+      params: { eventId: missingEventId },
+    },
+  );
+  assert.equal(missingEvent.status, 404);
 });
