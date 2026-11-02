@@ -93,12 +93,12 @@ function resize(
         pointerId: 1,
         currentTarget: handle,
         preventDefault() {},
-      } as Parameters<typeof props.onPointerDown>[0]);
+      } as unknown as Parameters<typeof props.onPointerDown>[0]);
       mounted.view();
       props = current!.lineProps(columns[index].id, columns[index].label);
       props.onPointerMove({ clientX } as Parameters<typeof props.onPointerMove>[0]);
       dom.flushFrames();
-      props.onPointerUp({ pointerId: 1, currentTarget: handle } as Parameters<
+      props.onPointerUp({ pointerId: 1, currentTarget: handle } as unknown as Parameters<
         typeof props.onPointerUp
       >[0]);
       mounted.view();

@@ -8230,6 +8230,20 @@ html[data-theme="black-yellow"] {
     }
   }
 
+  @media (max-width: 759px) {
+    /* 选择态需要两行触控控件；浏览态预留同样高度，审核完成后列表不移位。 */
+    .admin-list--repairs .admin-toolbar {
+      min-block-size: calc(46px * 2 + var(--s-2) + var(--s-1) * 2 + 1px);
+    }
+    .admin-table--repairs .admin-actions {
+      flex-wrap: wrap;
+    }
+    .admin-table--repairs .admin-actions > .btn {
+      min-inline-size: 46px;
+      flex-shrink: 0;
+    }
+  }
+
   /* ------------------------------------------------- 后台密度（宽屏） */
   /* 管理台是**密集数据界面**，不是官网页面。官网那套尺寸（`.btn` 46px、`.field__input`
      46px / 16px 字号、表头表尾大留白）在官网是对的 —— 那里要的是呼吸感与触控面积；

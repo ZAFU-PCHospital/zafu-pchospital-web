@@ -260,7 +260,7 @@ export function RepairAdminPanel({ canReview = false }: { canReview?: boolean } 
       ) : null}
 
       {state === "ready" ? (
-        <div className="admin-list">
+        <div className="admin-list admin-list--repairs">
           <AdminListToolbar
             count={pagination?.total ?? items.length}
             refreshing={list.refreshing}
@@ -361,7 +361,10 @@ export function RepairAdminPanel({ canReview = false }: { canReview?: boolean } 
           onClose={() => setReviewTarget(null)}
           onReviewed={(saved) => {
             list.patch(saved.id, saved);
-            setSelected((current) => current.filter((id) => id !== saved.id));
+            const remaining = selected.filter((id) => id !== saved.id);
+            setSelected(remaining);
+            if (selected.length > 0 && remaining.length === 0)
+              setCompletedBatch((value) => value + 1);
             setToast({
               text: saved.status === "APPROVED" ? copy.review.approved : copy.review.rejected,
               tone: saved.status === "APPROVED" ? "success" : "neutral",
@@ -369,7 +372,7 @@ export function RepairAdminPanel({ canReview = false }: { canReview?: boolean } 
             setReviewTarget(null);
             // 审核按钮成功后置灰，焦点交还同一行仍可操作的详情入口。
             requestAnimationFrame(() =>
-              document.getElementById(`repair-detail-${saved.id}`)?.focus(),
+              document.getElementById(`repair-detail-${saved.id}`)?.focus({ preventScroll: true }),
             );
           }}
         />
