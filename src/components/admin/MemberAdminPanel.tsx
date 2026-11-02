@@ -211,7 +211,9 @@ export function MemberAdminPanel() {
           .join("；")}`,
       );
     }
-    await load();
+    const failedIds = new Set(result.data.failed.map((item) => item.memberId));
+    setSelected((current) => current.filter((id) => failedIds.has(id)));
+    await list.refreshLoaded();
     if (result.data.failed.length === 0) setCompletedBatch((value) => value + 1);
   }
 
