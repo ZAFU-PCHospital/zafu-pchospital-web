@@ -513,6 +513,11 @@ export const adminCopy = {
       clear: "取消选择",
     },
     review: {
+      approveTitle: "确认通过维修记录",
+      approveHint: "确认通过这条维修记录？审核结果会通知参与维修的成员。",
+      approveSubmit: "确认通过",
+      approved: "已审核通过。",
+      rejected: "已退回。",
       rejectTitle: "退回原因",
       rejectHint: "退回必须填写原因，会同时通知提交人",
       notePlaceholder: "说明需要申请人补充或修正的内容",

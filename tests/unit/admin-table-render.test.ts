@@ -5,6 +5,7 @@ import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import type { MemberTableContext } from "../../src/components/admin/member-table-spec";
+import type { RepairTableContext } from "../../src/components/admin/repair-table-spec";
 import type { AuditLogEntry, MemberListEntry, RepairView } from "../../src/types/contracts";
 
 /** 验证表格的列顺序、单元格内容与可访问性标记。 */
@@ -496,11 +497,7 @@ test("审计表：空列表占满 7 列", async () => {
 
 /* ---------------------------------------------------------------- 维修记录表 */
 
-type RepairContext = {
-  selected: string[];
-  onToggleSelected: (recordId: string, checked: boolean) => void;
-  onDetail: (recordId: string) => void;
-};
+type RepairContext = RepairTableContext;
 
 function repair(overrides: Partial<RepairView> = {}): RepairView {
   return {
@@ -550,12 +547,42 @@ function renderRepairs(
         selected,
         onToggleSelected: () => {},
         onDetail: () => {},
+        canReview: true,
+        reviewDisabled: false,
+        onReview: () => {},
       } satisfies RepairContext,
       emptyText: modulesRef.admin.adminShared.empty,
       ...extra,
     }),
   );
 }
+
+test("维修表：审核按钮按权限显示，已审核与忙碌记录禁用且保留详情", async () => {
+  modulesRef = await load();
+  const context: RepairContext = {
+    selected: [],
+    onToggleSelected: () => {},
+    onDetail: () => {},
+    canReview: true,
+    reviewDisabled: false,
+    onReview: () => {},
+  };
+  const actions = (status: RepairView["status"], extra: Partial<RepairContext> = {}) => {
+    const html = renderRepairs([repair({ status })], { renderContext: { ...context, ...extra } });
+    return html.match(/<td data-label="操作"[^>]*>(.*?)<\/td>/s)![1];
+  };
+  const pending = actions("PENDING");
+  assert.match(pending, />通过</);
+  assert.match(pending, />退回</);
+  assert.match(pending, />详情</);
+  assert.doesNotMatch(pending, /disabled/);
+  for (const status of ["APPROVED", "REJECTED", "DRAFT"] as const)
+    assert.equal((actions(status).match(/disabled/g) ?? []).length, 2);
+  assert.equal((actions("PENDING", { reviewDisabled: true }).match(/disabled/g) ?? []).length, 2);
+  const forbidden = actions("PENDING", { canReview: false });
+  assert.doesNotMatch(forbidden, />通过<|>退回</);
+  assert.match(forbidden, />详情</);
+});
 
 test("维修表：表头 9 列，选择列有读屏名称，每列声明默认宽度", async () => {
   modulesRef = await load();
@@ -576,7 +603,7 @@ test("维修表：表头 9 列，选择列有读屏名称，每列声明默认�
   const widths = [...html.matchAll(/<col style="width:(\d+)px"\/>/g)].map((match) =>
     Number(match[1]),
   );
-  assert.deepEqual(widths, [48, 100, 150, 110, 180, 84, 100, 156, 150]);
+  assert.deepEqual(widths, [48, 100, 150, 110, 180, 84, 100, 156, 240]);
 });
 
 test("维修表：选择列是独立的复选框列（没有字段名），勾选状态跟着 selected 走", async () => {
