@@ -853,9 +853,17 @@ export function MemberRepairActivityBoard({ activityId }: Props) {
                             onError={setMessage}
                           />
                         </div>
+                        {board.canAdmin ? (
+                          <div className="activity-board__queue-line">
+                            <span className="activity-board__queue-label">{copy.servedBy}</span>
+                            <span className="activity-board__queue-value">
+                              {row.servedByName || copy.servedByUnknown}
+                            </span>
+                          </div>
+                        ) : null}
                       </div>
                     </div>
-                    <div className="activity-board__row-actions">
+                    <div className="activity-board__row-actions items-center">
                       {row.canRevert ? (
                         <Button variant="ghost" onClick={() => setRevertTarget(row)}>
                           {copy.revertServe}

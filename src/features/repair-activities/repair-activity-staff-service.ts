@@ -70,6 +70,8 @@ export type StaffRegistrationView = {
 /** 已接待行：报名视图 + 对应维修单状态（`null` = 记录缺失、已软删除或尚未建单）。 */
 export type StaffServedRow = StaffRegistrationView & {
   recordStatus: RepairStatus | null;
+  /** 仅管理员响应包含，取接待成员的真实姓名；资料缺失时为 null。 */
+  servedByName?: string | null;
   /** 当前操作者能否撤销这次接待：未建单，且是接待者本人或活动管理员。 */
   canRevert: boolean;
   /** 只有接待者本人、且还没建单时才能「继续填写」。 */
@@ -148,7 +150,7 @@ const registrationSelect = {
 const servedRecordSelect = { id: true, status: true, submittedAt: true, deletedAt: true } as const;
 type ServedRegistration = Prisma.RepairActivityRegistrationGetPayload<{
   include: { repairRecord: { select: typeof servedRecordSelect } };
-}>;
+}> & { servedBy?: { realName: string } | null };
 
 function servedRows(
   rows: ServedRegistration[],
@@ -171,6 +173,7 @@ function servedRows(
       return {
         ...toStaffReg(row),
         recordStatus,
+        ...(canAdmin ? { servedByName: row.servedBy?.realName.trim() || null } : {}),
         canRevert:
           (pendingRecord || legacyDraft) && (canAdmin || row.servedByMemberProfileId === memberId),
         canFill: pendingRecord && row.servedByMemberProfileId === memberId,
@@ -530,7 +533,10 @@ export const repairActivityStaffService = {
         status: "SERVED",
         ...(canAdmin ? {} : { servedByMemberProfileId: member.id }),
       },
-      include: { repairRecord: { select: servedRecordSelect } },
+      include: {
+        repairRecord: { select: servedRecordSelect },
+        servedBy: canAdmin ? { select: { realName: true } } : false,
+      },
     });
     return { served: servedRows(rows, member.id, canAdmin) };
   },
@@ -600,6 +606,7 @@ export const repairActivityStaffService = {
             repairRecord: {
               select: { id: true, status: true, submittedAt: true, deletedAt: true },
             },
+            servedBy: canAdmin ? { select: { realName: true } } : false,
           },
         }),
         findPendingServe(member.id),

@@ -308,6 +308,44 @@ test("报名截止但活动未结束时，工作台状态显示「可出勤」�
   assert.equal(text(ui.view()).includes("报名截止"), false);
 });
 
+for (const desktop of [true, false]) {
+  for (const canAdmin of [true, false]) {
+    test(`接待成员展示：${desktop ? "桌面" : "窄屏"} / ${canAdmin ? "管理员" : "成员"}`, async (t) => {
+      const data = board();
+      data.canAdmin = canAdmin;
+      data.served[0].servedByName = "接待成员真实姓名";
+      data.served.push({
+        ...data.served[0],
+        id: "pending",
+        repairRecordId: null,
+        recordStatus: null,
+        servedByName: "较长的接待成员真实姓名用于换行展示",
+      });
+      data.served.push({ ...data.served[0], id: "unknown", servedByName: null });
+      const ui = await mount(t, data, new Date(end.getTime() - 60_000), false, desktop);
+      if (!desktop) {
+        ui
+          .elements()
+          .find(
+            (element) =>
+              element.props.className === "activity-board__seg-btn" &&
+              text(element.props.children).includes(copy.servedTitle),
+          )!.props.onClick!();
+        ui.view();
+        await setImmediate();
+      }
+      const rendered = text(ui.view());
+      assert.equal(rendered.includes("接待成员真实姓名"), canAdmin);
+      assert.equal(rendered.includes("较长的接待成员真实姓名用于换行展示"), canAdmin);
+      assert.equal(rendered.includes(copy.servedByUnknown), canAdmin);
+      assert.equal(
+        ui.elements().filter((element) => element.props.children === copy.servedBy).length,
+        canAdmin ? 3 : 0,
+      );
+    });
+  }
+}
+
 test("旧签到确认窗跨过结束上限不能提交，取消仍可用，既有看板不卸载", async (t) => {
   const ui = await mount(t, board(), new Date(end.getTime() - 1_000));
   ui.elements().find((element) => element.props.type === "checkbox")!.props.onChange!();
