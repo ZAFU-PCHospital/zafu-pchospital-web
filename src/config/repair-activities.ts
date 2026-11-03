@@ -34,6 +34,10 @@ export const repairActivitiesPage = {
   detail: {
     backToList: "维修活动",
     breadcrumb: "活动详情",
+    dismissError: "关闭",
+    signupFailed: "报名失败",
+    signupFailedTitle: "报名未完成",
+    signupFailedConfirm: "知道了",
     queue: {
       title: "现场排队情况",
       refresh: "刷新",

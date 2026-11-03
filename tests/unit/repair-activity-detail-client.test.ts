@@ -35,6 +35,39 @@ function findElement(
   }
 }
 
+function pageAlerts(node: ReactNode) {
+  const alerts: ReactElement<{ message: string; closeLabel?: string; onClose?: () => void }>[] = [];
+  const visit = (current: ReactNode) => {
+    if (Array.isArray(current)) {
+      current.forEach(visit);
+      return;
+    }
+    if (!React.isValidElement<Record<string, unknown>>(current)) return;
+    const type = current.type as { name?: string } | string;
+    if (typeof type === "function" && type.name === "PageAlert") {
+      alerts.push(
+        current as ReactElement<{ message: string; closeLabel?: string; onClose?: () => void }>,
+      );
+    }
+    visit(current.props.children as ReactNode);
+  };
+  visit(node);
+  return alerts;
+}
+
+function pageAlertText(node: ReactNode): string {
+  return pageAlerts(node)
+    .map((alert) => alert.props.message)
+    .join("");
+}
+
+function signupErrorDialog(node: ReactNode) {
+  return findElement(
+    node,
+    (element) => element.props.title === repairActivitiesPage.detail.signupFailedTitle,
+  );
+}
+
 function signupDialog(node: ReactNode) {
   return findElement(node, (element) => typeof element.props.onConfirm === "function");
 }
@@ -879,7 +912,7 @@ test("取消网络失败时保留查询结果并提示重试", async (t) => {
   await setImmediate();
 
   const content = text(ui.view());
-  assert.ok(content.includes("网络异常，请稍后重试"));
+  assert.ok(pageAlertText(ui.view()).includes("网络异常，请稍后重试"));
   assert.ok(content.includes(copy.lookupRegisteredTitle), "失败时保留查询结果以便重试");
   assert.equal(ui.requests[3].url, "/api/v1/repair-activities/a");
   await ui.finish(3, { ...activity, status: "OPEN" });
@@ -915,7 +948,7 @@ test("取消服务端状态拒绝时保留查询结果并展示原因", async (t
   await setImmediate();
 
   const content = text(ui.view());
-  assert.ok(content.includes("活动已开始，不能自助取消"));
+  assert.ok(pageAlertText(ui.view()).includes("活动已开始，不能自助取消"));
   assert.ok(content.includes(copy.lookupRegisteredTitle));
   await ui.finish(3, { ...activity, status: "OPEN" });
 });
@@ -1025,7 +1058,8 @@ test("活动开始前已签到/已接待时仍不显示取消按钮", async (t) 
   assertNoCancel();
 });
 
-test("报名失败只显示错误，保留输入以便重试，不显示成功提醒", async (t) => {
+test("报名失败进入 Alert 对话框，保留输入以便重试，不显示成功提醒", async (t) => {
+  const copy = repairActivitiesPage.detail;
   const ui = await mount(t);
   await ui.finish(0, { ...activity, status: "OPEN" });
   const consent = ui.requestSignup();
@@ -1034,11 +1068,54 @@ test("报名失败只显示错误，保留输入以便重试，不显示成功�
     Response.json({ success: false, error: { message: "名额已满" } }, { status: 409 }),
   );
   await setImmediate();
-  assert.equal(signupDialog(ui.view()), undefined);
-  assert.ok(text(ui.view()).includes("名额已满"));
+
+  const dialog = signupErrorDialog(ui.view());
+  assert.ok(dialog, "报名失败应进入 Alert 对话框");
+  assert.ok(text(dialog).includes("名额已满"));
+  assert.equal(dialog.props.confirmLabel, copy.signupFailedConfirm);
+  assert.equal(typeof dialog.props.onClose, "function");
   assert.equal(ui.formResets(), 0, "失败时保留已填写的表单");
   assert.equal(ui.requests.length, 2, "失败时不刷新活动或再次提交");
-  assert.equal(ui.requestSignup().props.title, repairActivitiesPage.detail.consent.title);
+
+  (dialog.props.onClose as () => void)();
+  assert.equal(signupErrorDialog(ui.view()), undefined, "关闭后对话框消失");
+  assert.equal(ui.requestSignup().props.title, copy.consent.title);
+});
+
+test("报名被客户黑名单拦截时，错误进入可关闭的 Alert 对话框", async (t) => {
+  const copy = repairActivitiesPage.detail;
+  const ui = await mount(t);
+  await ui.finish(0, { ...activity, status: "OPEN" });
+  const consent = ui.requestSignup();
+  (consent.props.onConfirm as () => void)();
+  ui.requests[1].finish(
+    Response.json(
+      {
+        success: false,
+        error: {
+          code: "ACTIVITY_CUSTOMER_BLOCKED",
+          message: "该姓名与手机号的近期报名记录暂不能报名，请联系活动管理员",
+        },
+      },
+      { status: 403 },
+    ),
+  );
+  await setImmediate();
+
+  const dialog = signupErrorDialog(ui.view());
+  assert.ok(dialog, "阻断报名应进入 Alert 对话框");
+  assert.ok(text(dialog).includes("该姓名与手机号的近期报名记录暂不能报名，请联系活动管理员"));
+  assert.equal(dialog.props.confirmLabel, copy.signupFailedConfirm);
+  assert.equal(typeof dialog.props.onClose, "function");
+  assert.equal(ui.formResets(), 0, "错误对话框不清空表单");
+  assert.equal(pageAlerts(ui.view()).length, 0);
+
+  (dialog.props.onClose as () => void)();
+  assert.equal(signupErrorDialog(ui.view()), undefined, "关闭后对话框消失");
+  assert.ok(
+    findElement(ui.view(), (element) => element.props["aria-label"] === copy.signupTitle),
+    "关闭后仍保留报名表单",
+  );
 });
 
 test("上次报名的慢刷新结束时，不解除下一次报名的在途禁用", async (t) => {

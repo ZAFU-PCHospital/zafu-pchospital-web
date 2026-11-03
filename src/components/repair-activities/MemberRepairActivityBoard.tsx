@@ -10,8 +10,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { createPortal } from "react-dom";
-
 import { AdminModal } from "@/components/admin/AdminModal";
 import { AdminToast, type AdminToastMessage } from "@/components/admin/AdminToast";
 import { memberRepairActivityStatusBadgeClass } from "@/components/repair-activities/activity-status-badge";
@@ -25,7 +23,7 @@ import { RegistrationPhone } from "@/components/repair-activities/RegistrationPh
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
-import { Icon } from "@/components/ui/Icon";
+import { PageAlert } from "@/components/ui/PageAlert";
 import { repairStatusLabels } from "@/config/repairs";
 import {
   memberRepairActivitiesCopy,
@@ -54,20 +52,6 @@ type Props = { activityId: string };
 
 /** 手机端一次只展示一个分区（<1100px；宽屏由 CSS 显示全部并排栏）。 */
 type MobilePane = "eligible" | "queue" | "served";
-
-/** 页面级错误使用浮动提示，避免挤动工作台。 */
-function BoardAlert({ message }: { message: string }) {
-  if (typeof document === "undefined") return null;
-  return createPortal(
-    <div className="activity-board__alert">
-      <div className="card activity-board__alert-body" role="alert">
-        <Icon name="close" />
-        <p className="activity-board__alert-text">{message}</p>
-      </div>
-    </div>,
-    document.body,
-  );
-}
 
 export function MemberRepairActivityBoard({ activityId }: Props) {
   const router = useRouter();
@@ -615,7 +599,7 @@ export function MemberRepairActivityBoard({ activityId }: Props) {
       ) : null}
       <AdminToast toast={toast} onDismiss={() => setToast(null)} />
       {/* 页面级错误 = 浮动提示（方案 A）：不占布局，工具行与卡片之间只剩网格间距。 */}
-      {floatingMessage ? <BoardAlert message={floatingMessage} /> : null}
+      {floatingMessage ? <PageAlert message={floatingMessage} /> : null}
 
       {/* 手机端分区切换（·分段滑块）：窄屏一次只显示一个分区、切换行吸顶；
           宽屏由 CSS 隐藏，恢复并排栏。计数实时来自看板数据、放在段内（等宽段不因数字变化位移）。 */}

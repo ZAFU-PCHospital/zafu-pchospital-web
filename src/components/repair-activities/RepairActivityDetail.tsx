@@ -16,6 +16,7 @@ import { fetchRegistrationDeviceStatus } from "@/features/repair-activities/regi
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { PageAlert } from "@/components/ui/PageAlert";
 import { repairActivitiesPage } from "@/config/repair-activities";
 import {
   activityEndExclusive,
@@ -60,6 +61,7 @@ export function RepairActivityDetail({ activityId }: Props) {
   const [serverOffsetMs, setServerOffsetMs] = useState(0);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [problem, setProblem] = useState("");
+  const [signupProblem, setSignupProblem] = useState("");
   const [notice, setNotice] = useState<AdminToastMessage | null>(null);
   const [busy, setBusy] = useState(false);
   const [signupSucceeded, setSignupSucceeded] = useState(false);
@@ -193,6 +195,7 @@ export function RepairActivityDetail({ activityId }: Props) {
     setPendingSignup(null);
     setBusy(false);
     setProblem("");
+    setSignupProblem("");
     setNotice(null);
     void load();
     return () => {
@@ -363,6 +366,7 @@ export function RepairActivityDetail({ activityId }: Props) {
     event.preventDefault();
     if (busy || submittingRef.current || pendingSignup || signupPending) return;
     setProblem("");
+    setSignupProblem("");
     setNotice(null);
     setSignupInfo("");
     const data = Object.fromEntries(new FormData(event.currentTarget)) as Record<string, string>;
@@ -452,6 +456,7 @@ export function RepairActivityDetail({ activityId }: Props) {
     submittingRef.current = true;
     setBusy(true);
     setProblem("");
+    setSignupProblem("");
     setNotice(null);
     try {
       let response: Response;
@@ -513,7 +518,7 @@ export function RepairActivityDetail({ activityId }: Props) {
         } else if (json.error?.code === "ACTIVITY_FULL") {
           setSignupInfo(copy.fullLookupHint);
         } else {
-          setProblem(json.error?.message ?? "报名失败");
+          setSignupProblem(json.error?.message ?? copy.signupFailed);
         }
       } else {
         setSignupSucceeded(true);
@@ -521,6 +526,7 @@ export function RepairActivityDetail({ activityId }: Props) {
         setDeviceRegistration(json.data ?? null);
         setRegisteredPhone(pending.phone);
         setSignupInfo("");
+        setSignupProblem("");
         setSignupPending(null);
         signupFormRef.current?.reset();
         // 刷新独立收尾，不延长 POST 的忙碌周期，也不解除下一次操作的禁用。
@@ -586,6 +592,16 @@ export function RepairActivityDetail({ activityId }: Props) {
     (signupFormRef.current ?? lookupNameInputRef.current)?.focus({ preventScroll: true });
     setPendingSignup(null);
     setSignupSucceeded(false);
+  }
+
+  function closeSignupProblem() {
+    setSignupProblem("");
+    if (typeof window === "undefined") return;
+    window.requestAnimationFrame?.(() => {
+      signupFormRef.current
+        ?.querySelector<HTMLButtonElement>('button[type="submit"]')
+        ?.focus({ preventScroll: true });
+    });
   }
 
   async function doLookup(event: FormEvent<HTMLFormElement>) {
@@ -836,9 +852,11 @@ export function RepairActivityDetail({ activityId }: Props) {
 
       <AdminToast toast={notice} onDismiss={() => setNotice(null)} />
       {problem ? (
-        <p className="admin-status admin-status--error" role="alert">
-          {problem}
-        </p>
+        <PageAlert
+          message={problem}
+          closeLabel={copy.dismissError}
+          onClose={() => setProblem("")}
+        />
       ) : null}
 
       <div className={styles.layout}>
@@ -1330,6 +1348,19 @@ export function RepairActivityDetail({ activityId }: Props) {
             <p className="muted">{signupSucceeded ? copy.signupSuccess : copy.consent.subtitle}</p>
             {signupSucceeded ? <RepairActivityPreparation /> : <RepairActivityPrecautions />}
           </div>
+        </ConfirmDialog>
+      ) : null}
+
+      {/* 阻断报名的失败需要用户确认后再继续，复用现有 ConfirmDialog 的 Alert 语义。 */}
+      {signupProblem ? (
+        <ConfirmDialog
+          title={copy.signupFailedTitle}
+          confirmLabel={copy.signupFailedConfirm}
+          size="compact"
+          onConfirm={closeSignupProblem}
+          onClose={closeSignupProblem}
+        >
+          <p>{signupProblem}</p>
         </ConfirmDialog>
       ) : null}
     </div>

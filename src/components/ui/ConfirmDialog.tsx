@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 import { Button } from "@/components/ui/Button";
+import { cn } from "@/lib/utils";
 
 /**
  * ConfirmDialog —— 破坏操作二次确认（UX R3 / R4 / C7）。
@@ -22,6 +23,7 @@ export function ConfirmDialog({
   busy = false,
   confirmDisabled = false,
   confirmVariant = "solid",
+  size = "default",
 }: {
   title: string;
   children: ReactNode;
@@ -36,6 +38,8 @@ export function ConfirmDialog({
   /** 只禁用确认，保留取消 / Esc（例如操作窗口已结束）。 */
   confirmDisabled?: boolean;
   confirmVariant?: "solid" | "outline" | "ghost";
+  /** 短确认 / Alert 用紧凑窗口；详情表单仍用默认宽高。 */
+  size?: "default" | "compact";
 }) {
   const titleId = useId();
   const windowRef = useRef<HTMLDivElement>(null);
@@ -99,7 +103,7 @@ export function ConfirmDialog({
       />
       <div
         ref={windowRef}
-        className="admin-modal__window"
+        className={cn("admin-modal__window", size === "compact" && "admin-modal__window--compact")}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}

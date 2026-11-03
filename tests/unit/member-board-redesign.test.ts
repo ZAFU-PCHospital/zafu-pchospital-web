@@ -16,6 +16,7 @@ const boardSource = readFileSync(
   "utf8",
 );
 const pageSource = readFileSync("src/app/member/repair-activities/[id]/page.tsx", "utf8");
+const pageAlertSource = readFileSync("src/components/ui/PageAlert.tsx", "utf8");
 const cssSource = readFileSync("src/app/globals.css", "utf8");
 
 test("页头：小标签 + 活动名主标题 + 日期行，三种状态共用同一页头", () => {
@@ -71,17 +72,16 @@ test("样式接线：计数强调、标签定宽、窄屏主按钮加宽、对�
   assert.match(cssSource, /\.activity-board__row-actions--foot \{[^}]*border-top: 1px dotted/);
 });
 
-test("留空收紧（第二轮反馈·方案 A）：页面级错误改浮动提示，卡片与工具行只隔网格间距", () => {
+test("留空收紧（第二轮反馈·方案 A）：页面级错误改共享浮动提示，卡片与工具行只隔网格间距", () => {
   // 页面级错误不再内联占位：板面里只剩签到弹窗内那一处定高错误行，工具行与卡片之间没有常驻带。
   assert.equal((boardSource.match(/activity-board__feedback/g) ?? []).length, 1);
-  // 页面级错误 = Portal 浮条（role=alert），CSS 固定定位、不参与布局。
-  assert.ok(boardSource.includes('className="card activity-board__alert-body" role="alert"'));
-  assert.match(cssSource, /\.activity-board__alert \{[^}]*position: fixed/);
+  // 页面级错误 = 共享 PageAlert（Portal 浮条，role=alert），CSS 固定定位、不参与布局。
+  assert.ok(boardSource.includes("<PageAlert message={floatingMessage} />"));
+  assert.ok(pageAlertSource.includes('className="card page-alert__body"'));
+  assert.ok(pageAlertSource.includes('role="alert"'));
+  assert.match(cssSource, /\.page-alert \{[^}]*position: fixed/);
   assert.match(cssSource, /\.activity-board \{[^}]*gap: var\(--s-3\)/);
   // 弹窗内错误行仍是定高预留（错误出现 / 清空不挤动弹窗按钮），图标走语义令牌。
   assert.match(cssSource, /\.activity-board__feedback \{[^}]*block-size: 2lh/);
-  assert.match(
-    cssSource,
-    /\.activity-board__alert-body > svg \{[^}]*color: var\(--status-danger\)/,
-  );
+  assert.match(cssSource, /\.page-alert__body > svg \{[^}]*color: var\(--status-danger\)/);
 });
