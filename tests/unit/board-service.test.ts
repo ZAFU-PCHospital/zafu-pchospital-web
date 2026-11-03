@@ -127,6 +127,7 @@ test("增量 Service 的数据库边界：live 不读历史关系，served 按�
     { activityId: "fixture", deletedAt: null, status: "SERVED", servedByMemberProfileId: "member" },
   );
   assert.equal(served.served[0].canFill, true);
+  assert.equal("servedByName" in served.served[0], false);
   assert.equal(served.served[0].phoneMasked, "139****0000");
   assert.equal(JSON.stringify(served).includes("13900000000"), false);
 
@@ -140,4 +141,85 @@ test("增量 Service 的数据库边界：live 不读历史关系，served 按�
   assert.deepEqual(attendance.attendanceMembers, [
     { memberProfileId: "member", name: "隔离昵称", checkedInAt: now.toISOString() },
   ]);
+});
+
+test("已接待姓名：管理员取实际接待者姓名，兼容待补建与缺失资料；成员不查询或接收姓名", async (t) => {
+  const rows = [
+    {
+      ...registration,
+      servedBy: { realName: "接待者姓名", nickname: "接待者昵称" },
+    },
+    {
+      ...registration,
+      id: "submitted",
+      servedAt: new Date(now.getTime() - 1000),
+      servedByMemberProfileId: "other-member",
+      servedBy: { realName: "另一接待者", nickname: "另一昵称" },
+      repairRecordId: "record",
+      repairRecord: { id: "record", status: "PENDING", submittedAt: now, deletedAt: null },
+    },
+    {
+      ...registration,
+      id: "missing-member",
+      servedAt: new Date(now.getTime() - 2000),
+      servedByMemberProfileId: null,
+      servedBy: null,
+    },
+    {
+      ...registration,
+      id: "empty-name",
+      servedAt: new Date(now.getTime() - 3000),
+      servedBy: { realName: "  ", nickname: "不可用昵称兜底" },
+    },
+  ];
+  const queries: Record<string, unknown>[] = [];
+  const globalDb = globalThis as unknown as { __pcHospitalDb?: unknown };
+  const previous = globalDb.__pcHospitalDb;
+  globalDb.__pcHospitalDb = {
+    memberProfile: { findFirst: async () => ({ id: "member" }) },
+    repairActivity: { findFirst: async () => activity },
+    repairActivityRegistration: {
+      findMany: async (args: Record<string, unknown>) => {
+        queries.push(args);
+        return rows;
+      },
+      findFirst: async () => null,
+      count: async () => rows.length,
+    },
+    repairActivityAttendance: {
+      findUnique: async () => null,
+      findMany: async () => [],
+    },
+  };
+  t.after(() => {
+    globalDb.__pcHospitalDb = previous;
+  });
+
+  for (const method of ["getBoard", "getServedBoard"] as const) {
+    const adminBoard = await repairActivityStaffService[method]("fixture", actor(true));
+    assert.deepEqual(
+      adminBoard.served.map((row) => [row.id, row.servedByName]),
+      [
+        ["customer", "接待者姓名"],
+        ["submitted", "另一接待者"],
+        ["missing-member", null],
+        ["empty-name", null],
+      ],
+    );
+    assert.equal(adminBoard.served[0].repairRecordId, null, "待补建也返回接待者姓名");
+    assert.equal(adminBoard.served[1].recordStatus, "PENDING");
+    assert.deepEqual((queries.at(-1)!.include as Record<string, unknown>).servedBy, {
+      select: { realName: true },
+    });
+    assert.equal(JSON.stringify(adminBoard.served).includes("昵称"), false);
+
+    const memberBoard = await repairActivityStaffService[method]("fixture", actor(false));
+    assert.deepEqual(
+      memberBoard.served.map((row) => row.id),
+      ["customer", "empty-name"],
+    );
+    assert.ok(memberBoard.served.every((row) => !("servedByName" in row)));
+    assert.equal((queries.at(-1)!.include as Record<string, unknown>).servedBy, false);
+    assert.equal(JSON.stringify(memberBoard.served).includes("接待者姓名"), false);
+  }
 });

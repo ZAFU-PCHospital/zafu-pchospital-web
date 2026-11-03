@@ -799,6 +799,10 @@ DELETE     /api/v1/admin/comments/:id
     普通成员仅**本人接待**（issue #207）；每行新增 `canFill`（本人接待且未建单）与
     `canRevert`（本人或管理员且未建单）；`recordStatus` 为 `null` 且没有 `repairRecordId` 表示
     「待补建」，前端显示「待补建 / 继续填写」。
+  - 管理员的已接待行另含 `servedByName: string | null`，直接取报名的 `servedBy` 成员档案
+    `realName`（姓名），不使用昵称、账号显示名或维修参与人；待补建与已建单记录均返回。
+    资料缺失或姓名为空时为 `null`，页面在电话下方显示「接待成员 / 未知成员」。普通成员响应
+    不含此字段，数据库查询也不读取接待成员姓名；`view=served` 与不带 view 的完整看板一致。
   - `pendingServeRegistration: { registrationId, name, activityId, activityTitle } | null` ——
     全局拦截的客户端先行判据（客户端据此弹层且**不发 serve 请求**；服务端 409 为并发兜底）。
 - `POST /api/v1/member/repair-activities/:id/revert-serve` 只允许撤销「已接待、未建单」的接待：

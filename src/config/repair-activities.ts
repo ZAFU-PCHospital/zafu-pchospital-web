@@ -282,6 +282,8 @@ export const memberRepairActivitiesCopy = {
     viewRepair: "查看维修单",
     /** 「已接待」区块：常驻区块，数据空了只换内容不卸载。 */
     servedTitle: "已接待",
+    servedBy: "接待成员",
+    servedByUnknown: "未知成员",
     servedTag: "Served",
     servedEmpty: "本场还没有已接待的客户",
     /** 成员视角：列表只含本人接待，空态要说清「你」。 */
