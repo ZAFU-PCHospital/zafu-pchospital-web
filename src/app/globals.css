@@ -6244,6 +6244,21 @@ html[data-theme="black-yellow"] {
   .admin-modal__window--compact {
     inline-size: min(30rem, 100%);
   }
+  /* 短 Alert：内容高度自适应并在屏幕居中，窄屏也不铺满整屏。 */
+  .admin-modal .admin-modal__window--alert {
+    block-size: auto;
+    max-block-size: min(88vh, 40rem);
+    grid-template-rows: auto minmax(0, auto);
+  }
+  .admin-modal .admin-modal__window--alert .signup__actions {
+    justify-content: flex-end;
+  }
+  @media (max-width: 759px) {
+    .admin-modal .admin-modal__window--alert {
+      inline-size: min(30rem, calc(100vw - 2 * var(--s-4)));
+      max-block-size: calc(100dvh - var(--s-6));
+    }
+  }
   .admin-modal__head {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
@@ -9022,7 +9037,7 @@ html[data-theme="black-yellow"] {
   overflow-wrap: anywhere;
 }
 /* 页面级错误固定显示在视口顶部居中。 */
-.activity-board__alert {
+.page-alert {
   position: fixed;
   inset-block-start: var(--s-5);
   inset-inline: 0;
@@ -9032,28 +9047,50 @@ html[data-theme="black-yellow"] {
   padding-inline: var(--gutter);
   pointer-events: none; /* 只有提示条本身可点，其余区域照常操作页面 */
 }
-.activity-board__alert-body {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+.page-alert__body {
+  display: flex;
   align-items: center;
   gap: var(--s-3);
   max-inline-size: min(32rem, 100%);
   padding: var(--s-3) var(--s-4);
   pointer-events: auto;
 }
-.activity-board__alert-body > svg {
+/* 带关闭按钮时收紧上下留白，让按钮本身保留触控高度。 */
+.page-alert__body:has(.page-alert__close) {
+  padding-block: var(--s-2);
+}
+.page-alert__body > svg {
+  flex: 0 0 auto;
   inline-size: 1.125rem;
   block-size: 1.125rem;
   color: var(--status-danger);
 }
-.activity-board__alert-text {
+.page-alert__text {
+  min-width: 0;
   margin: 0;
   font-size: var(--t-sm);
   color: var(--ink);
   overflow-wrap: anywhere;
 }
+.page-alert__close {
+  flex: 0 0 auto;
+  min-inline-size: 2.75rem;
+  min-block-size: 2.75rem;
+  padding-inline: var(--s-2);
+  border: 1px solid transparent;
+  border-radius: var(--r-base);
+  color: var(--accent-deep);
+  font-size: var(--t-sm);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.page-alert__close:hover,
+.page-alert__close:focus-visible {
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
 /* 成功提示同时在场（罕见）：浮条下移让位，两行不重叠。 */
-body:has(.admin-toast) .activity-board__alert {
+body:has(.admin-toast) .page-alert {
   inset-block-start: calc(var(--s-5) + 3.25rem);
 }
 .activity-board__panes {

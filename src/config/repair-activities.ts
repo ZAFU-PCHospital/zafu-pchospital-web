@@ -34,6 +34,10 @@ export const repairActivitiesPage = {
   detail: {
     backToList: "维修活动",
     breadcrumb: "活动详情",
+    dismissError: "关闭",
+    signupFailed: "报名失败",
+    signupFailedTitle: "暂时无法报名",
+    signupFailedConfirm: "知道了",
     queue: {
       title: "现场排队情况",
       refresh: "刷新",
@@ -218,6 +222,7 @@ export const memberRepairActivitiesCopy = {
     attendPromptMember: "请先参加本场，再接待客户",
     signupNotClosed: "报名尚未截止，暂不可出勤、签到或接待",
     activityEnded: "活动已结束",
+    dismissAlert: "关闭",
     attendedBadge: "你已出勤",
     /** 手机端分区切换行（<1100px 常显；宽屏隐藏）的无障碍名称。 */
     paneSwitcherLabel: "工作台分区切换",

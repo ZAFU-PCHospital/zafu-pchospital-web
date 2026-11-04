@@ -16,6 +16,7 @@ import { fetchRegistrationDeviceStatus } from "@/features/repair-activities/regi
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { PageAlert } from "@/components/ui/PageAlert";
 import { repairActivitiesPage } from "@/config/repair-activities";
 import {
   activityEndExclusive,
@@ -47,6 +48,8 @@ type LookupOutcome =
   | { kind: "not-found"; message?: string }
   | { kind: "unknown"; message?: string };
 
+type SignupField = "name" | "phone" | "issueType" | "deviceModel";
+
 type Props = { activityId: string };
 
 /** 浏览器 setTimeout 的最大安全延时；超出会溢出并提前触发。 */
@@ -60,6 +63,7 @@ export function RepairActivityDetail({ activityId }: Props) {
   const [serverOffsetMs, setServerOffsetMs] = useState(0);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [problem, setProblem] = useState("");
+  const [signupProblem, setSignupProblem] = useState("");
   const [notice, setNotice] = useState<AdminToastMessage | null>(null);
   const [busy, setBusy] = useState(false);
   const [signupSucceeded, setSignupSucceeded] = useState(false);
@@ -71,7 +75,11 @@ export function RepairActivityDetail({ activityId }: Props) {
   const [pendingCheckResult, setPendingCheckResult] = useState<"not-found" | "unknown" | null>(
     null,
   );
+  const [signupNameError, setSignupNameError] = useState("");
   const [signupPhoneError, setSignupPhoneError] = useState("");
+  const [signupIssueTypeError, setSignupIssueTypeError] = useState("");
+  const [signupDeviceModelError, setSignupDeviceModelError] = useState("");
+  const [signupFocusField, setSignupFocusField] = useState<SignupField | null>(null);
   const [lookup, setLookup] = useState<RegistrationLookupView | null>(null);
   const [lookupPhone, setLookupPhone] = useState("");
   const [lookupPhoneError, setLookupPhoneError] = useState("");
@@ -109,6 +117,33 @@ export function RepairActivityDetail({ activityId }: Props) {
   const lookupAttemptRef = useRef(0);
   const lookupAbortRef = useRef<AbortController | null>(null);
   const request = useRef<{ background: boolean; controller: AbortController } | null>(null);
+
+  // 字段错误在 busy 结束、免责声明弹层卸载后再聚焦；否则控件仍 disabled。
+  useEffect(() => {
+    if (busy || !signupFocusField || typeof window === "undefined") return;
+    const field = signupFocusField;
+    const focus = () => {
+      if (field === "name") {
+        signupNameInputRef.current?.focus();
+      } else if (field === "phone") {
+        signupPhoneInputRef.current?.focus();
+      } else {
+        const selector = {
+          issueType: 'select[name="issueType"]',
+          deviceModel: 'input[name="deviceModel"]',
+        }[field];
+        const element = signupFormRef.current?.querySelector?.(selector);
+        if (element && "focus" in element) (element as HTMLElement).focus();
+      }
+      setSignupFocusField(null);
+    };
+    const usesRaf = typeof window.requestAnimationFrame === "function";
+    const frame = usesRaf ? window.requestAnimationFrame(focus) : window.setTimeout(focus, 0);
+    return () => {
+      if (usesRaf) window.cancelAnimationFrame?.(frame);
+      else window.clearTimeout(frame);
+    };
+  }, [busy, signupFocusField]);
 
   /**
    * `background` = 倒计时驱动的自动重取：传输 / 服务端瞬时失败时保留已渲染内容，
@@ -177,7 +212,11 @@ export function RepairActivityDetail({ activityId }: Props) {
     setSignupInfo("");
     setSignupPending(null);
     setPendingCheckResult(null);
+    setSignupNameError("");
     setSignupPhoneError("");
+    setSignupIssueTypeError("");
+    setSignupDeviceModelError("");
+    setSignupFocusField(null);
     setLookup(null);
     setLookupPhone("");
     setLookupPhoneError("");
@@ -193,6 +232,7 @@ export function RepairActivityDetail({ activityId }: Props) {
     setPendingSignup(null);
     setBusy(false);
     setProblem("");
+    setSignupProblem("");
     setNotice(null);
     void load();
     return () => {
@@ -363,18 +403,29 @@ export function RepairActivityDetail({ activityId }: Props) {
     event.preventDefault();
     if (busy || submittingRef.current || pendingSignup || signupPending) return;
     setProblem("");
+    setSignupProblem("");
     setNotice(null);
     setSignupInfo("");
+    setSignupNameError("");
+    setSignupPhoneError("");
+    setSignupIssueTypeError("");
+    setSignupDeviceModelError("");
+    setSignupFocusField(null);
     const data = Object.fromEntries(new FormData(event.currentTarget)) as Record<string, string>;
+    const name = (data.name ?? "").trim();
+    if (name.length < 2) {
+      setSignupNameError(copy.nameFormatHint);
+      signupNameInputRef.current?.focus();
+      return;
+    }
     const phone = (data.phone ?? "").trim();
     if (!CN_MOBILE_PATTERN.test(phone)) {
       setSignupPhoneError(copy.phoneFormatHint);
       signupPhoneInputRef.current?.focus();
       return;
     }
-    setSignupPhoneError("");
     setPendingSignup({
-      name: data.name ?? "",
+      name,
       phone,
       issueType: data.issueType ?? "",
       deviceModel: data.deviceModel ?? "",
@@ -452,6 +503,7 @@ export function RepairActivityDetail({ activityId }: Props) {
     submittingRef.current = true;
     setBusy(true);
     setProblem("");
+    setSignupProblem("");
     setNotice(null);
     try {
       let response: Response;
@@ -471,7 +523,7 @@ export function RepairActivityDetail({ activityId }: Props) {
       let json: {
         success: boolean;
         data?: RegistrationPublicView;
-        error?: { code?: string; message?: string };
+        error?: { code?: string; message?: string; fieldErrors?: Record<string, string[]> };
       };
       try {
         json = (await response.json()) as typeof json;
@@ -490,6 +542,24 @@ export function RepairActivityDetail({ activityId }: Props) {
         // 失败要让报名者看得见原因，而错误提示在弹层后面 —— 先关弹层再报错。
         setPendingSignup(null);
         setRegisteredPhone(pending.phone);
+        const fieldErrors = json.error?.fieldErrors;
+        const fieldMessages = {
+          name: fieldErrors?.name?.[0] ?? "",
+          phone: fieldErrors?.phone?.[0] ?? "",
+          issueType: fieldErrors?.issueType?.[0] ?? "",
+          deviceModel: fieldErrors?.deviceModel?.[0] ?? "",
+        };
+        const firstField = (["name", "phone", "issueType", "deviceModel"] as const).find(
+          (field) => fieldMessages[field],
+        );
+        if (firstField) {
+          setSignupNameError(fieldMessages.name);
+          setSignupPhoneError(fieldMessages.phone);
+          setSignupIssueTypeError(fieldMessages.issueType);
+          setSignupDeviceModelError(fieldMessages.deviceModel);
+          setSignupFocusField(firstField);
+          return;
+        }
         if (json.error?.code === "ACTIVITY_DEVICE_ALREADY_REGISTERED") {
           // 另一个 tab 已报过 / 本地状态没跟上：直接切到「已提交」面板，而不是只报一条错误。
           let registration: RegistrationPublicView | null | undefined;
@@ -513,7 +583,7 @@ export function RepairActivityDetail({ activityId }: Props) {
         } else if (json.error?.code === "ACTIVITY_FULL") {
           setSignupInfo(copy.fullLookupHint);
         } else {
-          setProblem(json.error?.message ?? "报名失败");
+          setSignupProblem(json.error?.message ?? copy.signupFailed);
         }
       } else {
         setSignupSucceeded(true);
@@ -521,6 +591,7 @@ export function RepairActivityDetail({ activityId }: Props) {
         setDeviceRegistration(json.data ?? null);
         setRegisteredPhone(pending.phone);
         setSignupInfo("");
+        setSignupProblem("");
         setSignupPending(null);
         signupFormRef.current?.reset();
         // 刷新独立收尾，不延长 POST 的忙碌周期，也不解除下一次操作的禁用。
@@ -586,6 +657,16 @@ export function RepairActivityDetail({ activityId }: Props) {
     (signupFormRef.current ?? lookupNameInputRef.current)?.focus({ preventScroll: true });
     setPendingSignup(null);
     setSignupSucceeded(false);
+  }
+
+  function closeSignupProblem() {
+    setSignupProblem("");
+    if (typeof window === "undefined") return;
+    window.requestAnimationFrame?.(() => {
+      signupFormRef.current
+        ?.querySelector<HTMLButtonElement>('button[type="submit"]')
+        ?.focus({ preventScroll: true });
+    });
   }
 
   async function doLookup(event: FormEvent<HTMLFormElement>) {
@@ -836,9 +917,11 @@ export function RepairActivityDetail({ activityId }: Props) {
 
       <AdminToast toast={notice} onDismiss={() => setNotice(null)} />
       {problem ? (
-        <p className="admin-status admin-status--error" role="alert">
-          {problem}
-        </p>
+        <PageAlert
+          message={problem}
+          closeLabel={copy.dismissError}
+          onClose={() => setProblem("")}
+        />
       ) : null}
 
       <div className={styles.layout}>
@@ -1052,13 +1135,28 @@ export function RepairActivityDetail({ activityId }: Props) {
                     <input
                       ref={signupNameInputRef}
                       className="field__input"
+                      id="repair-activity-signup-name"
                       name="name"
                       placeholder={copy.namePlaceholder}
                       required
                       minLength={2}
                       maxLength={40}
+                      aria-invalid={signupNameError ? true : undefined}
+                      aria-describedby={
+                        signupNameError ? "repair-activity-signup-name-error" : undefined
+                      }
+                      onInput={() => setSignupNameError("")}
                       disabled={!open || busy}
                     />
+                    {signupNameError ? (
+                      <p
+                        className="field__hint text-accent-deep"
+                        id="repair-activity-signup-name-error"
+                        role="alert"
+                      >
+                        {signupNameError}
+                      </p>
+                    ) : null}
                   </label>
                   <label className="field">
                     <span className="field__label">
@@ -1098,6 +1196,11 @@ export function RepairActivityDetail({ activityId }: Props) {
                       className="field__input"
                       name="issueType"
                       required
+                      aria-invalid={signupIssueTypeError ? true : undefined}
+                      aria-describedby={
+                        signupIssueTypeError ? "repair-activity-signup-issue-type-error" : undefined
+                      }
+                      onChange={() => setSignupIssueTypeError("")}
                       disabled={!open || busy}
                       defaultValue="CLEAN_PASTE"
                     >
@@ -1107,6 +1210,15 @@ export function RepairActivityDetail({ activityId }: Props) {
                         </option>
                       ))}
                     </select>
+                    {signupIssueTypeError ? (
+                      <p
+                        className="field__hint text-accent-deep"
+                        id="repair-activity-signup-issue-type-error"
+                        role="alert"
+                      >
+                        {signupIssueTypeError}
+                      </p>
+                    ) : null}
                   </label>
                   <label className="field">
                     <span className="field__label">{copy.deviceModel}</span>
@@ -1115,8 +1227,24 @@ export function RepairActivityDetail({ activityId }: Props) {
                       name="deviceModel"
                       maxLength={REPAIR_ACTIVITY_DEVICE_MODEL_MAX_LENGTH}
                       placeholder={copy.deviceModelPlaceholder}
+                      aria-invalid={signupDeviceModelError ? true : undefined}
+                      aria-describedby={
+                        signupDeviceModelError
+                          ? "repair-activity-signup-device-model-error"
+                          : undefined
+                      }
+                      onInput={() => setSignupDeviceModelError("")}
                       disabled={!open || busy}
                     />
+                    {signupDeviceModelError ? (
+                      <p
+                        className="field__hint text-accent-deep"
+                        id="repair-activity-signup-device-model-error"
+                        role="alert"
+                      >
+                        {signupDeviceModelError}
+                      </p>
+                    ) : null}
                   </label>
                 </div>
                 <p className="muted">{copy.signupConsentHint}</p>
@@ -1330,6 +1458,20 @@ export function RepairActivityDetail({ activityId }: Props) {
             <p className="muted">{signupSucceeded ? copy.signupSuccess : copy.consent.subtitle}</p>
             {signupSucceeded ? <RepairActivityPreparation /> : <RepairActivityPrecautions />}
           </div>
+        </ConfirmDialog>
+      ) : null}
+
+      {/* 阻断报名的失败需要用户确认后再继续，复用现有 ConfirmDialog 的 Alert 语义。 */}
+      {signupProblem ? (
+        <ConfirmDialog
+          title={copy.signupFailedTitle}
+          confirmLabel={copy.signupFailedConfirm}
+          size="compact"
+          showCloseButton={false}
+          onConfirm={closeSignupProblem}
+          onClose={closeSignupProblem}
+        >
+          <p>{signupProblem}</p>
         </ConfirmDialog>
       ) : null}
     </div>
