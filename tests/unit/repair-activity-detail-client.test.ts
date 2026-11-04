@@ -133,7 +133,7 @@ async function mount(
     addEventListener: (name: string, fn: () => void) => handlers.set(name, fn),
     removeEventListener: (name: string) => handlers.delete(name),
   };
-  const document = { visibilityState: "visible", ...events };
+  const document = { visibilityState: "visible", activeElement: null as unknown, ...events };
   const timeoutDelays: number[] = [];
   const recordTimeout = (handler: () => void, delay?: number) => {
     timeoutDelays.push(delay ?? 0);
@@ -241,11 +241,14 @@ async function mount(
   if (options.device) deviceStatus = options.device;
   view();
   let formResets = 0;
+  let signupNameNode: { focus(): void } | null = null;
   return {
     view,
     requests,
     timeoutDelays,
     formResets: () => formResets,
+    activeElement: () => document.activeElement,
+    signupNameNode: () => signupNameNode,
     requestSignup(overrides: Record<string, string> = {}) {
       const form = findElement(view(), (element) => element.props["aria-label"] === "报名参加");
       assert.ok(form);
@@ -255,6 +258,17 @@ async function mount(
         },
         focus() {},
       };
+      const nameInput = findElement(
+        form,
+        (element) => element.props.id === "repair-activity-signup-name",
+      );
+      const nameNode = {
+        focus() {
+          document.activeElement = nameNode;
+        },
+      };
+      if (nameInput) (nameInput.props.ref as { current: unknown }).current = nameNode;
+      signupNameNode = nameNode;
       formValues = new Map(
         Object.entries({
           name: "测试客户",
@@ -653,6 +667,9 @@ test("服务端字段校验错误回到表单内，不进入 Alert 对话框", a
   );
   assert.equal(nameInput?.props["aria-invalid"], true);
   assert.ok(text(ui.view()).includes("请输入 2–40 个字符"));
+  ui.view();
+  t.mock.timers.tick(0);
+  assert.equal(ui.activeElement(), ui.signupNameNode(), "焦点应在 busy 结束后落到姓名输入框");
   assert.ok(
     findElement(ui.view(), (element) => element.props["aria-label"] === copy.signupTitle),
     "字段错误后仍保留报名表单",

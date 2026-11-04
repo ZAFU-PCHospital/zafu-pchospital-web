@@ -48,6 +48,8 @@ type LookupOutcome =
   | { kind: "not-found"; message?: string }
   | { kind: "unknown"; message?: string };
 
+type SignupField = "name" | "phone" | "issueType" | "deviceModel";
+
 type Props = { activityId: string };
 
 /** 浏览器 setTimeout 的最大安全延时；超出会溢出并提前触发。 */
@@ -77,6 +79,7 @@ export function RepairActivityDetail({ activityId }: Props) {
   const [signupPhoneError, setSignupPhoneError] = useState("");
   const [signupIssueTypeError, setSignupIssueTypeError] = useState("");
   const [signupDeviceModelError, setSignupDeviceModelError] = useState("");
+  const [signupFocusField, setSignupFocusField] = useState<SignupField | null>(null);
   const [lookup, setLookup] = useState<RegistrationLookupView | null>(null);
   const [lookupPhone, setLookupPhone] = useState("");
   const [lookupPhoneError, setLookupPhoneError] = useState("");
@@ -114,6 +117,33 @@ export function RepairActivityDetail({ activityId }: Props) {
   const lookupAttemptRef = useRef(0);
   const lookupAbortRef = useRef<AbortController | null>(null);
   const request = useRef<{ background: boolean; controller: AbortController } | null>(null);
+
+  // 字段错误在 busy 结束、免责声明弹层卸载后再聚焦；否则控件仍 disabled。
+  useEffect(() => {
+    if (busy || !signupFocusField || typeof window === "undefined") return;
+    const field = signupFocusField;
+    const focus = () => {
+      if (field === "name") {
+        signupNameInputRef.current?.focus();
+      } else if (field === "phone") {
+        signupPhoneInputRef.current?.focus();
+      } else {
+        const selector = {
+          issueType: 'select[name="issueType"]',
+          deviceModel: 'input[name="deviceModel"]',
+        }[field];
+        const element = signupFormRef.current?.querySelector?.(selector);
+        if (element && "focus" in element) (element as HTMLElement).focus();
+      }
+      setSignupFocusField(null);
+    };
+    const usesRaf = typeof window.requestAnimationFrame === "function";
+    const frame = usesRaf ? window.requestAnimationFrame(focus) : window.setTimeout(focus, 0);
+    return () => {
+      if (usesRaf) window.cancelAnimationFrame?.(frame);
+      else window.clearTimeout(frame);
+    };
+  }, [busy, signupFocusField]);
 
   /**
    * `background` = 倒计时驱动的自动重取：传输 / 服务端瞬时失败时保留已渲染内容，
@@ -186,6 +216,7 @@ export function RepairActivityDetail({ activityId }: Props) {
     setSignupPhoneError("");
     setSignupIssueTypeError("");
     setSignupDeviceModelError("");
+    setSignupFocusField(null);
     setLookup(null);
     setLookupPhone("");
     setLookupPhoneError("");
@@ -367,23 +398,6 @@ export function RepairActivityDetail({ activityId }: Props) {
     prevStatusRef.current = current;
   }, [activity?.status]);
 
-  function focusSignupField(field: "name" | "phone" | "issueType" | "deviceModel") {
-    if (field === "name") {
-      signupNameInputRef.current?.focus();
-      return;
-    }
-    if (field === "phone") {
-      signupPhoneInputRef.current?.focus();
-      return;
-    }
-    const selector = {
-      issueType: 'select[name="issueType"]',
-      deviceModel: 'input[name="deviceModel"]',
-    }[field];
-    const element = signupFormRef.current?.querySelector?.(selector);
-    if (element && "focus" in element) (element as HTMLElement).focus();
-  }
-
   /** 填好表单 → 先弹免责声明，不直接提交。 */
   function requestSignup(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -396,6 +410,7 @@ export function RepairActivityDetail({ activityId }: Props) {
     setSignupPhoneError("");
     setSignupIssueTypeError("");
     setSignupDeviceModelError("");
+    setSignupFocusField(null);
     const data = Object.fromEntries(new FormData(event.currentTarget)) as Record<string, string>;
     const name = (data.name ?? "").trim();
     if (name.length < 2) {
@@ -542,7 +557,7 @@ export function RepairActivityDetail({ activityId }: Props) {
           setSignupPhoneError(fieldMessages.phone);
           setSignupIssueTypeError(fieldMessages.issueType);
           setSignupDeviceModelError(fieldMessages.deviceModel);
-          focusSignupField(firstField);
+          setSignupFocusField(firstField);
           return;
         }
         if (json.error?.code === "ACTIVITY_DEVICE_ALREADY_REGISTERED") {
