@@ -115,7 +115,7 @@ export const repairActivitiesPage = {
     fullPrecautions: "完整报名须知与免责声明 · {count} 条",
     serviceTitle: "服务说明",
     serviceHint: "社团提供免费志愿服务。能否修复、维修时长以现场检查为准；特殊拆机需求请提前咨询",
-    cancelHint: "活动开始前可在上方查询报名后自助取消；活动开始后请联系 QQ 群管理员",
+    cancelHint: "活动开始前可在上方查询报名功能中自助取消报名；活动开始后请联系 QQ 群管理员取消",
     preparation: [
       { icon: "hardDrive", title: "备份数据", description: "送修前自行备份重要文件" },
       { icon: "plug", title: "携带电源", description: "请带上设备的电源适配器" },
