@@ -24,6 +24,7 @@ export function ConfirmDialog({
   confirmDisabled = false,
   confirmVariant = "solid",
   size = "default",
+  showCloseButton = true,
 }: {
   title: string;
   children: ReactNode;
@@ -40,6 +41,8 @@ export function ConfirmDialog({
   confirmVariant?: "solid" | "outline" | "ghost";
   /** 短确认 / Alert 用紧凑窗口；详情表单仍用默认宽高。 */
   size?: "default" | "compact";
+  /** 已有底部确认动作时可隐藏标题栏关闭按钮；Esc 仍然可用。 */
+  showCloseButton?: boolean;
 }) {
   const titleId = useId();
   const windowRef = useRef<HTMLDivElement>(null);
@@ -118,9 +121,11 @@ export function ConfirmDialog({
               {title}
             </h2>
           </div>
-          <Button variant="ghost" icon="close" onClick={onClose} disabled={busy}>
-            {closeLabel}
-          </Button>
+          {showCloseButton ? (
+            <Button variant="ghost" icon="close" onClick={onClose} disabled={busy}>
+              {closeLabel}
+            </Button>
+          ) : null}
         </header>
         <div className="admin-modal__body">
           {children}

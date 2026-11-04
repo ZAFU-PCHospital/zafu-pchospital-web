@@ -1452,6 +1452,7 @@ export function RepairActivityDetail({ activityId }: Props) {
           title={copy.signupFailedTitle}
           confirmLabel={copy.signupFailedConfirm}
           size="compact"
+          showCloseButton={false}
           onConfirm={closeSignupProblem}
           onClose={closeSignupProblem}
         >

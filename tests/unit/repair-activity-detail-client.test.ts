@@ -1130,6 +1130,7 @@ test("报名失败进入 Alert 对话框，保留输入以便重试，不显示�
   assert.ok(dialog, "报名失败应进入 Alert 对话框");
   assert.ok(text(dialog).includes("名额已满"));
   assert.equal(dialog.props.confirmLabel, copy.signupFailedConfirm);
+  assert.equal(dialog.props.showCloseButton, false);
   assert.equal(typeof dialog.props.onClose, "function");
   assert.equal(ui.formResets(), 0, "失败时保留已填写的表单");
   assert.equal(ui.requests.length, 2, "失败时不刷新活动或再次提交");
@@ -1168,6 +1169,7 @@ test("报名被客户黑名单拦截时，错误进入可关闭的 Alert 对话�
     ),
   );
   assert.equal(dialog.props.confirmLabel, copy.signupFailedConfirm);
+  assert.equal(dialog.props.showCloseButton, false);
   assert.equal(typeof dialog.props.onClose, "function");
   assert.equal(ui.formResets(), 0, "错误对话框不清空表单");
   assert.equal(pageAlerts(ui.view()).length, 0);
