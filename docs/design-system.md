@@ -561,7 +561,7 @@ round 端点）。后台需要新图标时按同样规则补 `Icon.tsx` 的 `sha
 | `.admin-panel__title` | 面板 / 窗口内部的标题（`--t-lg`），不要改用页头尺寸的 `.admin-workspace__title` |
 | `.admin-modal`        | 详情窗口：全屏遮罩 + 居中窗口，内部独立滚动                                     |
 | `.admin-toast`        | 操作成功反馈：顶部居中浮层，4 秒后自动消失                                      |
-| `.page-alert`         | 可恢复的页面级错误：顶部浮条，`role="alert"`，不自动消失，可关闭                |
+| `.page-alert`         | 可恢复的页面级错误：顶部浮条，`role="alert"`，不自动消失，可关闭（传入回调时）  |
 | `.admin-photos`       | 审核弹窗里的照片区容器，内部使用共用的缩略图网格与灯箱                          |
 | `.photo-grid`         | 详情 / 审核端共用的照片缩略图网格（点击打开预览灯箱）                           |
 | `.photo-lightbox`     | 照片预览灯箱：适应窗口 / 原始尺寸切换、左右切图与焦点归还                       |

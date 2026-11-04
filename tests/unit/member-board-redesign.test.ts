@@ -76,7 +76,8 @@ test("留空收紧（第二轮反馈·方案 A）：页面级错误改共享浮�
   // 页面级错误不再内联占位：板面里只剩签到弹窗内那一处定高错误行，工具行与卡片之间没有常驻带。
   assert.equal((boardSource.match(/activity-board__feedback/g) ?? []).length, 1);
   // 页面级错误 = 共享 PageAlert（Portal 浮条，role=alert），CSS 固定定位、不参与布局。
-  assert.ok(boardSource.includes("<PageAlert message={floatingMessage} />"));
+  assert.ok(boardSource.includes("<PageAlert"));
+  assert.ok(boardSource.includes("onClose={message ? () => setMessage(\"\") : undefined}"));
   assert.ok(pageAlertSource.includes('className="card page-alert__body"'));
   assert.ok(pageAlertSource.includes('role="alert"'));
   assert.match(cssSource, /\.page-alert \{[^}]*position: fixed/);

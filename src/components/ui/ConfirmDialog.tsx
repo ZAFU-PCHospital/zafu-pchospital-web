@@ -103,7 +103,10 @@ export function ConfirmDialog({
       />
       <div
         ref={windowRef}
-        className={cn("admin-modal__window", size === "compact" && "admin-modal__window--compact")}
+        className={cn(
+          "admin-modal__window",
+          size === "compact" && "admin-modal__window--compact admin-modal__window--alert",
+        )}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}

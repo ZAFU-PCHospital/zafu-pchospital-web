@@ -404,7 +404,7 @@ export async function assertCustomerNotBlocked(
   if (isCustomerBlockActive(block, now))
     throw new AppError(
       "ACTIVITY_CUSTOMER_BLOCKED",
-      "该姓名与手机号的近期报名记录暂不能报名，请联系活动管理员",
+      "该姓名与手机号近期有未到场的活动记录，暂时无法报名本场活动。请联系活动管理员处理。",
     );
 }
 

@@ -602,6 +602,63 @@ test("非法手机号在打开确认弹层前拦截并可纠正", async (t) => {
   assert.equal(ui.requests.length, 1, "纠正后仍需同意须知才提交");
 });
 
+test("姓名只输入空格时在报名表单内拦截", async (t) => {
+  const copy = repairActivitiesPage.detail;
+  const ui = await mount(t);
+  await ui.finish(0, { ...activity, status: "OPEN" });
+  ui.requestSignup({ name: "   " });
+
+  assert.equal(ui.requests.length, 1, "空格姓名不发送报名请求");
+  assert.equal(signupDialog(ui.view()), undefined, "空格姓名不能打开确认弹层");
+  const nameInput = findElement(
+    ui.view(),
+    (element) => element.props.id === "repair-activity-signup-name",
+  );
+  assert.equal(nameInput?.props["aria-invalid"], true);
+  assert.equal(nameInput?.props["aria-describedby"], "repair-activity-signup-name-error");
+  const error = findElement(
+    ui.view(),
+    (element) => element.props.id === "repair-activity-signup-name-error",
+  );
+  assert.equal(error?.props.role, "alert");
+  assert.ok(text(ui.view()).includes(copy.nameFormatHint));
+});
+
+test("服务端字段校验错误回到表单内，不进入 Alert 对话框", async (t) => {
+  const copy = repairActivitiesPage.detail;
+  const ui = await mount(t);
+  await ui.finish(0, { ...activity, status: "OPEN" });
+  const consent = ui.requestSignup();
+  (consent.props.onConfirm as () => void)();
+  ui.requests[1].finish(
+    Response.json(
+      {
+        success: false,
+        error: {
+          code: "VALIDATION_FAILED",
+          message: "姓名须为 2–40 个字符",
+          fieldErrors: { name: ["请输入 2–40 个字符"] },
+        },
+      },
+      { status: 400 },
+    ),
+  );
+  await setImmediate();
+
+  assert.equal(signupErrorDialog(ui.view()), undefined);
+  assert.equal(pageAlertText(ui.view()), "");
+  const nameInput = findElement(
+    ui.view(),
+    (element) => element.props.id === "repair-activity-signup-name",
+  );
+  assert.equal(nameInput?.props["aria-invalid"], true);
+  assert.ok(text(ui.view()).includes("请输入 2–40 个字符"));
+  assert.ok(
+    findElement(ui.view(), (element) => element.props["aria-label"] === copy.signupTitle),
+    "字段错误后仍保留报名表单",
+  );
+});
+
 test("查询手机号非法时就地提示且不发送请求", async (t) => {
   const ui = await mount(t);
   await ui.finish(0, { ...activity, status: "OPEN" });
@@ -1094,7 +1151,8 @@ test("报名被客户黑名单拦截时，错误进入可关闭的 Alert 对话�
         success: false,
         error: {
           code: "ACTIVITY_CUSTOMER_BLOCKED",
-          message: "该姓名与手机号的近期报名记录暂不能报名，请联系活动管理员",
+          message:
+            "该姓名与手机号近期有未到场的活动记录，暂时无法报名本场活动。请联系活动管理员处理。",
         },
       },
       { status: 403 },
@@ -1104,7 +1162,11 @@ test("报名被客户黑名单拦截时，错误进入可关闭的 Alert 对话�
 
   const dialog = signupErrorDialog(ui.view());
   assert.ok(dialog, "阻断报名应进入 Alert 对话框");
-  assert.ok(text(dialog).includes("该姓名与手机号的近期报名记录暂不能报名，请联系活动管理员"));
+  assert.ok(
+    text(dialog).includes(
+      "该姓名与手机号近期有未到场的活动记录，暂时无法报名本场活动。请联系活动管理员处理。",
+    ),
+  );
   assert.equal(dialog.props.confirmLabel, copy.signupFailedConfirm);
   assert.equal(typeof dialog.props.onClose, "function");
   assert.equal(ui.formResets(), 0, "错误对话框不清空表单");

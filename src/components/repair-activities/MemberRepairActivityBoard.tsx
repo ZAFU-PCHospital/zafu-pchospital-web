@@ -599,7 +599,13 @@ export function MemberRepairActivityBoard({ activityId }: Props) {
       ) : null}
       <AdminToast toast={toast} onDismiss={() => setToast(null)} />
       {/* 页面级错误 = 浮动提示（方案 A）：不占布局，工具行与卡片之间只剩网格间距。 */}
-      {floatingMessage ? <PageAlert message={floatingMessage} /> : null}
+      {floatingMessage ? (
+        <PageAlert
+          message={floatingMessage}
+          closeLabel={message ? memberRepairActivitiesCopy.board.dismissAlert : undefined}
+          onClose={message ? () => setMessage("") : undefined}
+        />
+      ) : null}
 
       {/* 手机端分区切换（·分段滑块）：窄屏一次只显示一个分区、切换行吸顶；
           宽屏由 CSS 隐藏，恢复并排栏。计数实时来自看板数据、放在段内（等宽段不因数字变化位移）。 */}

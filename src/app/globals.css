@@ -6245,16 +6245,16 @@ html[data-theme="black-yellow"] {
     inline-size: min(30rem, 100%);
   }
   /* 短 Alert：内容高度自适应并在屏幕居中，窄屏也不铺满整屏。 */
-  .admin-modal .admin-modal__window--compact {
+  .admin-modal .admin-modal__window--alert {
     block-size: auto;
     max-block-size: min(88vh, 40rem);
     grid-template-rows: auto minmax(0, auto);
   }
-  .admin-modal .admin-modal__window--compact .signup__actions {
+  .admin-modal .admin-modal__window--alert .signup__actions {
     justify-content: flex-end;
   }
   @media (max-width: 759px) {
-    .admin-modal .admin-modal__window--compact {
+    .admin-modal .admin-modal__window--alert {
       inline-size: min(30rem, calc(100vw - 2 * var(--s-4)));
       max-block-size: calc(100dvh - var(--s-6));
     }
