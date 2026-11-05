@@ -17,7 +17,7 @@ export default async function MemberRepairActivityBoardPage({
   return (
     <Section
       variant="page-head"
-      className="member-workspace member-activity-workspace"
+      className="member-workspace member-activity-workspace member-activity-board-workspace"
       labelledBy="member-activity-board-title"
     >
       <MemberRepairActivityBoard activityId={id} />

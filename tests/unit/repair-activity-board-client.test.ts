@@ -24,8 +24,15 @@ type Props = {
   title?: string;
   busy?: boolean;
   confirmDisabled?: boolean;
+  value?: string;
+  ref?: { current: unknown };
   onClick?: () => void;
-  onChange?: () => void;
+  onChange?: (event?: {
+    target: { value: string };
+    nativeEvent?: { isComposing: boolean };
+  }) => void;
+  onCompositionStart?: () => void;
+  onCompositionEnd?: (event: { currentTarget: { value: string } }) => void;
   onConfirm?: () => void;
   onClose?: () => void;
 };
@@ -100,6 +107,8 @@ async function mount(
   const originals = ["window", "document"].map(
     (key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)] as const,
   );
+  const scrolls: number[] = [];
+  const windowListeners = new Map<string, Set<(event: Event) => void>>();
   Object.defineProperty(globalThis, "window", {
     configurable: true,
     value: {
@@ -108,8 +117,19 @@ async function mount(
       matchMedia: () => ({ matches: desktop, addEventListener() {}, removeEventListener() {} }),
       scrollX: 0,
       scrollY: 0,
-      addEventListener() {},
-      removeEventListener() {},
+      innerHeight: 844,
+      scrollTo({ top }: { top: number }) {
+        scrolls.push(top);
+        window.scrollY = top;
+      },
+      addEventListener(name: string, listener: (event: Event) => void) {
+        const listeners = windowListeners.get(name) ?? new Set();
+        listeners.add(listener);
+        windowListeners.set(name, listeners);
+      },
+      removeEventListener(name: string, listener: (event: Event) => void) {
+        windowListeners.get(name)?.delete(listener);
+      },
     },
   });
   Object.defineProperty(globalThis, "document", {
@@ -219,11 +239,23 @@ async function mount(
   });
   const { MemberRepairActivityBoard } =
     await import("../../src/components/repair-activities/MemberRepairActivityBoard");
+  const paneNodes = [{ scrollTop: 0 }, { scrollTop: 0 }, { scrollTop: 0 }];
+  const boardNode = {
+    style: { minHeight: "" },
+    getBoundingClientRect: () => ({ top: 100 - window.scrollY }),
+    querySelectorAll: (selector: string) =>
+      selector === ".activity-board__pane-body" ? paneNodes : [],
+  };
   const view = () => {
     cursor = 0;
     effectCursor = 0;
     callbackCursor = 0;
-    return MemberRepairActivityBoard({ activityId: currentActivityId });
+    const result = MemberRepairActivityBoard({ activityId: currentActivityId });
+    const ref = elements(result).find(
+      (element) => element.props.className === "activity-board activity-board--ready",
+    )?.props.ref;
+    if (ref) ref.current = boardNode;
+    return result;
   };
   view();
   mounted = true;
@@ -252,6 +284,19 @@ async function mount(
       ?.props;
   }
   return {
+    scrolls,
+    boardNode,
+    setScroll: (top: number) => {
+      window.scrollY = top;
+    },
+    setPaneScroll: (top: number) => {
+      for (const pane of paneNodes) pane.scrollTop = top;
+    },
+    paneScrolls: () => paneNodes.map((pane) => pane.scrollTop),
+    fireWindowEvent: (name: string) => {
+      const event = new Event(name);
+      for (const listener of windowListeners.get(name) ?? []) listener(event);
+    },
     replyToPost: (reply: () => Promise<Response>) => {
       postResponse = reply;
     },
@@ -307,6 +352,185 @@ test("报名截止但活动未结束时，工作台状态显示「可出勤」�
   assert.ok(text(ui.view()).includes("可出勤"));
   assert.equal(text(ui.view()).includes("报名截止"), false);
 });
+
+test("工作台搜索匹配公开给操作者的字段、保留真实位次和被筛选隐藏的签到选择", async (t) => {
+  const data = board();
+  data.queue.push({
+    ...data.queue[0],
+    id: "queue-two",
+    name: "测试客户二",
+    phoneMasked: "138****7621",
+    deviceModel: "ThinkPad X1",
+  });
+  const ui = await mount(t, data, new Date(end.getTime() - 60_000));
+  ui.elements().find((element) => element.props.type === "checkbox")!.props.onChange!();
+  const search = (value: string) =>
+    ui.elements().find((element) => element.props.type === "search")!.props.onChange!({
+      target: { value },
+    });
+  search("７６２１ thinkpad");
+  const filtered = text(ui.view());
+  assert.ok(filtered.includes("测试客户二") && filtered.includes("第2位"));
+  assert.ok(!filtered.includes("第1位"));
+  assert.ok(filtered.includes("已选 1 人（含未显示的 1 人）"));
+  assert.equal(ui.button(copy.checkIn).disabled, false);
+  search("1387621");
+  assert.ok(!text(ui.view()).includes("测试客户二"));
+  search("");
+  assert.equal(
+    ui.elements().find((element) => element.props.type === "checkbox")?.props.checked,
+    true,
+  );
+});
+
+test("手机切换分区统一回顶，历史加载和自动刷新不再改动浏览位置", async (t) => {
+  const ui = await mount(t, board(), new Date(end.getTime() - 60_000), false, false);
+  function switchTo(label: string) {
+    ui
+      .elements()
+      .find(
+        (element) =>
+          element.props.className === "activity-board__seg-btn" &&
+          text(element.props.children).includes(label),
+      )!.props.onClick!();
+    ui.view();
+  }
+  switchTo(copy.queueTitle);
+  ui.setScroll(700);
+  switchTo(copy.servedTitle);
+  assert.equal(window.scrollY, 0, "首次切入历史时立即回顶");
+  ui.setScroll(300);
+  await setImmediate();
+  ui.view();
+  assert.equal(window.scrollY, 300, "历史请求完成不能再次抢动滚动位置");
+  ui.setScroll(1250);
+  switchTo(copy.queueTitle);
+  assert.equal(window.scrollY, 0, "切回已访问的分区也回顶");
+  ui.setScroll(900);
+  switchTo(copy.servedTitle);
+  assert.equal(window.scrollY, 0);
+  ui.setScroll(600);
+  const beforeRefresh = ui.scrolls.length;
+  t.mock.timers.tick(5_000);
+  await setImmediate();
+  ui.view();
+  assert.equal(window.scrollY, 600);
+  assert.equal(ui.scrolls.length, beforeRefresh, "普通刷新不触发回顶");
+});
+
+test("手机刷新缩短名单时保留当前视口高度，主动搜索后解除", async (t) => {
+  const data = board();
+  const ui = await mount(t, data, new Date(end.getTime() - 60_000), false, false);
+  ui.setScroll(900);
+  data.eligible = [];
+  t.mock.timers.tick(5_000);
+  await setImmediate();
+  ui.view();
+  assert.ok(Number.parseFloat(ui.boardNode.style.minHeight) >= 1644);
+  assert.equal(window.scrollY, 900);
+  ui.elements().find((element) => element.props.type === "search")!.props.onChange!({
+    target: { value: "隔离" },
+  });
+  ui.view();
+  assert.equal(ui.boardNode.style.minHeight, "");
+  assert.equal(window.scrollY, 0);
+});
+
+test("手机滚回顶部时解除刷新留下的高度保护", async (t) => {
+  const data = board();
+  const ui = await mount(t, data, new Date(end.getTime() - 60_000), false, false);
+  ui.setScroll(900);
+  data.eligible = [];
+  t.mock.timers.tick(5_000);
+  await setImmediate();
+  ui.view();
+  assert.ok(Number.parseFloat(ui.boardNode.style.minHeight) > 0);
+
+  ui.setScroll(0);
+  ui.fireWindowEvent("scroll");
+  assert.equal(ui.boardNode.style.minHeight, "");
+});
+
+test("桌面搜索只重置各栏正文滚动，不改变整页位置", async (t) => {
+  const ui = await mount(t, board(), new Date(end.getTime() - 60_000), false, true);
+  ui.setPaneScroll(480);
+  ui.setScroll(900);
+  ui.elements().find((element) => element.props.type === "search")!.props.onChange!({
+    target: { value: "隔离" },
+  });
+  ui.view();
+  assert.deepEqual(ui.paneScrolls(), [0, 0, 0]);
+  assert.equal(window.scrollY, 900);
+});
+
+test("中文组词只更新输入框，提交后才筛选和回顶，勾选保留", async (t) => {
+  const ui = await mount(t, board(), new Date(end.getTime() - 60_000), false, false);
+  const input = () => ui.elements().find((element) => element.props.type === "search")!.props;
+  ui.elements().find((element) => element.props.type === "checkbox")!.props.onChange!();
+  ui.setScroll(900);
+  input().onCompositionStart!();
+  input().onChange!({ target: { value: "zhang" }, nativeEvent: { isComposing: true } });
+  assert.equal(input().value, "zhang");
+  assert.ok(text(ui.view()).includes("隔离夹具"));
+  assert.equal(text(ui.view()).includes(copy.searchEmpty), false);
+  assert.equal(window.scrollY, 900);
+  input().onCompositionEnd!({ currentTarget: { value: "张" } });
+  assert.equal(input().value, "张");
+  assert.ok(text(ui.view()).includes(copy.searchEmpty));
+  assert.ok(text(ui.view()).includes("已选 1 人（含未显示的 1 人）"));
+  assert.equal(window.scrollY, 0);
+  input().onChange!({ target: { value: "" } });
+  assert.equal(
+    ui.elements().find((element) => element.props.type === "checkbox")!.props.checked,
+    true,
+  );
+});
+
+test("搜索中的历史计数区分未加载、失败和确实零匹配", async (t) => {
+  const ui = await mount(t, board(), new Date(end.getTime() - 60_000), false, false);
+  const servedTab = () =>
+    ui
+      .elements()
+      .find(
+        (element) =>
+          element.props.className === "activity-board__seg-btn" &&
+          text(element.props.children).includes(copy.servedTitle),
+      )!;
+  const count = () =>
+    elements(servedTab().props.children).find(
+      (element) => element.props.className === "activity-board__seg-count",
+    )!.props.children;
+  ui.elements().find((element) => element.props.type === "search")!.props.onChange!({
+    target: { value: "不存在" },
+  });
+  assert.equal(count(), copy.searchCountUnknown);
+  ui.failReads(true);
+  servedTab().props.onClick!();
+  ui.view();
+  await setImmediate();
+  assert.equal(count(), copy.searchCountFailed);
+  ui.failReads(false);
+  ui.button(copy.refresh).onClick!();
+  await setImmediate();
+  assert.equal(count(), "0/1");
+});
+
+for (const desktop of [true, false]) {
+  test(`搜索和清空搜索：${desktop ? "桌面不滚动整页" : "手机整页回顶"}`, async (t) => {
+    const ui = await mount(t, board(), new Date(end.getTime() - 60_000), false, desktop);
+    const search = (value: string) => {
+      ui.elements().find((element) => element.props.type === "search")!.props.onChange!({
+        target: { value },
+      });
+      ui.view();
+    };
+    for (const value of ["隔离", ""]) {
+      ui.setScroll(900);
+      search(value);
+      assert.equal(window.scrollY, desktop ? 900 : 0);
+    }
+  });
+}
 
 for (const desktop of [true, false]) {
   for (const canAdmin of [true, false]) {
