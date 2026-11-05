@@ -97,6 +97,8 @@ export function MemberRepairActivityBoard({ activityId }: Props) {
    * 之后保留用户点选，不因 5 秒刷新里数据变化自动跳转。
    */
   const [mobilePane, setMobilePane] = useState<MobilePane | null>(null);
+  const mobileScroll = useRef<Partial<Record<MobilePane, number>>>({});
+  const pendingMobileScroll = useRef<number | null>(null);
   const paused =
     busy !== null ||
     checkInConfirmOpen ||
@@ -160,6 +162,8 @@ export function MemberRepairActivityBoard({ activityId }: Props) {
   useLayoutEffect(() => {
     // 只有换目标才清空操控状态；同场刷新不碰弹窗草稿与有效选择。
     setMobilePane(null);
+    mobileScroll.current = {};
+    pendingMobileScroll.current = null;
     setSearch("");
     setServedCollapsed(false);
     setServerEnded(false);
@@ -193,6 +197,20 @@ export function MemberRepairActivityBoard({ activityId }: Props) {
       pane.scrollTop = 0;
     });
   }, [activityId, search]);
+
+  useLayoutEffect(() => {
+    const position = pendingMobileScroll.current;
+    if (position === null || (mobilePane === "served" && !served.state.data)) return;
+    pendingMobileScroll.current = null;
+    window.scrollTo({ top: position, behavior: "instant" });
+  }, [mobilePane, served.state.data]);
+
+  function switchMobilePane(next: MobilePane) {
+    if (next === mobilePane) return;
+    if (mobilePane) mobileScroll.current[mobilePane] = window.scrollY;
+    pendingMobileScroll.current = mobileScroll.current[next] ?? window.scrollY;
+    setMobilePane(next);
+  }
 
   async function postJson<T>(
     path: string,
@@ -614,37 +632,45 @@ export function MemberRepairActivityBoard({ activityId }: Props) {
           onClose={message ? () => setMessage("") : undefined}
         />
       ) : null}
-      <div className="activity-board__search">
-        <input
-          className="field__input"
-          type="search"
-          aria-label={copy.search}
-          placeholder={copy.searchPlaceholder}
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-        />
-      </div>
+      <div className="activity-board__controls">
+        <div className="activity-board__search">
+          <input
+            className="field__input"
+            type="search"
+            aria-label={copy.search}
+            placeholder={copy.searchPlaceholder}
+            value={search}
+            onChange={(event) => {
+              mobileScroll.current = {};
+              pendingMobileScroll.current = null;
+              setSearch(event.target.value);
+            }}
+          />
+        </div>
 
-      {/* 手机端分区切换（·分段滑块）：窄屏一次只显示一个分区、切换行吸顶；
+        {/* 手机端分区切换（·分段滑块）：窄屏一次只显示一个分区、切换行吸顶；
           宽屏由 CSS 隐藏，恢复并排栏。计数实时来自看板数据、放在段内（等宽段不因数字变化位移）。 */}
-      <div className="activity-board__switcher" role="group" aria-label={copy.paneSwitcherLabel}>
-        <div
-          className="activity-board__seg"
-          style={{ "--seg-count": mobilePanes.length, "--seg-index": activeIndex } as CSSProperties}
-        >
-          <span className="activity-board__seg-thumb" aria-hidden="true" />
-          {mobilePanes.map(([key, label, count]) => (
-            <button
-              key={key}
-              type="button"
-              className="activity-board__seg-btn"
-              aria-pressed={mobilePane === key}
-              onClick={() => setMobilePane(key)}
-            >
-              {label}
-              <span className="activity-board__seg-count">{count}</span>
-            </button>
-          ))}
+        <div className="activity-board__switcher" role="group" aria-label={copy.paneSwitcherLabel}>
+          <div
+            className="activity-board__seg"
+            style={
+              { "--seg-count": mobilePanes.length, "--seg-index": activeIndex } as CSSProperties
+            }
+          >
+            <span className="activity-board__seg-thumb" aria-hidden="true" />
+            {mobilePanes.map(([key, label, count]) => (
+              <button
+                key={key}
+                type="button"
+                className="activity-board__seg-btn"
+                aria-pressed={mobilePane === key}
+                onClick={() => switchMobilePane(key)}
+              >
+                {label}
+                <span className="activity-board__seg-count">{count}</span>
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 

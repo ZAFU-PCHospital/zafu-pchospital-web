@@ -100,6 +100,7 @@ async function mount(
   const originals = ["window", "document"].map(
     (key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)] as const,
   );
+  const scrolls: number[] = [];
   Object.defineProperty(globalThis, "window", {
     configurable: true,
     value: {
@@ -108,6 +109,10 @@ async function mount(
       matchMedia: () => ({ matches: desktop, addEventListener() {}, removeEventListener() {} }),
       scrollX: 0,
       scrollY: 0,
+      scrollTo({ top }: { top: number }) {
+        scrolls.push(top);
+        window.scrollY = top;
+      },
       addEventListener() {},
       removeEventListener() {},
     },
@@ -252,6 +257,10 @@ async function mount(
       ?.props;
   }
   return {
+    scrolls,
+    setScroll: (top: number) => {
+      window.scrollY = top;
+    },
     replyToPost: (reply: () => Promise<Response>) => {
       postResponse = reply;
     },
@@ -336,6 +345,31 @@ test("工作台搜索匹配公开给操作者的字段、保留真实位次和�
     ui.elements().find((element) => element.props.type === "checkbox")?.props.checked,
     true,
   );
+});
+
+test("手机整页滚动在切换分区和首次加载历史后恢复对应浏览位置", async (t) => {
+  const ui = await mount(t, board(), new Date(end.getTime() - 60_000), false, false);
+  function switchTo(label: string) {
+    ui
+      .elements()
+      .find(
+        (element) =>
+          element.props.className === "activity-board__seg-btn" &&
+          text(element.props.children).includes(label),
+      )!.props.onClick!();
+    ui.view();
+  }
+  switchTo(copy.queueTitle);
+  ui.setScroll(700);
+  switchTo(copy.servedTitle);
+  await setImmediate();
+  ui.view();
+  assert.equal(ui.scrolls.at(-1), 700);
+  ui.setScroll(1250);
+  switchTo(copy.queueTitle);
+  assert.equal(ui.scrolls.at(-1), 700);
+  switchTo(copy.servedTitle);
+  assert.equal(ui.scrolls.at(-1), 1250);
 });
 
 for (const desktop of [true, false]) {

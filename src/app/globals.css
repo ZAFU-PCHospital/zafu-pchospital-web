@@ -8943,13 +8943,10 @@ html[data-theme="black-yellow"] {
 
   gap: var(--s-3);
 }
-.member-shell:has(.activity-board--ready) {
-  block-size: 100dvh;
-  align-items: stretch;
-}
-@media (max-width: 1099px) {
+@media (min-width: 1100px) {
   .member-shell:has(.activity-board--ready) {
-    grid-template-rows: auto 1fr;
+    block-size: 100dvh;
+    align-items: stretch;
   }
 }
 .member-shell__main:has(.activity-board--ready),
@@ -8966,6 +8963,7 @@ html[data-theme="black-yellow"] {
 }
 .member-activity-board-workspace.page-head {
   padding-block: var(--s-4);
+  overflow-anchor: none;
 }
 @media (min-width: 1100px) {
   .member-activity-board-workspace > .shell {
@@ -8982,6 +8980,10 @@ html[data-theme="black-yellow"] {
 }
 .activity-board__search .field__input {
   inline-size: 100%;
+}
+.activity-board__controls {
+  display: grid;
+  gap: var(--s-2);
 }
 /* 页头：活动名做主标题、日期做辅行；
    与首块内容的间距交给 .activity-board 的 grid gap。 */
@@ -9215,9 +9217,6 @@ body:has(.admin-toast) .page-alert {
    prefers-reduced-motion 下由全局 0.01ms 规则压成瞬时跳位。计数在段内，等宽段保证
    数字变化不改行宽。≥1100px 隐藏切换行、恢复并排栏。 */
 .activity-board__switcher {
-  position: sticky;
-  inset-block-start: 0;
-  z-index: 5;
   display: flex;
   justify-content: center;
   padding-block: var(--s-2);
@@ -9276,8 +9275,41 @@ body:has(.admin-toast) .page-alert {
   }
 }
 @media (max-width: 1099px) {
+  .activity-board__controls {
+    position: sticky;
+    inset-block-start: 0;
+    z-index: 5;
+    padding-block: var(--s-1);
+    background: var(--bg);
+  }
+  .activity-board__controls .activity-board__switcher {
+    padding-block: 0;
+  }
+  .activity-board__search {
+    inline-size: 100%;
+  }
   .activity-board__panes {
-    grid-template-rows: minmax(0, 1fr);
+    flex: none;
+    min-block-size: 0;
+    align-items: start;
+  }
+  .activity-board__pane-body {
+    flex: none;
+    overflow: visible;
+    scrollbar-gutter: auto;
+    padding-inline-end: 0;
+  }
+  .activity-board__actions {
+    position: fixed;
+    inset-inline: var(--gutter);
+    inset-block-end: calc(4.25rem + env(safe-area-inset-bottom, 0px));
+    z-index: 4;
+    border: 1px solid var(--line);
+    background: var(--surface-1);
+    padding: var(--s-2) var(--s-3);
+  }
+  .activity-board__pane:has(> .activity-board__actions) {
+    padding-block-end: 6rem;
   }
   .activity-board__panes > .activity-board__pane:not(.is-active) {
     display: none;
