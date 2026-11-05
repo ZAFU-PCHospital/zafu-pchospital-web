@@ -71,6 +71,8 @@ export function MemberRepairActivityBoard({ activityId }: Props) {
   const [serverEnded, setServerEnded] = useState(false);
   const [message, setMessage] = useState("");
   const [search, setSearch] = useState("");
+  const [searchDraft, setSearchDraft] = useState("");
+  const composingSearch = useRef(false);
   const [servedCollapsed, setServedCollapsed] = useState(false);
   const [toast, setToast] = useState<AdminToastMessage | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -105,11 +107,21 @@ export function MemberRepairActivityBoard({ activityId }: Props) {
     pendingNotice !== null ||
     attendanceOpen;
   const [desktop, setDesktop] = useState(false);
+  function preserveMobileHeight() {
+    const element = boardElement.current;
+    if (!element || desktop) return;
+    // 刷新缩短名单时，仍留出容纳当前视口的高度，避免浏览器夹断滚动位置。
+    element.style.minHeight =
+      window.scrollY > 0
+        ? `${Math.max(0, window.innerHeight - element.getBoundingClientRect().top)}px`
+        : "";
+  }
   const live = useBoardResource<StaffLiveBoardView>(activityId, "live", {
     automatic: true,
     paused,
     interval: serverEnded ? 60_000 : 5_000,
     succeeded(next) {
+      preserveMobileHeight();
       setClock(Date.now());
       setMessage((current) =>
         current === copy.checkInRefreshFailed || current === copy.refreshFailed ? "" : current,
@@ -126,6 +138,7 @@ export function MemberRepairActivityBoard({ activityId }: Props) {
     automatic: Boolean(live.state.data) && (desktop || mobilePane === "served"),
     paused,
     interval: 60_000,
+    succeeded: preserveMobileHeight,
   });
   const attendance = useBoardResource<StaffAttendanceBoardView>(activityId, "attendance", {
     automatic: false,
@@ -161,6 +174,8 @@ export function MemberRepairActivityBoard({ activityId }: Props) {
     // 只有换目标才清空操控状态；同场刷新不碰弹窗草稿与有效选择。
     setMobilePane(null);
     setSearch("");
+    setSearchDraft("");
+    composingSearch.current = false;
     setServedCollapsed(false);
     setServerEnded(false);
     setSelected(new Set());
@@ -193,6 +208,16 @@ export function MemberRepairActivityBoard({ activityId }: Props) {
       pane.scrollTop = 0;
     });
   }, [activityId, search]);
+
+  useLayoutEffect(() => {
+    if (boardElement.current) boardElement.current.style.minHeight = "";
+  }, [activityId, search, mobilePane, desktop]);
+
+  function applySearch(value: string) {
+    if (value === search) return;
+    setSearch(value);
+    if (!desktop) window.scrollTo({ top: 0, behavior: "instant" });
+  }
 
   function switchMobilePane(next: MobilePane) {
     if (next === mobilePane) return;
@@ -523,10 +548,13 @@ export function MemberRepairActivityBoard({ activityId }: Props) {
     .filter(({ row }) => !matches || matches(row));
   const servedRows = matches ? board.served.filter(matches) : board.served;
   const countLabel = (shown: number, total: number) => (matches ? `${shown}/${total}` : total);
-  const servedCountLabel =
-    matches && served.state.data
+  const servedCountLabel = matches
+    ? served.state.data
       ? countLabel(servedRows.length, board.served.length)
-      : board.servedCount;
+      : served.state.failures
+        ? copy.searchCountFailed
+        : copy.searchCountUnknown
+    : board.servedCount;
   const hiddenSelected = matches
     ? board.eligible.filter((row) => selected.has(row.id) && !matches(row)).length
     : 0;
@@ -627,10 +655,24 @@ export function MemberRepairActivityBoard({ activityId }: Props) {
             type="search"
             aria-label={copy.search}
             placeholder={copy.searchPlaceholder}
-            value={search}
+            value={searchDraft}
             onChange={(event) => {
-              setSearch(event.target.value);
-              if (!desktop) window.scrollTo({ top: 0, behavior: "instant" });
+              const value = event.target.value;
+              setSearchDraft(value);
+              if (
+                !composingSearch.current &&
+                !(event.nativeEvent as InputEvent | undefined)?.isComposing
+              )
+                applySearch(value);
+            }}
+            onCompositionStart={() => {
+              composingSearch.current = true;
+            }}
+            onCompositionEnd={(event) => {
+              composingSearch.current = false;
+              const value = event.currentTarget.value;
+              setSearchDraft(value);
+              applySearch(value);
             }}
           />
         </div>

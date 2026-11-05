@@ -232,6 +232,8 @@ export const memberRepairActivitiesCopy = {
     search: "搜索本场客户",
     searchPlaceholder: "搜索姓名、电话尾号、故障或机型",
     searchEmpty: "没有符合搜索条件的客户",
+    searchCountUnknown: "待查询",
+    searchCountFailed: "读取失败",
     collapseServed: "收起记录",
     expandServed: "展开记录",
     queueTitle: "排队中",

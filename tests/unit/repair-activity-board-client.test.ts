@@ -24,8 +24,15 @@ type Props = {
   title?: string;
   busy?: boolean;
   confirmDisabled?: boolean;
+  value?: string;
+  ref?: { current: unknown };
   onClick?: () => void;
-  onChange?: (event?: { target: { value: string } }) => void;
+  onChange?: (event?: {
+    target: { value: string };
+    nativeEvent?: { isComposing: boolean };
+  }) => void;
+  onCompositionStart?: () => void;
+  onCompositionEnd?: (event: { currentTarget: { value: string } }) => void;
   onConfirm?: () => void;
   onClose?: () => void;
 };
@@ -109,6 +116,7 @@ async function mount(
       matchMedia: () => ({ matches: desktop, addEventListener() {}, removeEventListener() {} }),
       scrollX: 0,
       scrollY: 0,
+      innerHeight: 844,
       scrollTo({ top }: { top: number }) {
         scrolls.push(top);
         window.scrollY = top;
@@ -224,11 +232,21 @@ async function mount(
   });
   const { MemberRepairActivityBoard } =
     await import("../../src/components/repair-activities/MemberRepairActivityBoard");
+  const boardNode = {
+    style: { minHeight: "" },
+    getBoundingClientRect: () => ({ top: 100 - window.scrollY }),
+    querySelectorAll: () => [],
+  };
   const view = () => {
     cursor = 0;
     effectCursor = 0;
     callbackCursor = 0;
-    return MemberRepairActivityBoard({ activityId: currentActivityId });
+    const result = MemberRepairActivityBoard({ activityId: currentActivityId });
+    const ref = elements(result).find(
+      (element) => element.props.className === "activity-board activity-board--ready",
+    )?.props.ref;
+    if (ref) ref.current = boardNode;
+    return result;
   };
   view();
   mounted = true;
@@ -258,6 +276,7 @@ async function mount(
   }
   return {
     scrolls,
+    boardNode,
     setScroll: (top: number) => {
       window.scrollY = top;
     },
@@ -380,6 +399,76 @@ test("手机切换分区统一回顶，历史加载和自动刷新不再改动�
   ui.view();
   assert.equal(window.scrollY, 600);
   assert.equal(ui.scrolls.length, beforeRefresh, "普通刷新不触发回顶");
+});
+
+test("手机刷新缩短名单时保留当前视口高度，主动搜索后解除", async (t) => {
+  const data = board();
+  const ui = await mount(t, data, new Date(end.getTime() - 60_000), false, false);
+  ui.setScroll(900);
+  data.eligible = [];
+  t.mock.timers.tick(5_000);
+  await setImmediate();
+  ui.view();
+  assert.ok(Number.parseFloat(ui.boardNode.style.minHeight) >= 1644);
+  assert.equal(window.scrollY, 900);
+  ui.elements().find((element) => element.props.type === "search")!.props.onChange!({
+    target: { value: "隔离" },
+  });
+  ui.view();
+  assert.equal(ui.boardNode.style.minHeight, "");
+  assert.equal(window.scrollY, 0);
+});
+
+test("中文组词只更新输入框，提交后才筛选和回顶，勾选保留", async (t) => {
+  const ui = await mount(t, board(), new Date(end.getTime() - 60_000), false, false);
+  const input = () => ui.elements().find((element) => element.props.type === "search")!.props;
+  ui.elements().find((element) => element.props.type === "checkbox")!.props.onChange!();
+  ui.setScroll(900);
+  input().onCompositionStart!();
+  input().onChange!({ target: { value: "zhang" }, nativeEvent: { isComposing: true } });
+  assert.equal(input().value, "zhang");
+  assert.ok(text(ui.view()).includes("隔离夹具"));
+  assert.equal(text(ui.view()).includes(copy.searchEmpty), false);
+  assert.equal(window.scrollY, 900);
+  input().onCompositionEnd!({ currentTarget: { value: "张" } });
+  assert.equal(input().value, "张");
+  assert.ok(text(ui.view()).includes(copy.searchEmpty));
+  assert.ok(text(ui.view()).includes("已选 1 人（含未显示的 1 人）"));
+  assert.equal(window.scrollY, 0);
+  input().onChange!({ target: { value: "" } });
+  assert.equal(
+    ui.elements().find((element) => element.props.type === "checkbox")!.props.checked,
+    true,
+  );
+});
+
+test("搜索中的历史计数区分未加载、失败和确实零匹配", async (t) => {
+  const ui = await mount(t, board(), new Date(end.getTime() - 60_000), false, false);
+  const servedTab = () =>
+    ui
+      .elements()
+      .find(
+        (element) =>
+          element.props.className === "activity-board__seg-btn" &&
+          text(element.props.children).includes(copy.servedTitle),
+      )!;
+  const count = () =>
+    elements(servedTab().props.children).find(
+      (element) => element.props.className === "activity-board__seg-count",
+    )!.props.children;
+  ui.elements().find((element) => element.props.type === "search")!.props.onChange!({
+    target: { value: "不存在" },
+  });
+  assert.equal(count(), copy.searchCountUnknown);
+  ui.failReads(true);
+  servedTab().props.onClick!();
+  ui.view();
+  await setImmediate();
+  assert.equal(count(), copy.searchCountFailed);
+  ui.failReads(false);
+  ui.button(copy.refresh).onClick!();
+  await setImmediate();
+  assert.equal(count(), "0/1");
 });
 
 for (const desktop of [true, false]) {
