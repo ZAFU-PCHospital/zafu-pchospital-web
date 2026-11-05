@@ -97,8 +97,6 @@ export function MemberRepairActivityBoard({ activityId }: Props) {
    * 之后保留用户点选，不因 5 秒刷新里数据变化自动跳转。
    */
   const [mobilePane, setMobilePane] = useState<MobilePane | null>(null);
-  const mobileScroll = useRef<Partial<Record<MobilePane, number>>>({});
-  const pendingMobileScroll = useRef<number | null>(null);
   const paused =
     busy !== null ||
     checkInConfirmOpen ||
@@ -162,8 +160,6 @@ export function MemberRepairActivityBoard({ activityId }: Props) {
   useLayoutEffect(() => {
     // 只有换目标才清空操控状态；同场刷新不碰弹窗草稿与有效选择。
     setMobilePane(null);
-    mobileScroll.current = {};
-    pendingMobileScroll.current = null;
     setSearch("");
     setServedCollapsed(false);
     setServerEnded(false);
@@ -198,18 +194,10 @@ export function MemberRepairActivityBoard({ activityId }: Props) {
     });
   }, [activityId, search]);
 
-  useLayoutEffect(() => {
-    const position = pendingMobileScroll.current;
-    if (position === null || (mobilePane === "served" && !served.state.data)) return;
-    pendingMobileScroll.current = null;
-    window.scrollTo({ top: position, behavior: "instant" });
-  }, [mobilePane, served.state.data]);
-
   function switchMobilePane(next: MobilePane) {
     if (next === mobilePane) return;
-    if (mobilePane) mobileScroll.current[mobilePane] = window.scrollY;
-    pendingMobileScroll.current = mobileScroll.current[next] ?? window.scrollY;
     setMobilePane(next);
+    if (!desktop) window.scrollTo({ top: 0, behavior: "instant" });
   }
 
   async function postJson<T>(
@@ -641,9 +629,8 @@ export function MemberRepairActivityBoard({ activityId }: Props) {
             placeholder={copy.searchPlaceholder}
             value={search}
             onChange={(event) => {
-              mobileScroll.current = {};
-              pendingMobileScroll.current = null;
               setSearch(event.target.value);
+              if (!desktop) window.scrollTo({ top: 0, behavior: "instant" });
             }}
           />
         </div>

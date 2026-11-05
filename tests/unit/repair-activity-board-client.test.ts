@@ -347,7 +347,7 @@ test("工作台搜索匹配公开给操作者的字段、保留真实位次和�
   );
 });
 
-test("手机整页滚动在切换分区和首次加载历史后恢复对应浏览位置", async (t) => {
+test("手机切换分区统一回顶，历史加载和自动刷新不再改动浏览位置", async (t) => {
   const ui = await mount(t, board(), new Date(end.getTime() - 60_000), false, false);
   function switchTo(label: string) {
     ui
@@ -362,15 +362,42 @@ test("手机整页滚动在切换分区和首次加载历史后恢复对应浏�
   switchTo(copy.queueTitle);
   ui.setScroll(700);
   switchTo(copy.servedTitle);
+  assert.equal(window.scrollY, 0, "首次切入历史时立即回顶");
+  ui.setScroll(300);
   await setImmediate();
   ui.view();
-  assert.equal(ui.scrolls.at(-1), 700);
+  assert.equal(window.scrollY, 300, "历史请求完成不能再次抢动滚动位置");
   ui.setScroll(1250);
   switchTo(copy.queueTitle);
-  assert.equal(ui.scrolls.at(-1), 700);
+  assert.equal(window.scrollY, 0, "切回已访问的分区也回顶");
+  ui.setScroll(900);
   switchTo(copy.servedTitle);
-  assert.equal(ui.scrolls.at(-1), 1250);
+  assert.equal(window.scrollY, 0);
+  ui.setScroll(600);
+  const beforeRefresh = ui.scrolls.length;
+  t.mock.timers.tick(5_000);
+  await setImmediate();
+  ui.view();
+  assert.equal(window.scrollY, 600);
+  assert.equal(ui.scrolls.length, beforeRefresh, "普通刷新不触发回顶");
 });
+
+for (const desktop of [true, false]) {
+  test(`搜索和清空搜索：${desktop ? "桌面不滚动整页" : "手机整页回顶"}`, async (t) => {
+    const ui = await mount(t, board(), new Date(end.getTime() - 60_000), false, desktop);
+    const search = (value: string) => {
+      ui.elements().find((element) => element.props.type === "search")!.props.onChange!({
+        target: { value },
+      });
+      ui.view();
+    };
+    for (const value of ["隔离", ""]) {
+      ui.setScroll(900);
+      search(value);
+      assert.equal(window.scrollY, desktop ? 900 : 0);
+    }
+  });
+}
 
 for (const desktop of [true, false]) {
   for (const canAdmin of [true, false]) {
