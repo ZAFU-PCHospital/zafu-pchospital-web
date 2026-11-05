@@ -116,6 +116,15 @@ export function MemberRepairActivityBoard({ activityId }: Props) {
         ? `${Math.max(0, window.innerHeight - element.getBoundingClientRect().top)}px`
         : "";
   }
+  useEffect(() => {
+    if (desktop) return;
+    const clearHeightProtectionAtTop = () => {
+      const element = boardElement.current;
+      if (element?.style.minHeight && window.scrollY === 0) element.style.minHeight = "";
+    };
+    window.addEventListener("scroll", clearHeightProtectionAtTop, { passive: true });
+    return () => window.removeEventListener("scroll", clearHeightProtectionAtTop);
+  }, [desktop]);
   const live = useBoardResource<StaffLiveBoardView>(activityId, "live", {
     automatic: true,
     paused,

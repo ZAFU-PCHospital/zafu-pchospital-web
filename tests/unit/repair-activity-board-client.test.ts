@@ -108,6 +108,7 @@ async function mount(
     (key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)] as const,
   );
   const scrolls: number[] = [];
+  const windowListeners = new Map<string, Set<(event: Event) => void>>();
   Object.defineProperty(globalThis, "window", {
     configurable: true,
     value: {
@@ -121,8 +122,14 @@ async function mount(
         scrolls.push(top);
         window.scrollY = top;
       },
-      addEventListener() {},
-      removeEventListener() {},
+      addEventListener(name: string, listener: (event: Event) => void) {
+        const listeners = windowListeners.get(name) ?? new Set();
+        listeners.add(listener);
+        windowListeners.set(name, listeners);
+      },
+      removeEventListener(name: string, listener: (event: Event) => void) {
+        windowListeners.get(name)?.delete(listener);
+      },
     },
   });
   Object.defineProperty(globalThis, "document", {
@@ -232,10 +239,12 @@ async function mount(
   });
   const { MemberRepairActivityBoard } =
     await import("../../src/components/repair-activities/MemberRepairActivityBoard");
+  const paneNodes = [{ scrollTop: 0 }, { scrollTop: 0 }, { scrollTop: 0 }];
   const boardNode = {
     style: { minHeight: "" },
     getBoundingClientRect: () => ({ top: 100 - window.scrollY }),
-    querySelectorAll: () => [],
+    querySelectorAll: (selector: string) =>
+      selector === ".activity-board__pane-body" ? paneNodes : [],
   };
   const view = () => {
     cursor = 0;
@@ -279,6 +288,14 @@ async function mount(
     boardNode,
     setScroll: (top: number) => {
       window.scrollY = top;
+    },
+    setPaneScroll: (top: number) => {
+      for (const pane of paneNodes) pane.scrollTop = top;
+    },
+    paneScrolls: () => paneNodes.map((pane) => pane.scrollTop),
+    fireWindowEvent: (name: string) => {
+      const event = new Event(name);
+      for (const listener of windowListeners.get(name) ?? []) listener(event);
     },
     replyToPost: (reply: () => Promise<Response>) => {
       postResponse = reply;
@@ -417,6 +434,33 @@ test("手机刷新缩短名单时保留当前视口高度，主动搜索后解�
   ui.view();
   assert.equal(ui.boardNode.style.minHeight, "");
   assert.equal(window.scrollY, 0);
+});
+
+test("手机滚回顶部时解除刷新留下的高度保护", async (t) => {
+  const data = board();
+  const ui = await mount(t, data, new Date(end.getTime() - 60_000), false, false);
+  ui.setScroll(900);
+  data.eligible = [];
+  t.mock.timers.tick(5_000);
+  await setImmediate();
+  ui.view();
+  assert.ok(Number.parseFloat(ui.boardNode.style.minHeight) > 0);
+
+  ui.setScroll(0);
+  ui.fireWindowEvent("scroll");
+  assert.equal(ui.boardNode.style.minHeight, "");
+});
+
+test("桌面搜索只重置各栏正文滚动，不改变整页位置", async (t) => {
+  const ui = await mount(t, board(), new Date(end.getTime() - 60_000), false, true);
+  ui.setPaneScroll(480);
+  ui.setScroll(900);
+  ui.elements().find((element) => element.props.type === "search")!.props.onChange!({
+    target: { value: "隔离" },
+  });
+  ui.view();
+  assert.deepEqual(ui.paneScrolls(), [0, 0, 0]);
+  assert.equal(window.scrollY, 900);
 });
 
 test("中文组词只更新输入框，提交后才筛选和回顶，勾选保留", async (t) => {
