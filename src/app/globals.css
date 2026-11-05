@@ -8923,7 +8923,7 @@ html[data-theme="black-yellow"] {
   color: var(--status-success-deep);
 }
 
-/* 维修活动 · 成员双栏工作台（M2） */
+/* 维修活动 · 成员工作台 */
 .member-page-head {
   margin-bottom: var(--s-5);
 }
@@ -8942,6 +8942,46 @@ html[data-theme="black-yellow"] {
   min-width: 0;
 
   gap: var(--s-3);
+}
+.member-shell:has(.activity-board--ready) {
+  block-size: 100dvh;
+  align-items: stretch;
+}
+@media (max-width: 1099px) {
+  .member-shell:has(.activity-board--ready) {
+    grid-template-rows: auto 1fr;
+  }
+}
+.member-shell__main:has(.activity-board--ready),
+.member-activity-board-workspace,
+.member-activity-board-workspace > .shell,
+.activity-board--ready {
+  display: flex;
+  flex-direction: column;
+}
+.member-activity-board-workspace,
+.member-activity-board-workspace > .shell,
+.activity-board--ready {
+  flex: 1;
+}
+.member-activity-board-workspace.page-head {
+  padding-block: var(--s-4);
+}
+@media (min-width: 1100px) {
+  .member-activity-board-workspace > .shell {
+    max-inline-size: none;
+    padding-inline: 0;
+  }
+}
+.member-activity-board-workspace .sec-title {
+  font-size: clamp(1.4rem, 2.4vw, 2.25rem);
+  overflow-wrap: anywhere;
+}
+.activity-board__search {
+  inline-size: min(100%, 27rem);
+}
+.activity-board__search .field__input {
+  inline-size: 100%;
 }
 /* 页头：活动名做主标题、日期做辅行；
    与首块内容的间距交给 .activity-board 的 grid gap。 */
@@ -8965,7 +9005,25 @@ html[data-theme="black-yellow"] {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--s-3);
+  gap: var(--s-2);
+}
+.activity-board__live-sync {
+  flex: 0 1 22rem;
+  min-inline-size: 0;
+}
+@media (max-width: 1099px) {
+  .activity-board__live-sync {
+    flex-basis: 100%;
+  }
+}
+@media (max-width: 759px) {
+  .activity-board--ready {
+    gap: var(--s-2);
+  }
+  .activity-board--ready .btn {
+    min-height: 2.75rem;
+    padding-block: var(--s-1);
+  }
 }
 
 .activity-board__sync {
@@ -8991,6 +9049,10 @@ html[data-theme="black-yellow"] {
 }
 .activity-board__sync-row > .activity-board__sync {
   flex: 1;
+}
+.activity-board__history-sync {
+  border-block-start: 1px solid var(--line);
+  padding-block-start: var(--s-2);
 }
 /* 「出勤成员」入口：工具栏尾部靠右；窄屏换行后仍贴右。 */
 .activity-board__attendance-entry {
@@ -9095,17 +9157,57 @@ body:has(.admin-toast) .page-alert {
 }
 .activity-board__panes {
   display: grid;
+  flex: 1 1 0;
   min-width: 0;
+  /* 矮窗口可外层滚动，仍给每个列表留出可操作空间。 */
+  min-block-size: 17rem;
   gap: var(--s-4);
+}
+.activity-board__pane.repair-panel {
+  display: flex;
+  flex-direction: column;
+  min-block-size: 0;
+  gap: var(--s-2);
+  padding: var(--s-3);
+}
+.activity-board__pane-body {
+  flex: 1 1 0;
+  min-block-size: 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  overscroll-behavior-y: contain;
+  padding-inline-end: var(--s-2);
+}
+.activity-board__pane-body:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.activity-board__history-toggle {
+  display: none;
 }
 @media (min-width: 1100px) {
   /* 成员（无 modifier）：排队中 ｜ 已接待 两列；管理员：待签到 ｜ 排队中 ｜ 已接待 三列。 */
   .activity-board__panes {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    align-items: start;
+    grid-template-rows: minmax(0, 1fr);
   }
   .activity-board__panes--admin {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .activity-board__history-toggle {
+    display: inline-flex;
+  }
+  .activity-board__panes--history-collapsed {
+    grid-template-columns: minmax(0, 1fr) minmax(10rem, 0.4fr);
+  }
+  .activity-board__panes--admin.activity-board__panes--history-collapsed {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) minmax(10rem, 0.55fr);
+  }
+  .activity-board__panes--history-collapsed .activity-board__pane--served {
+    align-self: start;
+  }
+  .activity-board__panes--history-collapsed .activity-board__pane--served > :not(header) {
+    display: none;
   }
 }
 /* 手机端分区切换（·分段滑块）：<1100px 居中胶囊、等宽分段（管理员 3 段 /
@@ -9174,6 +9276,9 @@ body:has(.admin-toast) .page-alert {
   }
 }
 @media (max-width: 1099px) {
+  .activity-board__panes {
+    grid-template-rows: minmax(0, 1fr);
+  }
   .activity-board__panes > .activity-board__pane:not(.is-active) {
     display: none;
   }
@@ -9184,6 +9289,8 @@ body:has(.admin-toast) .page-alert {
   align-items: baseline;
   justify-content: space-between;
   gap: var(--s-2);
+  min-block-size: 2.25rem;
+  align-content: center;
 }
 .activity-board__pane-head h2 {
   margin: 0;
@@ -9208,7 +9315,7 @@ body:has(.admin-toast) .page-alert {
   margin: 0;
   padding: 0;
   display: grid;
-  gap: var(--s-3);
+  gap: var(--s-1);
 }
 .activity-board__row {
   display: grid;
@@ -9230,6 +9337,13 @@ body:has(.admin-toast) .page-alert {
   grid-template-columns: minmax(2.5rem, max-content) minmax(0, 1fr);
   gap: var(--s-2);
   align-items: baseline;
+}
+.activity-board__served-main {
+  min-width: 0;
+}
+.activity-board__served-main .repair-tag > svg {
+  inline-size: 1em;
+  block-size: 1em;
 }
 .activity-board__queue-rank {
   font-size: var(--t-xs);
@@ -9260,21 +9374,28 @@ body:has(.admin-toast) .page-alert {
 .activity-board__check {
   display: flex;
   gap: var(--s-2);
-  align-items: flex-start;
+  align-items: baseline;
   cursor: pointer;
 }
 .activity-board__check > input {
   flex-shrink: 0;
   accent-color: var(--accent-deep);
 }
-.activity-board__check > span,
+.activity-board__check > div,
 .activity-board__queue-main > div {
   min-width: 0;
+}
+.activity-board__check-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 var(--s-2);
 }
 /* 待签到勾选行的说明文字（电话 / 故障类型）：与详情行同一对比度档。 */
 .activity-board__check-meta {
   color: var(--ink-2);
   font-size: var(--t-sm);
+  margin: 0;
 }
 .activity-board__actions {
   display: flex;
@@ -9282,6 +9403,8 @@ body:has(.admin-toast) .page-alert {
   align-items: center;
   justify-content: space-between;
   gap: var(--s-3);
+  border-block-start: 1px solid var(--line);
+  padding-block-start: var(--s-2);
 }
 /* 电话与按钮常驻定宽，脱敏 / 明文 / 请求中均不改变行高与换行位置。 */
 .activity-board__phone {
@@ -9349,6 +9472,10 @@ body:has(.admin-toast) .page-alert {
    按钮的 max-content 宽度，图标会和正文抢宽（实测 1280px 下正文列只剩个位数像素）。
    此处只在管理员三栏隐藏图标、保留文字按钮；成员两栏与窄屏单栏宽度充裕，保留图标。 */
 @media (min-width: 1100px) {
+  .activity-board--ready .btn {
+    min-height: 2.25rem;
+    padding-block: var(--s-1);
+  }
   .activity-board__panes--admin .activity-board__serve-btn.btn svg,
   .activity-board__panes--admin .activity-board__withdraw-btn.btn svg {
     display: none;

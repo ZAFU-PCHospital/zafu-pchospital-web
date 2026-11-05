@@ -229,12 +229,17 @@ export const memberRepairActivitiesCopy = {
     eligibleTitle: "待签到",
     eligibleTag: "Eligible",
     eligibleEmpty: "当前没有可签到的报名",
+    search: "搜索本场客户",
+    searchPlaceholder: "搜索姓名、电话尾号、故障或机型",
+    searchEmpty: "没有符合搜索条件的客户",
+    collapseServed: "收起记录",
+    expandServed: "展开记录",
     queueTitle: "排队中",
     queueTag: "Queue",
     queueEmpty: "暂无排队客户",
     /** 成员视角（成员无「待签到」区）。 */
     queueEmptyMember: "暂无排队客户",
-    /** 队列位次：按当前渲染顺序（服务端已按签到时间升序）从 1 开始。 */
+    /** 队列位次按服务端队列计算，搜索时保留原位次。 */
     queueRank: "第{index}位",
     checkIn: "签到入队",
     checkingIn: "签到中…",
@@ -262,7 +267,9 @@ export const memberRepairActivitiesCopy = {
     checkInConfirmHint: "请核对客户信息与故障类型",
     checkInConfirm: "确认签到",
     checkInCancel: "取消",
-    selectHint: "勾选左侧报名后点「签到入队」",
+    selectHint: "勾选客户后签到入队",
+    selectedCount: "已选 {count} 人",
+    selectedHidden: "（含未显示的 {count} 人）",
     selectNone: "请先勾选至少一条报名",
     serve: "接待",
     serving: "落单中…",
@@ -289,7 +296,6 @@ export const memberRepairActivitiesCopy = {
     servedTitle: "已接待",
     servedBy: "接待成员",
     servedByUnknown: "未知成员",
-    servedTag: "Served",
     servedEmpty: "本场还没有已接待的客户",
     /** 成员视角：列表只含本人接待，空态要说清「你」。 */
     servedEmptySelf: "本场你还没有接待记录",

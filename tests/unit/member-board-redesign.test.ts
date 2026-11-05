@@ -40,9 +40,9 @@ test("栏头计数：三个分区都带数量，排队人数单独强调", () =>
       'className="activity-board__pane-count activity-board__pane-count--queue"',
     ),
   );
-  assert.ok(boardSource.includes("{board.eligible.length}"));
-  assert.ok(boardSource.includes("{board.queue.length}"));
-  assert.ok(boardSource.includes("{board.servedCount}"));
+  assert.ok(boardSource.includes("countLabel(eligibleRows.length, board.eligible.length)"));
+  assert.ok(boardSource.includes("countLabel(queueRows.length, board.queue.length)"));
+  assert.ok(boardSource.includes("{servedCountLabel}"));
 });
 
 test("排队卡三区：详情行「标签 + 值」成对，操作区沉底", () => {
@@ -77,7 +77,7 @@ test("留空收紧（第二轮反馈·方案 A）：页面级错误改共享浮�
   assert.equal((boardSource.match(/activity-board__feedback/g) ?? []).length, 1);
   // 页面级错误 = 共享 PageAlert（Portal 浮条，role=alert），CSS 固定定位、不参与布局。
   assert.ok(boardSource.includes("<PageAlert"));
-  assert.ok(boardSource.includes("onClose={message ? () => setMessage(\"\") : undefined}"));
+  assert.ok(boardSource.includes('onClose={message ? () => setMessage("") : undefined}'));
   assert.ok(pageAlertSource.includes('className="card page-alert__body"'));
   assert.ok(pageAlertSource.includes('role="alert"'));
   assert.match(cssSource, /\.page-alert \{[^}]*position: fixed/);

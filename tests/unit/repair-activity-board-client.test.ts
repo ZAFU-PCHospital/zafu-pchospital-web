@@ -25,7 +25,7 @@ type Props = {
   busy?: boolean;
   confirmDisabled?: boolean;
   onClick?: () => void;
-  onChange?: () => void;
+  onChange?: (event?: { target: { value: string } }) => void;
   onConfirm?: () => void;
   onClose?: () => void;
 };
@@ -306,6 +306,36 @@ test("报名截止但活动未结束时，工作台状态显示「可出勤」�
   const ui = await mount(t, board(), new Date(end.getTime() - 60_000));
   assert.ok(text(ui.view()).includes("可出勤"));
   assert.equal(text(ui.view()).includes("报名截止"), false);
+});
+
+test("工作台搜索匹配公开给操作者的字段、保留真实位次和被筛选隐藏的签到选择", async (t) => {
+  const data = board();
+  data.queue.push({
+    ...data.queue[0],
+    id: "queue-two",
+    name: "测试客户二",
+    phoneMasked: "138****7621",
+    deviceModel: "ThinkPad X1",
+  });
+  const ui = await mount(t, data, new Date(end.getTime() - 60_000));
+  ui.elements().find((element) => element.props.type === "checkbox")!.props.onChange!();
+  const search = (value: string) =>
+    ui.elements().find((element) => element.props.type === "search")!.props.onChange!({
+      target: { value },
+    });
+  search("７６２１ thinkpad");
+  const filtered = text(ui.view());
+  assert.ok(filtered.includes("测试客户二") && filtered.includes("第2位"));
+  assert.ok(!filtered.includes("第1位"));
+  assert.ok(filtered.includes("已选 1 人（含未显示的 1 人）"));
+  assert.equal(ui.button(copy.checkIn).disabled, false);
+  search("1387621");
+  assert.ok(!text(ui.view()).includes("测试客户二"));
+  search("");
+  assert.equal(
+    ui.elements().find((element) => element.props.type === "checkbox")?.props.checked,
+    true,
+  );
 });
 
 for (const desktop of [true, false]) {
