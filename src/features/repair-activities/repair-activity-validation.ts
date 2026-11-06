@@ -311,13 +311,17 @@ export function canServeRegistration(status: string): boolean {
  * 排队序：CHECKED_IN 按 checkedInAt ASC；null 排最后（防御）。
  * 返回新数组，不改原数组。
  */
-export function sortQueueByCheckedInAt<T extends { checkedInAt: Date | string | null }>(
-  rows: readonly T[],
-): T[] {
+export function sortQueueByCheckedInAt<
+  T extends { checkedInAt: Date | string | null; checkInOrder?: number | null; id?: string },
+>(rows: readonly T[]): T[] {
   return [...rows].sort((a, b) => {
     const ta = a.checkedInAt ? new Date(a.checkedInAt).getTime() : Number.POSITIVE_INFINITY;
     const tb = b.checkedInAt ? new Date(b.checkedInAt).getTime() : Number.POSITIVE_INFINITY;
-    return ta - tb;
+    return (
+      ta - tb ||
+      (a.checkInOrder ?? -1) - (b.checkInOrder ?? -1) ||
+      (a.id ?? "").localeCompare(b.id ?? "")
+    );
   });
 }
 

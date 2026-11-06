@@ -186,6 +186,8 @@ M6 批次 2 的其余能力（技能标签库 CRUD、原评论管理、邀请码
 
 ## 7. 检查与测试
 
+批量签到顺序迁移 `20261106000000_repair_activity_check_in_order` 为报名记录增加可空的 `check_in_order`；历史记录保持空值，发布时先执行版本化迁移。
+
 成员部门（issue #171）迁移 `20261020000000_member_department` 新增成员非空部门
 （默认 `REPAIR`）与报名可空录取部门，两列均以 CHECK 限定 `REPAIR / PUBLICITY / OFFICE`。
 存量成员归维修部，历史报名保持 NULL；不新增表或权限。后续

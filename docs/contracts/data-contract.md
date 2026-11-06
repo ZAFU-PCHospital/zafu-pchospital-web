@@ -265,6 +265,7 @@ Repository / Service 的默认读取必须加 `deletedAt: null`。身份采用�
   有效且已出勤的成员持 `activity:staff` 时，可在签到事务内明确修正 REGISTERED 报名的类型；
   未传修改项时保留当前类型，不用弹窗快照覆盖其他修改。
 - 类型、CHECKED_IN、checkedInAt 与所有审计在锁定活动的 Serializable 事务中整批提交或回滚。
+- 批量签到按请求中的报名 ID 顺序保存 `checkInOrder`；相同签到时间按该字段升序排列，历史空值按 ID 稳定排列。撤回时清空该字段。
   已 CHECKED_IN 的相同类型重试不重置时间 / 队列顺序；不同类型修改及 SERVED 均拒绝。
 - 真正的类型变更逐条复用 USER 审计 `repair_activity.registration_issue_type_updated`，
   actorUserId 为成员账号，before / after 只记 issueType；无变更或幂等重试不重复记录类型审计。

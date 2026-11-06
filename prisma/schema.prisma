@@ -661,6 +661,7 @@ model RepairActivityRegistration {
   consentVersion          String?        @map("consent_version") @db.VarChar(16)
   consentAcceptedAt       DateTime?      @map("consent_accepted_at") @db.DateTime(3)
   checkedInAt             DateTime?      @map("checked_in_at") @db.DateTime(3)
+  checkInOrder            Int?           @map("check_in_order")
   servedAt                DateTime?      @map("served_at") @db.DateTime(3)
   servedByMemberProfileId String?        @map("served_by_member_profile_id") @db.Char(36)
   repairRecordId          String?        @unique(map: "repair_activity_regs_repair_record_uq") @map("repair_record_id") @db.Char(36)

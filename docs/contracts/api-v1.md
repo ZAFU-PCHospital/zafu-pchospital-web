@@ -640,7 +640,8 @@ DELETE     /api/v1/admin/comments/:id
 ### 仍由应用层表达的展示顺序
 
 - **报名队列位次**：队列本就按签到时间升序（服务端顺序即口径），位次取渲染顺序（从 1 起），
-  没有新增字段或接口。
+  同一签到时间按批量请求的报名 ID 顺序排列；历史空值以 ID 稳定排序。
+  `checkInOrder` 随成员看板报名记录返回。
 - **首页近场活动「报名开放中优先」**：`pickNonEndedRepairActivitiesForHomePreview`
   按 OPEN → UPCOMING → FULL / CLOSED 分档，同档内 `activityAt` 升序，`ENDED` 不进预览；
   公开列表的未结束 / 已结束分段排序已下推到数据库（见下方「公开活动列表分页」），

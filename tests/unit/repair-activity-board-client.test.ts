@@ -35,6 +35,10 @@ type Props = {
   onCompositionEnd?: (event: { currentTarget: { value: string } }) => void;
   onConfirm?: () => void;
   onClose?: () => void;
+  "aria-label"?: string;
+  onPointerDown?: (event: never) => void;
+  onPointerMove?: (event: never) => void;
+  onPointerUp?: (event: never) => void;
 };
 function elements(node: ReactNode): ReactElement<Props>[] {
   if (Array.isArray(node)) return node.flatMap(elements);
@@ -56,6 +60,7 @@ const row: StaffRegistrationView = {
   deviceModel: null,
   status: "REGISTERED",
   checkedInAt: null,
+  checkInOrder: null,
   servedAt: null,
   repairRecordId: null,
   createdAt: "2026-10-23T00:00:00Z",
@@ -103,8 +108,8 @@ async function mount(
   rejectEnded = false,
   desktop = true,
 ) {
-  t.mock.timers.enable({ apis: ["Date", "setInterval"], now });
-  const originals = ["window", "document"].map(
+  t.mock.timers.enable({ apis: ["Date", "setInterval", "setTimeout"], now });
+  const originals = ["window", "document", "requestAnimationFrame", "cancelAnimationFrame"].map(
     (key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)] as const,
   );
   const scrolls: number[] = [];
@@ -139,6 +144,14 @@ async function mount(
       addEventListener() {},
       removeEventListener() {},
     },
+  });
+  Object.defineProperty(globalThis, "requestAnimationFrame", {
+    configurable: true,
+    value: () => 1,
+  });
+  Object.defineProperty(globalThis, "cancelAnimationFrame", {
+    configurable: true,
+    value: () => {},
   });
   (globalThis as unknown as { React: typeof React }).React = React;
   const slots: unknown[] = [];
@@ -210,10 +223,12 @@ async function mount(
   const reads: { view: string; at: number }[] = [];
   let postResponse: (() => Promise<Response>) | null = null;
   const posts: string[] = [];
+  const postBodies: string[] = [];
   let gets = 0;
   t.mock.method(globalThis, "fetch", async (input: unknown, init?: RequestInit) => {
     if (init?.method === "POST") {
       posts.push(String(input));
+      postBodies.push(String(init.body));
       if (postResponse) return postResponse();
       assert.ok(rejectEnded, "截止后不能发出写请求");
       return Response.json(
@@ -246,6 +261,15 @@ async function mount(
     querySelectorAll: (selector: string) =>
       selector === ".activity-board__pane-body" ? paneNodes : [],
   };
+  const modalBody = { scrollTop: 0, getBoundingClientRect: () => ({ top: 0, bottom: 200 }) };
+  let frameCallback: (() => void) | null = null;
+  Object.defineProperty(globalThis, "requestAnimationFrame", {
+    configurable: true,
+    value: (callback: () => void) => {
+      frameCallback = callback;
+      return 1;
+    },
+  });
   const view = () => {
     cursor = 0;
     effectCursor = 0;
@@ -255,6 +279,20 @@ async function mount(
       (element) => element.props.className === "activity-board activity-board--ready",
     )?.props.ref;
     if (ref) ref.current = boardNode;
+    const list = elements(result).find((element) => element.type === "ol")?.props.ref;
+    if (list)
+      list.current = {
+        querySelectorAll: () =>
+          data.eligible.map((item, index) => ({
+            dataset: { checkInId: item.id },
+            getBoundingClientRect: () => ({
+              top: index * 100,
+              bottom: (index + 1) * 100,
+              height: 100,
+            }),
+          })),
+        closest: () => modalBody,
+      };
     return result;
   };
   view();
@@ -286,6 +324,8 @@ async function mount(
   return {
     scrolls,
     boardNode,
+    modalBody,
+    fireFrame: () => frameCallback?.(),
     setScroll: (top: number) => {
       window.scrollY = top;
     },
@@ -312,10 +352,125 @@ async function mount(
     button,
     dialog,
     posts,
+    postBodies,
     gets: () => gets,
     elements: () => elements(view()),
   };
 }
+
+test("批量签到可调整顺序，提交时保留调整结果", async (t) => {
+  const data = board();
+  data.eligible.push({ ...row, id: "second", name: "第二位" });
+  const ui = await mount(t, data, new Date(end.getTime() - 60_000));
+  for (const checkbox of ui.elements().filter((element) => element.props.type === "checkbox")) {
+    checkbox.props.onChange!();
+    ui.view();
+  }
+  ui.button(copy.checkIn).onClick!();
+  const moveUp = ui.elements().find((element) => element.props["aria-label"] === "第二位 上移");
+  assert.ok(moveUp);
+  moveUp.props.onClick!();
+  ui.replyToPost(async () =>
+    Response.json({ success: false, error: { code: "TEST", message: "测试" } }, { status: 400 }),
+  );
+  ui.dialog()!.onConfirm!();
+  await setImmediate();
+  assert.deepEqual(JSON.parse(ui.postBodies[0]).registrationIds, ["second", "registration"]);
+});
+
+test("批量签到可长按空白标题行拖到列表末尾", async (t) => {
+  const data = board();
+  data.eligible.push({ ...row, id: "second", name: "第二位" });
+  const ui = await mount(t, data, new Date(end.getTime() - 60_000));
+  for (const checkbox of ui.elements().filter((element) => element.props.type === "checkbox")) {
+    checkbox.props.onChange!();
+    ui.view();
+  }
+  ui.button(copy.checkIn).onClick!();
+  const headers = ui
+    .elements()
+    .filter((element) => element.props.className === "activity-board__sort-head");
+  headers[0].props.onPointerDown!({
+    pointerType: "mouse",
+    pointerId: 1,
+    button: 0,
+    clientX: 150,
+    clientY: 20,
+    target: { closest: () => null },
+    currentTarget: { setPointerCapture() {} },
+  } as never);
+  t.mock.timers.tick(250);
+  ui.view();
+  assert.ok(
+    ui.elements().some((element) => String(element.props.className).includes("is-dragging")),
+  );
+  const activeHeader = ui
+    .elements()
+    .find((element) => element.props.className === "activity-board__sort-head")!;
+  activeHeader.props.onPointerMove!({
+    pointerId: 1,
+    clientX: 150,
+    clientY: 175,
+    preventDefault() {},
+  } as never);
+  activeHeader.props.onPointerUp!({ pointerId: 1 } as never);
+  ui.replyToPost(async () =>
+    Response.json({ success: false, error: { code: "TEST", message: "测试" } }, { status: 400 }),
+  );
+  ui.dialog()!.onConfirm!();
+  await setImmediate();
+  assert.deepEqual(JSON.parse(ui.postBodies[0]).registrationIds, ["second", "registration"]);
+});
+
+test("触屏长按到时才拖动，靠近弹窗边缘自动滚动", async (t) => {
+  const data = board();
+  data.eligible.push({ ...row, id: "second", name: "第二位" });
+  const ui = await mount(t, data, new Date(end.getTime() - 60_000), false, false);
+  for (const checkbox of ui.elements().filter((element) => element.props.type === "checkbox")) {
+    checkbox.props.onChange!();
+    ui.view();
+  }
+  ui.button(copy.checkIn).onClick!();
+  const header = ui
+    .elements()
+    .find((element) => element.props.className === "activity-board__sort-head")!;
+  header.props.onPointerDown!({
+    pointerType: "touch",
+    pointerId: 1,
+    clientX: 150,
+    clientY: 20,
+    target: { closest: () => null },
+    currentTarget: { setPointerCapture() {} },
+  } as never);
+  t.mock.timers.tick(449);
+  assert.equal(
+    ui.elements().some((element) => String(element.props.className).includes("is-dragging")),
+    false,
+  );
+  t.mock.timers.tick(1);
+  assert.equal(
+    ui.elements().some((element) => String(element.props.className).includes("is-dragging")),
+    true,
+  );
+  header.props.onPointerMove!({
+    pointerId: 1,
+    clientX: 150,
+    clientY: 190,
+    preventDefault() {},
+  } as never);
+  ui.fireFrame();
+  assert.equal(ui.modalBody.scrollTop, 16);
+  ui.modalBody.scrollTop = 40;
+  header.props.onPointerMove!({
+    pointerId: 1,
+    clientX: 150,
+    clientY: 10,
+    preventDefault() {},
+  } as never);
+  ui.fireFrame();
+  assert.equal(ui.modalBody.scrollTop, 24);
+  header.props.onPointerUp!({ pointerId: 1 } as never);
+});
 
 test("结束的看板保留历史、出勤状态和纠错，三项控件禁用且不误报尚未截止", async (t) => {
   const data = board(false);

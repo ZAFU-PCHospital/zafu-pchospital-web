@@ -62,6 +62,7 @@ export type StaffRegistrationView = {
   deviceModel: string | null;
   status: string;
   checkedInAt: string | null;
+  checkInOrder: number | null;
   servedAt: string | null;
   repairRecordId: string | null;
   createdAt: string;
@@ -143,6 +144,7 @@ const registrationSelect = {
   deviceModel: true,
   status: true,
   checkedInAt: true,
+  checkInOrder: true,
   servedAt: true,
   repairRecordId: true,
   createdAt: true,
@@ -217,6 +219,7 @@ function toStaffReg(row: {
   deviceModel: string | null;
   status: string;
   checkedInAt: Date | null;
+  checkInOrder: number | null;
   servedAt: Date | null;
   repairRecordId: string | null;
   createdAt: Date;
@@ -232,6 +235,7 @@ function toStaffReg(row: {
     deviceModel: row.deviceModel,
     status: row.status,
     checkedInAt: row.checkedInAt?.toISOString() ?? null,
+    checkInOrder: row.checkInOrder,
     servedAt: row.servedAt?.toISOString() ?? null,
     repairRecordId: row.repairRecordId,
     createdAt: row.createdAt.toISOString(),
@@ -700,6 +704,11 @@ export const repairActivityStaffService = {
     return inSerializableTransaction(async (tx) => {
       const { now } = await requireStaffOpen(tx, activityId);
       const checkedIn: StaffRegistrationView[] = [];
+      const previous = await tx.repairActivityRegistration.aggregate({
+        where: { activityId, checkedInAt: now },
+        _max: { checkInOrder: true },
+      });
+      let nextOrder = (previous._max.checkInOrder ?? -1) + 1;
 
       for (const registrationId of uniqueIds) {
         const reg = await tx.repairActivityRegistration.findFirst({
@@ -729,6 +738,7 @@ export const repairActivityStaffService = {
           data: {
             status: "CHECKED_IN",
             checkedInAt: now,
+            checkInOrder: nextOrder++,
             ...(updates.has(registrationId) ? { issueType: updates.get(registrationId) } : {}),
           },
         });
@@ -793,7 +803,7 @@ export const repairActivityStaffService = {
       }
       const updated = await tx.repairActivityRegistration.update({
         where: { id: registrationId },
-        data: { status: "REGISTERED", checkedInAt: null },
+        data: { status: "REGISTERED", checkedInAt: null, checkInOrder: null },
       });
       await appendAuditLog(tx, {
         actor,

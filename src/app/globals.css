@@ -9357,6 +9357,65 @@ body:has(.admin-toast) .page-alert {
   border-top: 1px solid var(--line);
   overflow-wrap: anywhere;
 }
+.activity-board__sort-row {
+  position: relative;
+  gap: var(--s-2);
+}
+.activity-board__sort-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 44px;
+  touch-action: none;
+  user-select: none;
+  cursor: grab;
+}
+.activity-board__sort-head:active {
+  cursor: grabbing;
+}
+.activity-board__sort-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+.activity-board__sort-actions .btn {
+  min-height: 44px;
+  padding: 0 var(--s-2);
+  font-size: var(--t-sm);
+}
+.activity-board__sort-customer {
+  line-height: 1.4;
+}
+.activity-board__sort-details {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  column-gap: var(--s-2);
+  row-gap: 0;
+  font-size: var(--t-sm);
+  line-height: 1.4;
+}
+.admin-modal .activity-board__sort-details .field__label {
+  font-size: var(--t-sm);
+}
+.activity-board__sort-row.is-dragging {
+  opacity: 0.4;
+}
+.activity-board__sort-row.is-drop-before::before,
+.activity-board__sort-row.is-drop-after::after {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  z-index: 1;
+  block-size: 2px;
+  background: var(--accent);
+}
+.activity-board__sort-row.is-drop-before::before {
+  inset-block-start: -1px;
+}
+.activity-board__sort-row.is-drop-after::after {
+  inset-block-end: -1px;
+}
 /* 排队卡按姓名、故障详情、操作区单列排列。 */
 .activity-board__row--queue {
   grid-template-columns: minmax(0, 1fr);

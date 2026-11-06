@@ -26,6 +26,8 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Icon } from "@/components/ui/Icon";
 import { PageAlert } from "@/components/ui/PageAlert";
 import { cn } from "@/lib/utils";
+import { applyOrder, movedManyIds } from "@/lib/list-order";
+import { useCheckInPointerSort } from "./useCheckInPointerSort";
 import { createBoardSearch } from "./board-search";
 import { repairStatusLabels } from "@/config/repairs";
 import {
@@ -88,6 +90,22 @@ export function MemberRepairActivityBoard({ activityId }: Props) {
   );
   const [checkInError, setCheckInError] = useState("");
   const checkInPending = useRef(false);
+  const moveCheckInRow = useCallback((id: string, beforeId: string | null) => {
+    if (checkInPending.current) return;
+    setCheckInRows((rows) => {
+      const { order } = movedManyIds(
+        rows.map((row) => row.id),
+        [id],
+        beforeId,
+      );
+      return order ? applyOrder(rows, order) : rows;
+    });
+  }, []);
+  const checkInDrag = useCheckInPointerSort(
+    checkInRows.map((row) => row.id),
+    moveCheckInRow,
+    !checkInConfirmOpen || checkInPending.current || busy === "check-in",
+  );
   const boardElement = useRef<HTMLDivElement>(null);
   /** 全局接单拦截弹层：点击「接待」命中未完成草稿时出现，不发请求。 */
   const [pendingNotice, setPendingNotice] = useState<StaffPendingServe | null>(null);
@@ -1051,22 +1069,52 @@ export function MemberRepairActivityBoard({ activityId }: Props) {
           onConfirm={() => void confirmCheckIn()}
         >
           <p>{copy.checkInConfirmHint}</p>
-          <ol className="activity-board__list">
+          <ol ref={checkInDrag.listRef} className="activity-board__list">
             {checkInRows.map((row, index) => (
-              <li key={row.id} className="activity-board__row">
-                <div>
+              <li
+                key={row.id}
+                className={cn(
+                  "activity-board__row",
+                  "activity-board__sort-row",
+                  checkInDrag.rowClass(row.id),
+                )}
+                data-check-in-id={row.id}
+              >
+                <div className="activity-board__sort-head" {...checkInDrag.headerProps(row.id)}>
                   <span className="text-ink-3 text-xs">{index + 1}. </span>
+                  <span className="activity-board__sort-actions">
+                    <Button
+                      variant="ghost"
+                      aria-label={`${row.name} ${copy.checkInMoveUp}`}
+                      disabled={checkInBusy || !staffOpen || index === 0}
+                      onClick={() => moveCheckInRow(row.id, checkInRows[index - 1].id)}
+                    >
+                      {copy.checkInMoveUp}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      aria-label={`${row.name} ${copy.checkInMoveDown}`}
+                      disabled={checkInBusy || !staffOpen || index === checkInRows.length - 1}
+                      onClick={() => moveCheckInRow(row.id, checkInRows[index + 2]?.id ?? null)}
+                    >
+                      {copy.checkInMoveDown}
+                    </Button>
+                  </span>
+                </div>
+                <div className="activity-board__sort-customer">
                   <strong>{row.name}</strong> · {row.phoneMasked}
                 </div>
-                {row.deviceModel ? (
-                  <p className="muted m-0">
-                    {copy.deviceModel} {row.deviceModel}
-                  </p>
-                ) : null}
                 <div className="field">
-                  <label className="field__label" htmlFor={`check-in-issue-${row.id}`}>
-                    {row.name} · {copy.issueType}
-                  </label>
+                  <div className="activity-board__sort-details">
+                    <label className="field__label" htmlFor={`check-in-issue-${row.id}`}>
+                      {row.name} · {copy.issueType}
+                    </label>
+                    {row.deviceModel ? (
+                      <span className="muted">
+                        {copy.deviceModel} {row.deviceModel}
+                      </span>
+                    ) : null}
+                  </div>
                   <select
                     id={`check-in-issue-${row.id}`}
                     className="field__input"

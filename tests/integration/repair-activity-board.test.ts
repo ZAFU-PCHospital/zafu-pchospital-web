@@ -457,7 +457,7 @@ dbTest("核对后批量签到：新类型与标签、成员审计、撤回保留
   const initialQueue = (await repairActivityService.getPublicQueue(ACTIVITY_ID)).waitingCount!;
   const first = await checkInFixture();
   const second = await checkInFixture();
-  const result = await postCheckIn([first.id, second.id], staffCookie, [
+  const result = await postCheckIn([second.id, first.id], staffCookie, [
     { registrationId: first.id, issueType: "SOFTWARE_SYSTEM" },
     { registrationId: second.id, issueType: "OTHER" },
   ]);
@@ -467,10 +467,17 @@ dbTest("核对后批量签到：新类型与标签、成员审计、撤回保留
       checkedIn: Array<{ issueType: string; issueTypeLabel: string; checkedInAt: string }>;
     }
   ).checkedIn;
-  assert.equal(rows[0].issueType, "SOFTWARE_SYSTEM");
-  assert.equal(rows[0].issueTypeLabel, "软件 / 系统问题");
-  assert.equal(rows[1].issueType, "OTHER");
+  assert.equal(rows[1].issueType, "SOFTWARE_SYSTEM");
+  assert.equal(rows[1].issueTypeLabel, "软件 / 系统问题");
+  assert.equal(rows[0].issueType, "OTHER");
   assert.equal(rows[0].checkedInAt, rows[1].checkedInAt);
+  const queued = (await repairActivityStaffService.getBoard(ACTIVITY_ID, staffActor)).queue.filter(
+    (row) => row.id === first.id || row.id === second.id,
+  );
+  assert.deepEqual(
+    queued.map((row) => row.id),
+    [second.id, first.id],
+  );
   const saved = await db.repairActivityRegistration.findUniqueOrThrow({ where: { id: first.id } });
   assert.equal(saved.issueType, "SOFTWARE_SYSTEM");
   assert.equal(saved.status, "CHECKED_IN");
