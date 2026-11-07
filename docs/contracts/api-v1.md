@@ -717,8 +717,9 @@ DELETE     /api/v1/admin/comments/:id
   不再只看 `activity_at`。结束时间已过的活动当场归入已结束段，不会出现「排在未结束段、
   徽章却写已结束」；历史活动（`ends_at IS NULL`）仍按 `activity_at` 与今日零点比较，
   与 `activityEndExclusive` 等价。两段互斥且并为全集，`total = 未结束 + 已结束` 不变。
-- 写入：管理端 `POST` 要求 `location`、`endsAt` 必填；`PATCH` 缺字段表示保持原值，
-  `endsAt: null`（或 `location: ""`）表示显式清空 —— 两个字段的清空行为一致。
+- 写入：管理端 `POST` 要求 `location`、`endsAt` 必填；`PATCH` 缺字段表示保持原值。
+  清空语义两字段不同：`endsAt` 只能用 `null` 清空（空串会被判 400 `VALIDATION_FAILED`），
+  `location` 用 `""` 或 `null` 都可清空。
 - 展示：报名页同一张活动卡展示名称、开始～结束时间与地点；同日只显示一次日期
   （`2026/10/24 10:00–12:00`），跨天两端都显示完整日期时间；`endsAt` / `location`
   为空时该行不渲染。
