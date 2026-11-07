@@ -65,7 +65,9 @@ function board(attended = true): StaffBoardView {
     activity: {
       id: "activity",
       title: "隔离活动",
+      location: "学 3-301 活动室",
       activityAt: "2026-10-23T10:30:00Z",
+      endsAt: "2026-10-23T12:30:00Z",
       capacity: 10,
       signupOpensAt: "2026-10-22T00:00:00Z",
       signupClosesAt: "2026-10-23T04:00:00Z",

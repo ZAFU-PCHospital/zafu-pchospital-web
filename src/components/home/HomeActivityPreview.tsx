@@ -19,6 +19,7 @@ const copy = homeActivityPreview;
 
 const TICKET_COPY: ActivityTicketCopy = {
   activityAt: copy.activityAt,
+  location: copy.location,
   capacity: copy.capacity,
   remainingShort: copy.remainingShort,
   endedHint: copy.endedHint,

@@ -1,5 +1,6 @@
-import { bodyString } from "@/features/admin/admin-http";
+import { bodyOptionalString, bodyString } from "@/features/admin/admin-http";
 import {
+  bodyNullableIsoDate,
   bodyOptionalIsoDate,
   bodyRequiredInt,
 } from "@/features/repair-activities/repair-activity-http";
@@ -22,6 +23,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (!id) throw new AppError("VALIDATION_FAILED", "活动 ID 无效");
 
     const title = "title" in body ? bodyString(body, "title") : undefined;
+    // 地点与结束时间都可清空：location 用空串 → null，endsAt 用显式 null；
+    // 缺字段一律表示「保持原值」，两条字段的清空行为保持一致。
+    const location = bodyOptionalString(body, "location");
     const capacity =
       "capacity" in body
         ? bodyRequiredInt(body, "capacity", { min: REPAIR_ACTIVITY_CAPACITY_MIN, max: 10_000 })
@@ -31,8 +35,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       id,
       {
         title,
+        location,
         capacity,
         activityAt: bodyOptionalIsoDate(body, "activityAt"),
+        endsAt: bodyNullableIsoDate(body, "endsAt"),
         signupOpensAt: bodyOptionalIsoDate(body, "signupOpensAt"),
         signupClosesAt: bodyOptionalIsoDate(body, "signupClosesAt"),
       },

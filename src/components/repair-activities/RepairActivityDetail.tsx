@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 
 import {
   formatShanghaiDateTime,
+  formatShanghaiTimeRange,
   signupCountdownParts,
 } from "@/components/repair-activities/activity-format";
 import { AdminToast, type AdminToastMessage } from "@/components/admin/AdminToast";
@@ -19,7 +20,7 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { PageAlert } from "@/components/ui/PageAlert";
 import { repairActivitiesPage } from "@/config/repair-activities";
 import {
-  activityEndExclusive,
+  activityEndBoundary,
   canAcceptNewRegistration,
   canShowPublicQueue,
   REPAIR_ACTIVITY_DEVICE_MODEL_MAX_LENGTH,
@@ -354,11 +355,11 @@ export function RepairActivityDetail({ activityId }: Props) {
     };
   }, [waitingForOpen, load]);
 
-  /** 排队区块只在活动开始到活动自然日结束之间出现；在边界时刻刷新可见性。 */
+  /** 排队区块只在活动开始到活动结束之间出现；在边界时刻刷新可见性。 */
   useEffect(() => {
     if (!activity) return;
     const startMs = Date.parse(activity.activityAt);
-    const endMs = activityEndExclusive(new Date(activity.activityAt)).getTime();
+    const endMs = activityEndBoundary(new Date(activity.activityAt), activity.endsAt).getTime();
     if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) return;
     let cancelled = false;
     const timers: number[] = [];
@@ -891,8 +892,17 @@ export function RepairActivityDetail({ activityId }: Props) {
         <dl className={styles.meta}>
           <div>
             <dt>{repairActivitiesPage.activityAt}</dt>
-            <dd>{formatShanghaiDateTime(activity.activityAt)}</dd>
+            <dd>
+              {formatShanghaiTimeRange(activity.activityAt, activity.endsAt) ??
+                formatShanghaiDateTime(activity.activityAt)}
+            </dd>
           </div>
+          {activity.location ? (
+            <div>
+              <dt>{repairActivitiesPage.location}</dt>
+              <dd>{activity.location}</dd>
+            </div>
+          ) : null}
           <div>
             <dt>{repairActivitiesPage.window}</dt>
             <dd>

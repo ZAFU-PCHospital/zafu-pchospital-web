@@ -60,6 +60,7 @@ export const homeActivityPreview = {
   capacity: "名额 {registered} / {capacity}",
   remainingShort: "剩余 {count}",
   activityAt: "活动时间",
+  location: "地点",
   endedHint: "活动已结束",
   detailCta: "查看详情",
   loadFailedSilent: true,

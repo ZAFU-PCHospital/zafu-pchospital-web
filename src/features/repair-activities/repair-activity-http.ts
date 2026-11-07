@@ -41,6 +41,20 @@ export function bodyOptionalIsoDate(body: Record<string, unknown>, key: string):
   return bodyRequiredIsoDate(body, key);
 }
 
+/**
+ * 选填时间的「三态」解析：缺字段 → `undefined`（保持原值），`null` → `null`（显式清空），
+ * 字符串 → 按必填格式解析。`bodyOptionalIsoDate` 把 `null` 当成未提供，无法表达清空，
+ * 因此需要清空的字段（如活动结束时间）用本函数。
+ */
+export function bodyNullableIsoDate(
+  body: Record<string, unknown>,
+  key: string,
+): Date | null | undefined {
+  if (!(key in body)) return undefined;
+  if (body[key] === null) return null;
+  return bodyRequiredIsoDate(body, key);
+}
+
 export function bodyIssueType(body: Record<string, unknown>): RepairActivityIssueType {
   return assertValidIssueType(body.issueType);
 }

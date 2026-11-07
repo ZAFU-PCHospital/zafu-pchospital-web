@@ -21,6 +21,35 @@ export function formatShanghaiTime(iso: string): string {
   }).format(new Date(iso));
 }
 
+/**
+ * 活动时间区间：同日只显示一次日期 + 起止时刻（`2026/10/24 14:00–16:00`），
+ * 跨天两端都显示完整日期时间（`2026/10/24 23:00 — 2026/10/25 01:00`）。
+ * 结束时间缺失或解析失败返回 null，调用方回退为只显示开始时刻。
+ */
+export function formatShanghaiTimeRange(
+  startIso: string,
+  endsAt: string | null | undefined,
+): string | null {
+  if (!endsAt) return null;
+  const start = new Date(startIso);
+  const end = new Date(endsAt);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return null;
+  if (shanghaiDayKey(start) === shanghaiDayKey(end)) {
+    return `${formatShanghaiDateTime(startIso)}–${formatShanghaiTime(endsAt)}`;
+  }
+  return `${formatShanghaiDateTime(startIso)} — ${formatShanghaiDateTime(endsAt)}`;
+}
+
+/** Asia/Shanghai 自然日键（`YYYY-MM-DD`），只用于比较两天是否同一天。 */
+function shanghaiDayKey(date: Date): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Shanghai",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
 /** 公开列表日期票根：月份、两位日、星期，统一按 Asia/Shanghai 取。 */
 export function formatShanghaiDateParts(iso: string): {
   month: string;

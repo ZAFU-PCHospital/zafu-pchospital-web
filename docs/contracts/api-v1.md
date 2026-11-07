@@ -682,10 +682,47 @@ DELETE     /api/v1/admin/comments/:id
   当天仍可改故障类型。此前「`now >= activityAt` 即结束」的口径会让活动当天显示「已结束」。
 - 判定只由 `activityEndExclusive()` / `deriveRepairActivityStatus()` 一处实现
   （`src/features/repair-activities/repair-activity-validation.ts`）；
-  管理端改报名与手机号查询（lookup）用同一助手直接比较，公开详情 `getPublic` 的
-  `ACTIVITY_ENDED` 拦截走派生状态自动跟随。
+  公开详情 `getPublic` 的 `ACTIVITY_ENDED` 拦截走派生状态自动跟随。
+- **issue #362 起**：活动有结束时间时 `ENDED` 改为按结束时间判定，上述自然日口径仅作为
+  结束时间缺失时的回退（见下节）。**同期两处直接比较已分叉，不要再当作同一助手**：
+  - 手机号查询 `lookup`（`repair-activity-service.ts`）改走 `activityEndBoundary(activityAt, endsAt)`，
+    与 `ENDED` 同口径 —— 结束时间到了就不能再查询 / 改类型 / 自助取消；
+  - 管理端改报名（`updateRegistration`）**仍用 `activityEndExclusive(activityAt)`**（活动日次日
+    00:00 上海），与成员端接待窗口一致，不随 `endsAt` 提前关闭。
 
 新增错误码：无（`SKILL_INACTIVE` 与 `SKILL_CODE_CONFLICT` 已分别在 M3、M6 批次 2 登记）。
+
+### 活动地点与结束时间（issue #362）
+
+维修活动新增独立「地点」与「结束时间」，两者**可空**：历史活动不回填、不编造，前端在字段为空时
+不渲染对应信息。
+
+- Schema：`repair_activities.location VARCHAR(120) NULL`、`repair_activities.ends_at DATETIME(3) NULL`，
+  前向 Migration 只加列，不改动历史行。
+- 契约：`RepairActivityPublicView` / `RepairActivityAdminView` 增加 `location: string | null`、
+  `endsAt: string | null`；成员侧 `StaffActivityListItem` 同步；机器接口
+  `GET/POST/PATCH /api/v1/bot/repair-activities` 的响应同样返回这两个字段。
+- 写入校验：新增 `activityAt < endsAt`（`endsAt` 为空时跳过），其余报名窗口规则不变；
+  默认时长常量 `REPAIR_ACTIVITY_DEFAULT_DURATION_MINUTES = 120` 供管理端表单联动
+  「开始时间 + 2 小时」使用，用户手动改过结束时间则不再覆盖。
+- `ENDED` 判定：`now >= endsAt` 即已结束；`endsAt` 为空（历史数据）时回退
+  `now >= activityEndExclusive(activityAt)`。统一实现为 `activityEndBoundary()`。
+- **成员接待窗口不变**：`canOperateActivityStaff` / `assertActivityStaffOpen` 仍以
+  `activityEndExclusive(activityAt)`（当日上海自然日 24:00）为界 —— 结束时间到了，
+  成员端仍可接待到当日 24:00，管理端改报名沿用同一窗口。
+- **公开排队随已结束隐藏**：`canShowPublicQueue` 与 `GET /api/v1/repair-activities/:id/queue`
+  改用同一结束上界，避免公开页同时出现「已结束」和「排队中」。
+- **公开列表分段同口径**：`GET /api/v1/repair-activities` 与首页预览的「未结束 / 已结束」SQL
+  条件改为 `now >= COALESCE(ends_at, 活动日次日 00:00 上海)`（`publicActivitySegmentWheres`），
+  不再只看 `activity_at`。结束时间已过的活动当场归入已结束段，不会出现「排在未结束段、
+  徽章却写已结束」；历史活动（`ends_at IS NULL`）仍按 `activity_at` 与今日零点比较，
+  与 `activityEndExclusive` 等价。两段互斥且并为全集，`total = 未结束 + 已结束` 不变。
+- 写入：管理端 `POST` 要求 `location`、`endsAt` 必填；`PATCH` 缺字段表示保持原值。
+  清空语义两字段不同：`endsAt` 只能用 `null` 清空（空串会被判 400 `VALIDATION_FAILED`），
+  `location` 用 `""` 或 `null` 都可清空。
+- 展示：报名页同一张活动卡展示名称、开始～结束时间与地点；同日只显示一次日期
+  （`2026/10/24 10:00–12:00`），跨天两端都显示完整日期时间；`endsAt` / `location`
+  为空时该行不渲染。
 
 ### 管理端成员详情按需读取
 

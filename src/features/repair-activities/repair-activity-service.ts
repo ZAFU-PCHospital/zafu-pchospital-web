@@ -9,11 +9,13 @@ import {
 } from "@/features/repair-activities/edit-token";
 import { maskActivityPhone } from "@/features/repair-activities/phone-mask";
 import {
+  activityEndBoundary,
   activityEndExclusive,
   assertActivityTimeRules,
   assertValidCapacity,
   assertValidDeviceModel,
   assertValidIssueType,
+  assertValidLocation,
   assertValidRegistrantName,
   assertValidTitle,
   canCancelRegistration,
@@ -29,7 +31,7 @@ import {
   syncCustomerForRegistration,
 } from "@/features/repair-activities/repair-activity-customer-service";
 import { pickNonEndedRepairActivitiesForHomePreview } from "@/features/repair-activities/repair-activity-sort";
-import { startOfShanghaiDay } from "@/lib/academic-term";
+import { publicActivitySegmentWheres } from "@/features/repair-activities/repair-activity-public-query";
 import { AppError } from "@/lib/api/errors";
 import { paginationMeta } from "@/lib/api/pagination";
 import { appendAuditLog } from "@/lib/audit/audit-service";
@@ -47,7 +49,11 @@ import type {
 export type RepairActivityPublicView = {
   id: string;
   title: string;
+  /** 活动地点；历史活动为空。 */
+  location: string | null;
   activityAt: string;
+  /** 活动结束时间；历史活动为空（前端不渲染结束时刻）。 */
+  endsAt: string | null;
   capacity: number;
   signupOpensAt: string;
   signupClosesAt: string;
@@ -80,7 +86,11 @@ export type RepairActivityAdminView = RepairActivityPublicView & {
 
 export type CreateRepairActivityInput = {
   title: string;
+  /** 地点：管理端表单必填，服务层按选填校验（历史活动与机器创建可能为空）。 */
+  location?: unknown;
   activityAt: Date;
+  /** 结束时间：缺省时不写（历史口径回退活动日次日 00:00）。 */
+  endsAt?: Date | null;
   capacity: number;
   signupOpensAt: Date;
   signupClosesAt: Date;
@@ -88,7 +98,9 @@ export type CreateRepairActivityInput = {
 
 export type UpdateRepairActivityInput = {
   title?: string;
+  location?: unknown;
   activityAt?: Date;
+  endsAt?: Date | null;
   capacity?: number;
   signupOpensAt?: Date;
   signupClosesAt?: Date;
@@ -135,7 +147,9 @@ export type UpdateRegistrationInput = {
 type ActivityRow = {
   id: string;
   title: string;
+  location: string | null;
   activityAt: Date;
+  endsAt: Date | null;
   capacity: number;
   signupOpensAt: Date;
   signupClosesAt: Date;
@@ -162,13 +176,10 @@ const PUBLIC_ENDED_ORDER_BY = [
   { id: "asc" },
 ] satisfies Prisma.RepairActivityOrderByWithRelationInput[];
 
-function publicActiveWhere(todayStart: Date): Prisma.RepairActivityWhereInput {
-  return { deletedAt: null, activityAt: { gte: todayStart } };
-}
-
-function publicEndedWhere(todayStart: Date): Prisma.RepairActivityWhereInput {
-  return { deletedAt: null, activityAt: { lt: todayStart } };
-}
+/**
+ * 公开列表两段（未结束 / 已结束）的 SQL 条件见 `repair-activity-public-query.ts`：
+ * 与 ENDED 判定同口径，历史活动回退活动日次日 00:00（上海）。
+ */
 
 async function countEffectiveRegistrations(activityId: string): Promise<number> {
   return getDb().repairActivityRegistration.count({
@@ -184,6 +195,7 @@ function toPublicView(
   const status = deriveRepairActivityStatus({
     now,
     activityAt: row.activityAt,
+    endsAt: row.endsAt,
     signupOpensAt: row.signupOpensAt,
     signupClosesAt: row.signupClosesAt,
     effectiveRegistrationCount: registeredCount,
@@ -192,7 +204,9 @@ function toPublicView(
   return {
     id: row.id,
     title: row.title,
+    location: row.location,
     activityAt: row.activityAt.toISOString(),
+    endsAt: row.endsAt?.toISOString() ?? null,
     capacity: row.capacity,
     signupOpensAt: row.signupOpensAt.toISOString(),
     signupClosesAt: row.signupClosesAt.toISOString(),
@@ -224,7 +238,9 @@ function toHomePreviewView(
   return {
     id: item.id,
     title: item.title,
+    location: item.location,
     activityAt: item.activityAt,
+    endsAt: item.endsAt,
     capacity: item.capacity,
     signupOpensAt: item.signupOpensAt,
     signupClosesAt: item.signupClosesAt,
@@ -289,18 +305,23 @@ export async function createRepairActivityInTransaction(
   actor: AuthorizedActor,
 ): Promise<RepairActivityAdminView> {
   const title = assertValidTitle(input.title);
+  const location = assertValidLocation(input.location);
+  const endsAt = input.endsAt ?? null;
   assertValidCapacity(input.capacity);
   assertActivityTimeRules({
     activityAt: input.activityAt,
     signupOpensAt: input.signupOpensAt,
     signupClosesAt: input.signupClosesAt,
+    endsAt,
   });
   const now = new Date();
   const created = await tx.repairActivity.create({
     data: {
       id: randomUUID(),
       title,
+      location,
       activityAt: input.activityAt,
+      endsAt,
       capacity: input.capacity,
       signupOpensAt: input.signupOpensAt,
       signupClosesAt: input.signupClosesAt,
@@ -318,8 +339,10 @@ export async function createRepairActivityInTransaction(
     result: "SUCCESS",
     after: {
       title,
+      location,
       capacity: input.capacity,
       activityAt: input.activityAt.toISOString(),
+      endsAt: endsAt?.toISOString() ?? null,
       signupOpensAt: input.signupOpensAt.toISOString(),
       signupClosesAt: input.signupClosesAt.toISOString(),
       ...integrationAudit(actor),
@@ -344,12 +367,15 @@ export async function updateRepairActivityInTransaction(
     throw new AppError("STATE_TRANSITION_INVALID", "活动已变化，请重新查询并确认", { status: 409 });
   }
   const title = input.title !== undefined ? assertValidTitle(input.title) : before.title;
+  const location =
+    input.location !== undefined ? assertValidLocation(input.location) : before.location;
   const capacity = input.capacity !== undefined ? input.capacity : before.capacity;
   assertValidCapacity(capacity);
   const activityAt = input.activityAt ?? before.activityAt;
+  const endsAt = input.endsAt !== undefined ? input.endsAt : before.endsAt;
   const signupOpensAt = input.signupOpensAt ?? before.signupOpensAt;
   const signupClosesAt = input.signupClosesAt ?? before.signupClosesAt;
-  assertActivityTimeRules({ activityAt, signupOpensAt, signupClosesAt });
+  assertActivityTimeRules({ activityAt, signupOpensAt, signupClosesAt, endsAt });
 
   const effectiveCount = await tx.repairActivityRegistration.count({
     where: { activityId, ...effectiveStatusFilter },
@@ -367,7 +393,16 @@ export async function updateRepairActivityInTransaction(
 
   const updated = await tx.repairActivity.update({
     where: { id: activityId },
-    data: { title, capacity, activityAt, signupOpensAt, signupClosesAt, version: { increment: 1 } },
+    data: {
+      title,
+      location,
+      capacity,
+      activityAt,
+      endsAt,
+      signupOpensAt,
+      signupClosesAt,
+      version: { increment: 1 },
+    },
   });
   await appendAuditLog(tx, {
     actor,
@@ -379,15 +414,19 @@ export async function updateRepairActivityInTransaction(
     result: "SUCCESS",
     before: {
       title: before.title,
+      location: before.location,
       capacity: before.capacity,
       activityAt: before.activityAt.toISOString(),
+      endsAt: before.endsAt?.toISOString() ?? null,
       signupOpensAt: before.signupOpensAt.toISOString(),
       signupClosesAt: before.signupClosesAt.toISOString(),
     },
     after: {
       title: updated.title,
+      location: updated.location,
       capacity: updated.capacity,
       activityAt: updated.activityAt.toISOString(),
+      endsAt: updated.endsAt?.toISOString() ?? null,
       signupOpensAt: updated.signupOpensAt.toISOString(),
       signupClosesAt: updated.signupClosesAt.toISOString(),
       ...integrationAudit(actor),
@@ -450,6 +489,7 @@ export const repairActivityService = {
       if (!activity || activity.deletedAt) {
         throw new AppError("ACTIVITY_NOT_FOUND", "活动不存在");
       }
+      // 管理端改报名沿用成员端接待窗口（活动日次日 00:00 上海），不随 endsAt 提前关闭。
       if (new Date().getTime() >= activityEndExclusive(activity.activityAt).getTime()) {
         throw new AppError("ACTIVITY_ENDED", "活动已结束");
       }
@@ -596,9 +636,7 @@ export const repairActivityService = {
     now: Date = new Date(),
   ): Promise<RepairActivityPublicListResult> {
     const db = getDb();
-    const todayStart = startOfShanghaiDay(now);
-    const activeWhere = publicActiveWhere(todayStart);
-    const endedWhere = publicEndedWhere(todayStart);
+    const { active: activeWhere, ended: endedWhere } = publicActivitySegmentWheres(now);
 
     const [total, activeCount] = await Promise.all([
       db.repairActivity.count({ where: { deletedAt: null } }),
@@ -653,9 +691,8 @@ export const repairActivityService = {
     now: Date = new Date(),
   ): Promise<RepairActivityPublicView[]> {
     const db = getDb();
-    const todayStart = startOfShanghaiDay(now);
     const rows = await db.repairActivity.findMany({
-      where: publicActiveWhere(todayStart),
+      where: publicActivitySegmentWheres(now).active,
       orderBy: PUBLIC_ACTIVE_ORDER_BY,
     });
     const counts = await loadCounts(rows.map((row) => row.id));
@@ -676,10 +713,9 @@ export const repairActivityService = {
     limit = 3,
     now: Date = new Date(),
   ): Promise<RepairActivityPublicView[]> {
-    const todayStart = startOfShanghaiDay(now);
     const take = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 3;
     const rows = await getDb().repairActivity.findMany({
-      where: publicEndedWhere(todayStart),
+      where: publicActivitySegmentWheres(now).ended,
       orderBy: PUBLIC_ENDED_ORDER_BY,
       take,
     });
@@ -704,10 +740,11 @@ export const repairActivityService = {
   async getPublicQueue(activityId: string): Promise<RepairActivityQueueView> {
     const row = await getDb().repairActivity.findFirst({
       where: { id: activityId, deletedAt: null },
-      select: { activityAt: true, signupClosesAt: true },
+      select: { activityAt: true, endsAt: true, signupClosesAt: true },
     });
     if (!row) throw new AppError("ACTIVITY_NOT_FOUND", "活动不存在");
-    const end = activityEndExclusive(row.activityAt).getTime();
+    // 与公开详情同一结束口径：有结束时间按结束时间，历史活动回退活动日次日 00:00。
+    const end = activityEndBoundary(row.activityAt, row.endsAt).getTime();
     const assertNotEnded = (now: Date) => {
       if (now.getTime() >= end) throw new AppError("ACTIVITY_ENDED", "活动已结束");
     };
@@ -759,7 +796,7 @@ export const repairActivityService = {
         throw new AppError("ACTIVITY_NOT_FOUND", "活动不存在");
       }
       const now = new Date();
-      if (now.getTime() >= activityEndExclusive(activity.activityAt).getTime()) {
+      if (now.getTime() >= activityEndBoundary(activity.activityAt, activity.endsAt).getTime()) {
         throw new AppError("ACTIVITY_ENDED", "活动已结束");
       }
       const effectiveCount = await tx.repairActivityRegistration.count({
@@ -768,6 +805,7 @@ export const repairActivityService = {
       const status = deriveRepairActivityStatus({
         now,
         activityAt: activity.activityAt,
+        endsAt: activity.endsAt,
         signupOpensAt: activity.signupOpensAt,
         signupClosesAt: activity.signupClosesAt,
         effectiveRegistrationCount: effectiveCount,
@@ -873,7 +911,7 @@ export const repairActivityService = {
     });
     if (!activity) throw new AppError("ACTIVITY_NOT_FOUND", "活动不存在");
     const now = new Date();
-    if (now.getTime() >= activityEndExclusive(activity.activityAt).getTime()) {
+    if (now.getTime() >= activityEndBoundary(activity.activityAt, activity.endsAt).getTime()) {
       throw new AppError("ACTIVITY_ENDED", "活动已结束");
     }
     const reg = await getDb().repairActivityRegistration.findFirst({
@@ -966,6 +1004,7 @@ export const repairActivityService = {
       const activityStatus = deriveRepairActivityStatus({
         now,
         activityAt: activity.activityAt,
+        endsAt: activity.endsAt,
         signupOpensAt: activity.signupOpensAt,
         signupClosesAt: activity.signupClosesAt,
         effectiveRegistrationCount: effectiveCount,

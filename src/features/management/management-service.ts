@@ -15,8 +15,12 @@ import { inSerializableTransaction } from "@/lib/db/transaction";
 export type MachineActivityView = {
   id: string;
   title: string;
+  /** 活动地点；历史活动为空。 */
+  location: string | null;
   capacity: number;
   activityAt: string;
+  /** 活动结束时间；历史活动为空。 */
+  endsAt: string | null;
   signupOpensAt: string;
   signupClosesAt: string;
   version: string;
@@ -26,8 +30,10 @@ function view(row: Omit<MachineActivityView, "version">, version: number): Machi
   return {
     id: row.id,
     title: row.title,
+    location: row.location,
     capacity: row.capacity,
     activityAt: row.activityAt,
+    endsAt: row.endsAt,
     signupOpensAt: row.signupOpensAt,
     signupClosesAt: row.signupClosesAt,
     version: `"${version}"`,
@@ -88,6 +94,7 @@ export const managementService = {
       {
         ...row,
         activityAt: row.activityAt.toISOString(),
+        endsAt: row.endsAt?.toISOString() ?? null,
         signupOpensAt: row.signupOpensAt.toISOString(),
         signupClosesAt: row.signupClosesAt.toISOString(),
       },

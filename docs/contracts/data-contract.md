@@ -4,6 +4,11 @@
 `bot_operations` 以机器主体与操作UUID去重，成功结果与活动及SYSTEM审计同事务提交。
 不新增ADMIN用户，不把群成员OpenID作为网站User外键。详见 [机器接口契约](management-bot.md)。
 
+维修活动地点与结束时间（issue #362）：`repair_activities` 新增 `location VARCHAR(120) NULL`
+与 `ends_at DATETIME(3) NULL`，由前向 Migration `20261107000000_repair_activity_location_ends_at`
+加列。两列**可空**：历史活动不回填、不编造；`ends_at` 为空时「已结束」判定回退活动日次日
+00:00（上海），`location` 为空时前端不渲染地点行。写入校验 `activity_at < ends_at`。
+
 ## 数据库基线
 
 - GreatSQL：`8.0.32-27`（MySQL 8.0 协议）
