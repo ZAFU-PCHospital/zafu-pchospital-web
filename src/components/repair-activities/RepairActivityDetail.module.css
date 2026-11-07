@@ -454,7 +454,7 @@
   display: grid;
   gap: var(--s-3);
   min-width: 0;
-  margin: calc(var(--s-3) * -1) calc(var(--s-4) * -1) 0;
+  margin: calc(var(--s-3) * -1) calc(var(--s-4) * -1) calc(var(--s-3) * -1);
   padding: var(--s-3) var(--s-4);
   border-start-start-radius: 11px;
   border-start-end-radius: 11px;
@@ -580,13 +580,12 @@
 }
 
 /* 打孔撕票线：横向虚线贯穿卡宽，两端半圆缺口纯 CSS。
-   缺口底色与上方活动段同色（wash），并让整条线落在绿色块内，避免露出白底或错色。 */
+   活动段负边距压到虚线上，缺口用下方白底咬进绿带底边，形成票根打孔。 */
 .receiptDivider {
   position: relative;
   align-self: stretch;
   border-block-start: 1px dashed var(--line-strong);
   margin-inline: calc(var(--s-4) * -1);
-  margin-block-start: -0.5rem;
 }
 
 .receiptDivider::before,
@@ -598,7 +597,7 @@
   block-size: 0.75rem;
   border: 1px solid var(--line-strong);
   border-radius: 50%;
-  background: var(--status-success-wash);
+  background: var(--surface-1);
   transform: translateY(-50%);
 }
 
