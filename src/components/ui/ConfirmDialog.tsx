@@ -6,7 +6,11 @@ import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
 
-/** fit 布局关闭时的淡出时长，与 globals.css 里 `receipt-window-out` 保持一致。 */
+/**
+ * fit 布局关闭时的淡出时长：与 globals.css 的 `admin-modal-out` 动画一致，
+ * 其时长取 `--d-ui`（170ms）。**改这里必须同步改 `--d-ui`**，否则会出现
+ * 「动画没走完就卸载」或「卸载晚于动画」的抖动。
+ */
 const EXIT_MS = 170;
 
 /**
@@ -70,21 +74,29 @@ export function ConfirmDialog({
   const [closing, setClosing] = useState(false);
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const animateExit = layout === "fit";
+  /**
+   * 关闭：fit 布局先播完淡出再交给调用方，其余布局同步关闭。
+   * 关闭动画期间的重复调用一律 no-op（否则双击会二次触发 onClose/onConfirm）。
+   */
   const requestClose = useCallback(() => {
-    if (!animateExit || closing) {
+    if (closing) return;
+    if (!animateExit) {
       onClose();
       return;
     }
     setClosing(true);
+    if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
     closeTimerRef.current = setTimeout(onClose, EXIT_MS);
   }, [animateExit, closing, onClose]);
-  /** 确认动作同样先播完淡出再交给调用方（仅 fit 布局）。 */
+  /** 确认动作同样先播完淡出再交给调用方（仅 fit 布局），并防重入。 */
   const handleConfirm = useCallback(() => {
-    if (!animateExit || closing) {
+    if (closing) return;
+    if (!animateExit) {
       onConfirm();
       return;
     }
     setClosing(true);
+    if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
     closeTimerRef.current = setTimeout(onConfirm, EXIT_MS);
   }, [animateExit, closing, onConfirm]);
 
@@ -185,6 +197,8 @@ export function ConfirmDialog({
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
+        /* 关闭动画期间整窗不可聚焦、不可点击：Tab 不会落进正在消失的弹窗。 */
+        inert={closing || undefined}
       >
         <header className="admin-modal__head">
           <div>
