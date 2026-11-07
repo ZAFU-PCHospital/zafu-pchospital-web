@@ -81,6 +81,7 @@ test("凭条集中展示活动、起止时间、地点与报名信息", async ()
   assert.ok(content.includes(copy.deviceModel), "机型标签");
   assert.ok(content.includes(registration.deviceModel!), "机型值");
   assert.ok(content.includes(copy.screenshotHint), "截图提示");
+  assert.equal(content.includes(registration.id), false, "凭条不展示报名编号");
 });
 
 test("地点为空时整行不渲染，不编造占位", async () => {

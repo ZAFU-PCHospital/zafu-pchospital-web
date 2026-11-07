@@ -384,15 +384,16 @@
   }
 }
 
-/* 报名成功凭条（issue #363）：票根式两段，窄屏一屏内可截图。 */
+/* 报名成功凭条（issue #363）：票根式两段 + 打孔撕票线，窄屏一屏内可截图。 */
 .receiptWrap {
   display: grid;
   gap: var(--s-4);
 }
 
 .receipt {
+  position: relative;
   display: grid;
-  gap: var(--s-3);
+  gap: var(--s-4);
   padding: var(--s-4);
   border: 1px solid var(--line-strong);
   border-radius: var(--r-mid);
@@ -406,7 +407,7 @@
 
 .receiptKicker {
   margin: 0;
-  color: var(--accent-deep);
+  color: var(--status-success-deep);
   font-size: var(--t-xs);
   font-weight: 600;
   letter-spacing: 0.12em;
@@ -420,29 +421,25 @@
   overflow-wrap: anywhere;
 }
 
-.receiptMeta,
-.receiptFields {
+.receiptMeta {
   display: grid;
   gap: var(--s-2);
   margin: 0;
 }
 
-.receiptMeta > div,
-.receiptFields > div {
+.receiptMeta > div {
   display: grid;
   grid-template-columns: minmax(4.5rem, auto) minmax(0, 1fr);
   gap: var(--s-3);
   align-items: baseline;
 }
 
-.receiptMeta dt,
-.receiptFields dt {
+.receiptMeta dt {
   color: var(--ink-3);
   font-size: var(--t-sm);
 }
 
-.receiptMeta dd,
-.receiptFields dd {
+.receiptMeta dd {
   margin: 0;
   color: var(--ink);
   font-size: var(--t-sm);
@@ -450,9 +447,85 @@
   overflow-wrap: anywhere;
 }
 
+.receiptHolder {
+  display: grid;
+  gap: var(--s-3);
+  min-width: 0;
+}
+
+.receiptFields {
+  display: grid;
+  gap: var(--s-3);
+  margin: 0;
+}
+
+/* 核验字段：姓名与手机号是第一眼，字号 ≈17px（由 --t-base 派生，不写死像素）。 */
+.receiptIdentity {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s-3);
+}
+
+.receiptIdentity dt {
+  color: var(--ink-3);
+  font-size: var(--t-xs);
+}
+
+.receiptIdentity dd {
+  margin: var(--s-1) 0 0;
+  color: var(--ink);
+  font-size: calc(var(--t-base) * 1.0625);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+/* 次要信息三列；机型缺省时自动收窄为两列。 */
+.receiptSecondary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--s-3);
+}
+
+.receiptSecondary dt {
+  color: var(--ink-3);
+  font-size: var(--t-xs);
+}
+
+.receiptSecondary dd {
+  margin: var(--s-1) 0 0;
+  color: var(--ink-2);
+  font-size: var(--t-sm);
+  overflow-wrap: anywhere;
+}
+
+/* 打孔撕票线：横向虚线贯穿卡宽，两端半圆缺口；桌面转竖向居中。 */
 .receiptDivider {
-  display: block;
+  position: relative;
+  align-self: stretch;
   border-block-start: 1px dashed var(--line-strong);
+  margin-inline: calc(var(--s-4) * -1);
+}
+
+.receiptDivider::before,
+.receiptDivider::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  inline-size: 0.75rem;
+  block-size: 0.75rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  background: var(--surface-1);
+  transform: translateY(-50%);
+}
+
+.receiptDivider::before {
+  inset-inline-start: -0.375rem;
+}
+
+.receiptDivider::after {
+  inset-inline-end: -0.375rem;
 }
 
 .receiptHint {
@@ -489,4 +562,34 @@
   content: "·";
   margin-inline-end: var(--s-2);
   color: var(--ink-4);
+}
+
+@media (min-width: 40rem) {
+  /* 桌面：凭条左右两段，撕票线竖向居中，缺口在上下边缘。 */
+  .receipt {
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    gap: var(--s-5);
+    padding: var(--s-5);
+    align-items: start;
+  }
+
+  .receiptDivider {
+    margin-inline: 0;
+    border-block-start: none;
+    border-inline-start: 1px dashed var(--line-strong);
+  }
+
+  .receiptDivider::before,
+  .receiptDivider::after {
+    top: -0.375rem;
+    bottom: auto;
+    inset-inline-start: 50%;
+    inset-inline-end: auto;
+    transform: translateX(-50%);
+  }
+
+  .receiptDivider::after {
+    top: auto;
+    bottom: -0.375rem;
+  }
 }

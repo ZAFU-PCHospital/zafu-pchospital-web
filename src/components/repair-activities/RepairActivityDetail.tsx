@@ -1440,11 +1440,14 @@ export function RepairActivityDetail({ activityId }: Props) {
       {pendingSignup ? (
         <ConfirmDialog
           title={signupSucceeded ? copy.signupSuccessTitle : copy.consent.title}
-          confirmLabel={signupSucceeded ? copy.receipt.acknowledge : copy.consent.agree}
+          titleTone={signupSucceeded ? "success" : "default"}
+          /* 成功态是只读凭条：隐藏确认与取消按钮，只留标题栏 ✕ / Esc / 遮罩关闭。 */
+          confirmLabel={signupSucceeded ? null : copy.consent.agree}
           cancelLabel={signupSucceeded ? undefined : copy.confirmEdit}
           busy={!signupSucceeded && busy}
           onConfirm={signupSucceeded ? closeSignupDialog : () => void confirmSignup()}
           onClose={closeSignupDialog}
+          size={signupSucceeded ? "narrow" : "default"}
         >
           {!signupSucceeded && pendingSignup ? (
             <div className={styles.signupConfirm}>

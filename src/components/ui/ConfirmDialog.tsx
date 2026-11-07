@@ -24,11 +24,13 @@ export function ConfirmDialog({
   confirmDisabled = false,
   confirmVariant = "solid",
   size = "default",
+  titleTone = "default",
   showCloseButton = true,
 }: {
   title: string;
   children: ReactNode;
-  confirmLabel: string;
+  /** 传 `null` 隐藏确认按钮（如只读的成功凭条）；关闭仍走 ✕ / Esc / 遮罩。 */
+  confirmLabel?: string | null;
   /** 仅需知晓的提醒可省略取消按钮；关闭与 Esc 仍可用。 */
   cancelLabel?: string;
   /** 标题栏关闭按钮文案（默认可访问名「关闭」） */
@@ -39,8 +41,10 @@ export function ConfirmDialog({
   /** 只禁用确认，保留取消 / Esc（例如操作窗口已结束）。 */
   confirmDisabled?: boolean;
   confirmVariant?: "solid" | "outline" | "ghost";
-  /** 短确认 / Alert 用紧凑窗口；详情表单仍用默认宽高。 */
-  size?: "default" | "compact";
+  /** 短确认 / Alert 用紧凑窗口；详情表单仍用默认宽高；narrow 为 640px 窄档。 */
+  size?: "default" | "compact" | "narrow";
+  /** success 把标题染成成功色；状态仍由标题文字表达，不只靠颜色。 */
+  titleTone?: "default" | "success";
   /** 已有底部确认动作时可隐藏标题栏关闭按钮；Esc 仍然可用。 */
   showCloseButton?: boolean;
 }) {
@@ -109,6 +113,7 @@ export function ConfirmDialog({
         className={cn(
           "admin-modal__window",
           size === "compact" && "admin-modal__window--compact admin-modal__window--alert",
+          size === "narrow" && "admin-modal__window--narrow",
         )}
         role="dialog"
         aria-modal="true"
@@ -117,7 +122,13 @@ export function ConfirmDialog({
       >
         <header className="admin-modal__head">
           <div>
-            <h2 className="admin-modal__title" id={titleId}>
+            <h2
+              className={cn(
+                "admin-modal__title",
+                titleTone === "success" && "admin-modal__title--success",
+              )}
+              id={titleId}
+            >
               {title}
             </h2>
           </div>
@@ -129,21 +140,25 @@ export function ConfirmDialog({
         </header>
         <div className="admin-modal__body">
           {children}
-          <div className="signup__actions">
-            {cancelLabel ? (
-              <Button type="button" variant="ghost" onClick={onClose} disabled={busy}>
-                {cancelLabel}
-              </Button>
-            ) : null}
-            <Button
-              type="button"
-              variant={confirmVariant}
-              disabled={busy || confirmDisabled}
-              onClick={onConfirm}
-            >
-              {confirmLabel}
-            </Button>
-          </div>
+          {confirmLabel || cancelLabel ? (
+            <div className="signup__actions">
+              {cancelLabel ? (
+                <Button type="button" variant="ghost" onClick={onClose} disabled={busy}>
+                  {cancelLabel}
+                </Button>
+              ) : null}
+              {confirmLabel ? (
+                <Button
+                  type="button"
+                  variant={confirmVariant}
+                  disabled={busy || confirmDisabled}
+                  onClick={onConfirm}
+                >
+                  {confirmLabel}
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       </div>
     </div>,

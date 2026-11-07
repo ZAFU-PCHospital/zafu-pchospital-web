@@ -6244,6 +6244,10 @@ html[data-theme="black-yellow"] {
   .admin-modal__window--compact {
     inline-size: min(30rem, 100%);
   }
+  /* 窄档：详情类内容（如报名成功凭条）在桌面也不铺满整宽。 */
+  .admin-modal__window--narrow {
+    inline-size: min(40rem, 100%);
+  }
   /* 短 Alert：内容高度自适应并在屏幕居中，窄屏也不铺满整屏。 */
   .admin-modal .admin-modal__window--alert {
     block-size: auto;
@@ -6276,6 +6280,10 @@ html[data-theme="black-yellow"] {
     font-weight: 800;
     line-height: 1.2;
     color: var(--ink);
+  }
+  /* 成功态标题：颜色只作辅助，文字本身仍表达状态。 */
+  .admin-modal__title--success {
+    color: var(--status-success-deep);
   }
   .admin-modal__lead {
     margin: var(--s-2) 0 0;

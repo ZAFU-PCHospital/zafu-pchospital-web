@@ -608,6 +608,10 @@ test("报名成功弹层渲染一屏凭条：活动名、起止时间、地点�
 
   const success = signupDialog(ui.view());
   assert.ok(success);
+  assert.equal(success.props.confirmLabel, null, "成功态是只读凭条：不渲染确认按钮");
+  assert.equal(success.props.cancelLabel, undefined, "成功态不渲染取消按钮");
+  assert.equal(success.props.titleTone, "success", "标题用成功色辅助表达状态");
+  assert.equal(success.props.size, "narrow", "成功态用 640px 窄档，桌面不铺满");
   const receipt = findElement(success, (element) => element.type === RepairActivityReceipt);
   assert.ok(receipt, "成功态必须是凭条，而不是一段纯文字");
 
@@ -618,6 +622,11 @@ test("报名成功弹层渲染一屏凭条：活动名、起止时间、地点�
   assert.ok(content.includes(registration.name), "凭条要有姓名");
   assert.ok(content.includes(registration.phoneMasked), "凭条要有脱敏手机");
   assert.ok(content.includes(repairActivitiesPage.detail.receipt.screenshotHint), "截图提示");
+  assert.equal(
+    content.includes(registration.id),
+    false,
+    "用户已裁定凭条不放报名编号，编号仍在常驻成功面板",
+  );
 
   const preparation = findElement(
     success,
