@@ -73,6 +73,19 @@ export function ConfirmDialog({
   /** fit 布局的关闭淡出：先播完再真正卸载，其他布局保持同步关闭。 */
   const [closing, setClosing] = useState(false);
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /**
+   * 非 fit 布局同步关闭时的同帧去重：置位后在下一个任务复位，只吃掉同一个 JS 任务里的
+   * 重复点击；跨任务的再次点击照常放行（调用方失败后重试不受影响）。
+   */
+  const sameTickRef = useRef(false);
+  const claimSameTick = useCallback(() => {
+    if (sameTickRef.current) return false;
+    sameTickRef.current = true;
+    setTimeout(() => {
+      sameTickRef.current = false;
+    }, 0);
+    return true;
+  }, []);
   const animateExit = layout === "fit";
   /**
    * 关闭：fit 布局先播完淡出再交给调用方，其余布局同步关闭。
@@ -81,24 +94,24 @@ export function ConfirmDialog({
   const requestClose = useCallback(() => {
     if (closing) return;
     if (!animateExit) {
-      onClose();
+      if (claimSameTick()) onClose();
       return;
     }
     setClosing(true);
     if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
     closeTimerRef.current = setTimeout(onClose, EXIT_MS);
-  }, [animateExit, closing, onClose]);
+  }, [animateExit, claimSameTick, closing, onClose]);
   /** 确认动作同样先播完淡出再交给调用方（仅 fit 布局），并防重入。 */
   const handleConfirm = useCallback(() => {
     if (closing) return;
     if (!animateExit) {
-      onConfirm();
+      if (claimSameTick()) onConfirm();
       return;
     }
     setClosing(true);
     if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
     closeTimerRef.current = setTimeout(onConfirm, EXIT_MS);
-  }, [animateExit, closing, onConfirm]);
+  }, [animateExit, claimSameTick, closing, onConfirm]);
 
   useEffect(
     () => () => {
