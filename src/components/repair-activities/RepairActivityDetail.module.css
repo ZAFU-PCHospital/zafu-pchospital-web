@@ -474,6 +474,7 @@
 .receiptIdentity dd {
   margin: var(--s-1) 0 0;
   color: var(--ink);
+  /* 1.0625 × --t-base（1rem）≈ 17px：凭条第一眼字号，仍由令牌派生 */
   font-size: calc(var(--t-base) * 1.0625);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
