@@ -3,6 +3,10 @@ import { createRequire } from "node:module";
 import test from "node:test";
 import type { ReactNode } from "react";
 
+import { clientDom, element, mountClient } from "../support/react-client";
+
+import { Button } from "../../src/components/ui/Button";
+
 const require = createRequire(import.meta.url);
 const React = require("react") as typeof import("react");
 const ReactDOM = require("react-dom") as typeof import("react-dom");
@@ -104,4 +108,50 @@ test("closeIconOnly 时 ✕ 为纯图标按钮且带可访问名", () => {
     1,
     "只有底部按钮渲染文字，✕ 不带文字节点",
   );
+});
+
+test("非 fit 布局同 tick 连点只触发一次，隔一个 tick 再点仍能触发（重试不被掐死）", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const dom = clientDom();
+  (globalThis as unknown as { HTMLElement: unknown }).HTMLElement = dom.Node;
+  const originalCreatePortal = ReactDOM.createPortal;
+  (ReactDOM as unknown as { createPortal: unknown }).createPortal = (children: ReactNode) =>
+    React.createElement(React.Fragment, null, children);
+  t.after(() => {
+    (ReactDOM as unknown as { createPortal: unknown }).createPortal = originalCreatePortal;
+    dom.restore();
+    Reflect.deleteProperty(globalThis, "HTMLElement");
+  });
+
+  const calls: string[] = [];
+  const mounted = mountClient(t, () =>
+    ConfirmDialog({
+      title: "同帧去重",
+      confirmLabel: "确定",
+      cancelLabel: "取消",
+      onConfirm: () => calls.push("confirm"),
+      onClose: () => calls.push("close"),
+      children: React.createElement("p", null, "内容"),
+    }),
+  );
+  const buttonOf = (label: string) =>
+    element(mounted.view(), (node) => node.type === Button && node.props.children === label);
+  const confirm = buttonOf("确定");
+  const cancel = buttonOf("取消");
+
+  // 同一个 JS 任务里连点两次：只触发一次
+  (confirm.props.onClick as () => void)();
+  (confirm.props.onClick as () => void)();
+  assert.deepEqual(calls, ["confirm"], "同一 tick 只触发一次 onConfirm");
+
+  // 复位定时器在下一个任务触发；此后再点必须照常触发（调用方失败重试不被掐死）
+  t.mock.timers.tick(1);
+  (confirm.props.onClick as () => void)();
+  assert.deepEqual(calls, ["confirm", "confirm"], "跨 tick 再点仍能触发");
+
+  // 取消按钮同一 tick 双调也只触发一次 onClose（先让上一次的复位定时器跑完）
+  t.mock.timers.tick(1);
+  (cancel.props.onClick as () => void)();
+  (cancel.props.onClick as () => void)();
+  assert.deepEqual(calls, ["confirm", "confirm", "close"], "同一 tick 只触发一次 onClose");
 });
