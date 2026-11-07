@@ -400,6 +400,12 @@
   background: var(--surface-1);
 }
 
+/* 活动段：抬头 + 时间/地点；桌面左右两段时靠 min-width: 0 防长内容撑破网格。 */
+.receiptActivity {
+  display: grid;
+  min-width: 0;
+}
+
 .receiptHead {
   display: grid;
   gap: var(--s-1);
