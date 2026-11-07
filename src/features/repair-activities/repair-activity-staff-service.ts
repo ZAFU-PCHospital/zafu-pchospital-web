@@ -41,7 +41,11 @@ import type {
 export type StaffActivityListItem = {
   id: string;
   title: string;
+  /** 活动地点；历史活动为空。 */
+  location: string | null;
   activityAt: string;
+  /** 活动结束时间；历史活动为空。 */
+  endsAt: string | null;
   capacity: number;
   signupOpensAt: string;
   signupClosesAt: string;
@@ -329,7 +333,9 @@ function toListItem(
   row: {
     id: string;
     title: string;
+    location: string | null;
     activityAt: Date;
+    endsAt: Date | null;
     capacity: number;
     signupOpensAt: Date;
     signupClosesAt: Date;
@@ -341,6 +347,7 @@ function toListItem(
   const status = deriveRepairActivityStatus({
     now,
     activityAt: row.activityAt,
+    endsAt: row.endsAt,
     signupOpensAt: row.signupOpensAt,
     signupClosesAt: row.signupClosesAt,
     effectiveRegistrationCount: registeredCount,
@@ -349,7 +356,9 @@ function toListItem(
   return {
     id: row.id,
     title: row.title,
+    location: row.location,
     activityAt: row.activityAt.toISOString(),
+    endsAt: row.endsAt?.toISOString() ?? null,
     capacity: row.capacity,
     signupOpensAt: row.signupOpensAt.toISOString(),
     signupClosesAt: row.signupClosesAt.toISOString(),

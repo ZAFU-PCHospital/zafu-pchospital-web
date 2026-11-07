@@ -24,6 +24,8 @@ export const repairActivitiesPage = {
   remainingShort: "剩余 {count}",
   capacity: "名额 {registered} / {capacity}",
   activityAt: "活动时间",
+  /** 活动地点（issue #362）：历史活动没有地点时不渲染该行。 */
+  location: "地点",
   window: "报名时间",
   endedHint: "活动已结束",
   previousPage: "上一页",
@@ -207,6 +209,8 @@ export const memberRepairActivitiesCopy = {
     notAttended: "未出勤",
     capacity: "名额 {registered} / {capacity}",
     activityAt: "活动时间",
+    /** 活动地点（issue #362）：为空时不渲染该行。 */
+    location: "地点",
   },
   board: {
     title: "活动工作台",

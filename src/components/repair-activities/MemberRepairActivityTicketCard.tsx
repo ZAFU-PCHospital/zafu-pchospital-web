@@ -1,5 +1,8 @@
 import { ActivityTicketCardShell } from "@/components/repair-activities/ActivityTicketCardShell";
-import { formatShanghaiTime } from "@/components/repair-activities/activity-format";
+import {
+  formatShanghaiTime,
+  formatShanghaiTimeRange,
+} from "@/components/repair-activities/activity-format";
 import { memberRepairActivityStatusBadgeClass } from "@/components/repair-activities/activity-status-badge";
 import {
   memberRepairActivitiesCopy,
@@ -15,6 +18,7 @@ export function MemberRepairActivityTicketCard({ activity }: { activity: StaffAc
     .replace("{registered}", String(activity.registeredCount))
     .replace("{capacity}", String(activity.capacity));
   const attendance = activity.attended ? copy.attended : copy.notAttended;
+  const timeRange = formatShanghaiTimeRange(activity.activityAt, activity.endsAt);
 
   return (
     <ActivityTicketCardShell
@@ -23,8 +27,13 @@ export function MemberRepairActivityTicketCard({ activity }: { activity: StaffAc
       meta={
         <>
           <p>
-            {copy.activityAt} · {formatShanghaiTime(activity.activityAt)}
+            {copy.activityAt} · {timeRange ?? formatShanghaiTime(activity.activityAt)}
           </p>
+          {activity.location ? (
+            <p>
+              {copy.location} · {activity.location}
+            </p>
+          ) : null}
           <p>
             {capacity} · {attendance}
           </p>

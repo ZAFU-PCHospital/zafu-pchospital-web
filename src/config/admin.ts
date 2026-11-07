@@ -559,7 +559,9 @@ export const adminCopy = {
     title: "维修活动",
     table: {
       title: "标题",
+      location: "地点",
       activityAt: "活动时间",
+      endsAt: "结束时间",
       window: "报名窗口",
       capacity: "名额",
       attendance: "出勤",
@@ -569,11 +571,14 @@ export const adminCopy = {
     create: {
       title: "新建活动",
       titleField: "标题",
+      location: "地点",
+      locationPlaceholder: "如：学 3-301 活动室",
       capacity: "人数上限（至少 1 人）",
       activityAt: "活动时间",
+      endsAt: "结束时间",
       signupOpensAt: "报名开始",
       signupClosesAt: "报名截止",
-      timeHint: "报名开始须早于截止，截止不得晚于活动开始",
+      timeHint: "报名开始须早于截止，截止不得晚于活动开始，结束须晚于开始",
       submit: "创建活动",
       created: "活动已创建",
     },
@@ -582,6 +587,8 @@ export const adminCopy = {
       submit: "保存修改",
       saved: "活动已更新",
       cancel: "取消",
+      /** 历史活动缺地点 / 结束时间时留空即可，不强制补录。 */
+      legacyHint: "历史活动的地点与结束时间可以留空，留空时报名页不显示对应信息",
     },
     removePanel: {
       title: "删除活动",

@@ -17,6 +17,8 @@ import {
   repairActivityRegistrationStatusLabels,
   repairActivityStatusShortLabels,
   REPAIR_ACTIVITY_CAPACITY_MIN,
+  REPAIR_ACTIVITY_DEFAULT_DURATION_MINUTES,
+  REPAIR_ACTIVITY_LOCATION_MAX_LENGTH,
   type RepairActivityStatus,
 } from "@/features/repair-activities/repair-activity-validation";
 import type {
@@ -53,6 +55,11 @@ export function RepairActivityAdminPanel() {
   const [removingRegistration, setRemovingRegistration] = useState<RegistrationAdminView | null>(
     null,
   );
+  /** 结束时间联动：开始时间改动时自动填 +2h，用户手动改过结束时间后不再覆盖。 */
+  const createEndsAtRef = useRef<HTMLInputElement>(null);
+  const createEndsAtTouchedRef = useRef(false);
+  const editEndsAtRef = useRef<HTMLInputElement>(null);
+  const editEndsAtTouchedRef = useRef(false);
 
   const load = useCallback(async () => {
     setState((current) => (current === "ready" ? "ready" : "loading"));
@@ -92,8 +99,10 @@ export function RepairActivityAdminPanel() {
       method: "POST",
       body: {
         title: data.title ?? "",
+        location: data.location ?? "",
         capacity: Number(data.capacity),
         activityAt: toIso(data.activityAt ?? ""),
+        endsAt: toIso(data.endsAt ?? ""),
         signupOpensAt: toIso(data.signupOpensAt ?? ""),
         signupClosesAt: toIso(data.signupClosesAt ?? ""),
       },
@@ -104,8 +113,23 @@ export function RepairActivityAdminPanel() {
       return;
     }
     form.reset();
+    createEndsAtTouchedRef.current = false;
     setToast({ text: copy.create.created, tone: "success" });
     await load();
+  }
+
+  /**
+   * 打开 / 关闭编辑窗都清掉「已手改结束时间」标记：
+   * 否则改过活动 A 的结束时间后，打开活动 B 改开始时间就不再自动填充（跨活动状态泄漏）。
+   */
+  function openEdit(item: RepairActivityAdminView) {
+    editEndsAtTouchedRef.current = false;
+    setEditing(item);
+  }
+
+  function closeEdit() {
+    editEndsAtTouchedRef.current = false;
+    setEditing(null);
   }
 
   async function saveEdit(event: FormEvent<HTMLFormElement>) {
@@ -121,8 +145,10 @@ export function RepairActivityAdminPanel() {
         method: "PATCH",
         body: {
           title: data.title ?? "",
+          location: data.location ?? "",
           capacity: Number(data.capacity),
           activityAt: toIso(data.activityAt ?? ""),
+          endsAt: toIso(data.endsAt ?? ""),
           signupOpensAt: toIso(data.signupOpensAt ?? ""),
           signupClosesAt: toIso(data.signupClosesAt ?? ""),
         },
@@ -133,7 +159,7 @@ export function RepairActivityAdminPanel() {
       setProblem(result.message);
       return;
     }
-    setEditing(null);
+    closeEdit();
     setToast({ text: copy.edit.saved, tone: "success" });
     await load();
   }
@@ -403,6 +429,16 @@ export function RepairActivityAdminPanel() {
               <input className="field__input" name="title" required maxLength={120} />
             </label>
             <label className="field">
+              <span className="field__label">{copy.create.location}</span>
+              <input
+                className="field__input"
+                name="location"
+                required
+                maxLength={REPAIR_ACTIVITY_LOCATION_MAX_LENGTH}
+                placeholder={copy.create.locationPlaceholder}
+              />
+            </label>
+            <label className="field">
               <span className="field__label">{copy.create.capacity}</span>
               <input
                 className="field__input"
@@ -430,7 +466,32 @@ export function RepairActivityAdminPanel() {
             </label>
             <label className="field">
               <span className="field__label">{copy.create.activityAt}</span>
-              <input className="field__input" type="datetime-local" name="activityAt" required />
+              <input
+                className="field__input"
+                type="datetime-local"
+                name="activityAt"
+                required
+                onChange={(event) => {
+                  fillSuggestedEnd(
+                    event.currentTarget.value,
+                    createEndsAtRef,
+                    createEndsAtTouchedRef,
+                  );
+                }}
+              />
+            </label>
+            <label className="field">
+              <span className="field__label">{copy.create.endsAt}</span>
+              <input
+                className="field__input"
+                type="datetime-local"
+                name="endsAt"
+                required
+                ref={createEndsAtRef}
+                onChange={() => {
+                  createEndsAtTouchedRef.current = true;
+                }}
+              />
             </label>
           </div>
           <p className="field__hint">{copy.create.timeHint}</p>
@@ -466,7 +527,9 @@ export function RepairActivityAdminPanel() {
               <thead>
                 <tr>
                   <th>{copy.table.title}</th>
+                  <th>{copy.table.location}</th>
                   <th>{copy.table.activityAt}</th>
+                  <th>{copy.table.endsAt}</th>
                   <th>{copy.table.window}</th>
                   <th>{copy.table.capacity}</th>
                   <th>{copy.table.attendance}</th>
@@ -478,7 +541,11 @@ export function RepairActivityAdminPanel() {
                 {items.map((item) => (
                   <tr key={item.id}>
                     <td data-label={copy.table.title}>{item.title}</td>
+                    <td data-label={copy.table.location}>{item.location ?? "—"}</td>
                     <td data-label={copy.table.activityAt}>{formatDateTime(item.activityAt)}</td>
+                    <td data-label={copy.table.endsAt}>
+                      {item.endsAt ? formatDateTime(item.endsAt) : "—"}
+                    </td>
                     <td data-label={copy.table.window}>
                       {formatDateTime(item.signupOpensAt)}
                       <span className="muted"> → </span>
@@ -508,7 +575,7 @@ export function RepairActivityAdminPanel() {
                     </td>
                     <td data-label={copy.table.actions}>
                       <div className="admin-row-actions">
-                        <Button variant="ghost" disabled={busy} onClick={() => setEditing(item)}>
+                        <Button variant="ghost" disabled={busy} onClick={() => openEdit(item)}>
                           {copy.action.edit}
                         </Button>
                         <Button
@@ -534,7 +601,7 @@ export function RepairActivityAdminPanel() {
       {showCustomerBlacklist ? <RepairActivityCustomerBlacklistPanel /> : null}
 
       {editing ? (
-        <AdminModal title={copy.edit.title} onClose={() => setEditing(null)}>
+        <AdminModal title={copy.edit.title} onClose={closeEdit}>
           <form className="admin-form" onSubmit={saveEdit}>
             <div className="admin-form__grid">
               <label className="field">
@@ -545,6 +612,16 @@ export function RepairActivityAdminPanel() {
                   required
                   maxLength={120}
                   defaultValue={editing.title}
+                />
+              </label>
+              <label className="field">
+                <span className="field__label">{copy.create.location}</span>
+                <input
+                  className="field__input"
+                  name="location"
+                  maxLength={REPAIR_ACTIVITY_LOCATION_MAX_LENGTH}
+                  placeholder={copy.create.locationPlaceholder}
+                  defaultValue={editing.location ?? ""}
                 />
               </label>
               <label className="field">
@@ -587,11 +664,32 @@ export function RepairActivityAdminPanel() {
                   name="activityAt"
                   required
                   defaultValue={toLocalInput(editing.activityAt)}
+                  onChange={(event) => {
+                    fillSuggestedEnd(
+                      event.currentTarget.value,
+                      editEndsAtRef,
+                      editEndsAtTouchedRef,
+                    );
+                  }}
+                />
+              </label>
+              <label className="field">
+                <span className="field__label">{copy.create.endsAt}</span>
+                <input
+                  className="field__input"
+                  type="datetime-local"
+                  name="endsAt"
+                  ref={editEndsAtRef}
+                  defaultValue={editing.endsAt ? toLocalInput(editing.endsAt) : ""}
+                  onChange={() => {
+                    editEndsAtTouchedRef.current = true;
+                  }}
                 />
               </label>
             </div>
+            <p className="field__hint">{copy.edit.legacyHint}</p>
             <div className="signup__actions">
-              <Button type="button" variant="ghost" onClick={() => setEditing(null)}>
+              <Button type="button" variant="ghost" onClick={closeEdit}>
                 {copy.edit.cancel}
               </Button>
               <Button type="submit" variant="solid" disabled={busy}>
@@ -800,4 +898,32 @@ function toIso(value: string): string | null {
   if (!value) return null;
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+/**
+ * 开始时间 → 建议的结束时间（`datetime-local` 本地值）：开始 + 默认时长（2 小时）。
+ * 用户已手动改过结束时间、或开始时间还解析不出时返回 null，调用方不覆盖当前值。
+ */
+export function suggestedEndsAtLocal(startValue: string, endsAtTouched: boolean): string | null {
+  if (endsAtTouched) return null;
+  const start = new Date(startValue);
+  if (Number.isNaN(start.getTime())) return null;
+  return toLocalInput(
+    new Date(start.getTime() + REPAIR_ACTIVITY_DEFAULT_DURATION_MINUTES * 60_000).toISOString(),
+  );
+}
+
+/**
+ * 把建议结束时间写进非受控控件：直接写 DOM 值不会触发 change，
+ * 因此不会把「用户手动改过」的标记打上。
+ */
+function fillSuggestedEnd(
+  startValue: string,
+  endsAtRef: { current: HTMLInputElement | null },
+  touchedRef: { current: boolean },
+): void {
+  const next = suggestedEndsAtLocal(startValue, touchedRef.current);
+  const input = endsAtRef.current;
+  if (!next || !input) return;
+  input.value = next;
 }

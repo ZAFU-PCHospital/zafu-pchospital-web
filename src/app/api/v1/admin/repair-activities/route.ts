@@ -30,11 +30,13 @@ export async function POST(request: Request) {
     const result = await repairActivityService.create(
       {
         title: bodyString(body, "title"),
+        location: bodyString(body, "location"),
         capacity: bodyRequiredInt(body, "capacity", {
           min: REPAIR_ACTIVITY_CAPACITY_MIN,
           max: 10_000,
         }),
         activityAt: bodyRequiredIsoDate(body, "activityAt"),
+        endsAt: bodyRequiredIsoDate(body, "endsAt"),
         signupOpensAt: bodyRequiredIsoDate(body, "signupOpensAt"),
         signupClosesAt: bodyRequiredIsoDate(body, "signupClosesAt"),
       },

@@ -1,5 +1,8 @@
 import { ActivityTicketCardShell } from "@/components/repair-activities/ActivityTicketCardShell";
-import { formatShanghaiTime } from "@/components/repair-activities/activity-format";
+import {
+  formatShanghaiTime,
+  formatShanghaiTimeRange,
+} from "@/components/repair-activities/activity-format";
 import { repairActivityStatusBadgeClass } from "@/components/repair-activities/activity-status-badge";
 import {
   repairActivityStatusLabels,
@@ -9,6 +12,8 @@ import type { RepairActivityPublicView } from "@/features/repair-activities/repa
 
 export type ActivityTicketCopy = {
   activityAt: string;
+  /** 地点标签；卡片上地点为空时整行不渲染。 */
+  location: string;
   /** `名额 {registered} / {capacity}` */
   capacity: string;
   /** `剩余 {count}` */
@@ -27,6 +32,7 @@ type Props = {
 /** 公开活动日期票根卡：公开列表与首页预览共用同一套字段与页脚。 */
 export function ActivityTicketCard({ activity, copy, showDetailCta = false }: Props) {
   const ended = activity.status === "ENDED";
+  const timeRange = formatShanghaiTimeRange(activity.activityAt, activity.endsAt);
   const footer = ended ? (
     <p className="muted">{copy.endedHint}</p>
   ) : (
@@ -49,8 +55,13 @@ export function ActivityTicketCard({ activity, copy, showDetailCta = false }: Pr
       meta={
         <>
           <p>
-            {copy.activityAt} · {formatShanghaiTime(activity.activityAt)}
+            {copy.activityAt} · {timeRange ?? formatShanghaiTime(activity.activityAt)}
           </p>
+          {activity.location ? (
+            <p>
+              {copy.location} · {activity.location}
+            </p>
+          ) : null}
           <p>{formatCapacityLine(activity, ended, copy)}</p>
         </>
       }

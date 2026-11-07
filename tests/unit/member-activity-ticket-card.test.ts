@@ -29,7 +29,9 @@ function text(node: ReactNode): string {
 const activity: StaffActivityListItem = {
   id: "activity-1",
   title: "秋季义务维修",
+  location: "学 3-301 活动室",
   activityAt: "2026-11-02T10:00:00Z",
+  endsAt: "2026-11-02T12:00:00Z",
   capacity: 10,
   signupOpensAt: "2026-10-28T04:00:00Z",
   signupClosesAt: "2026-11-02T09:00:00Z",

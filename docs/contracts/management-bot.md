@@ -27,6 +27,8 @@
 
 创建JSON：`title,capacity,activityAt,signupOpensAt,signupClosesAt`。时间为带Z或±hh:mm的ISO时间，按现有Service核验 `signupOpensAt < signupClosesAt <= activityAt`；标题2–120字符，容量整数1–10000。拒绝未知字段、字符串/布尔容量和超过8KiB的JSON。
 
+响应字段（issue #362）：`data` 额外返回 `location: string|null` 与 `endsAt: string|null`（活动地点与结束时间），历史活动两者为 `null`。创建与更新请求体仍只接受上列字段——机器接口写入地点/结束时间的能力属于后续子任务，本次仅暴露读取。
+
 ## 幂等与版本
 
 - POST/PATCH必须带UUID `Idempotency-Key`，与模型调用requestId不同。

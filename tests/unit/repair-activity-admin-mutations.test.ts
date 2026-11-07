@@ -246,6 +246,21 @@ async function mount(t: TestContext) {
       assert.ok(node);
       return node;
     },
+    /** 打开「编辑活动」弹窗（与报名编辑不是同一个弹窗）。 */
+    openActivityEdit() {
+      (button(adminCopy.repairActivities.action.edit).props.onClick as () => void)();
+      const node = dialog(adminCopy.repairActivities.edit.title);
+      assert.ok(node);
+      return node;
+    },
+    /** 活动编辑弹窗里的具名字段。 */
+    activityEditInput(name: string) {
+      const node = dialog(adminCopy.repairActivities.edit.title);
+      assert.ok(node);
+      const input = find(node, (element) => element.props.name === name);
+      assert.ok(input, name);
+      return input;
+    },
     async confirm() {
       const node = dialog(copy.delete);
       assert.ok(node);
@@ -264,6 +279,47 @@ async function mount(t: TestContext) {
     },
   };
 }
+
+test("活动编辑窗：改开始时间自动填结束时间 +2h，手动改过后不再覆盖", async (t) => {
+  const app = await mount(t);
+  app.openActivityEdit();
+  const endsAt = app.activityEditInput("endsAt");
+  const activityAt = app.activityEditInput("activityAt");
+  const ref = endsAt.props.ref as { current: { value: string } | null };
+  ref.current = { value: "" };
+
+  (activityAt.props.onChange as (event: unknown) => void)({
+    currentTarget: { value: "2026-11-06T10:00" },
+  });
+  assert.equal(ref.current?.value, "2026-11-06T12:00", "开始 + 2h");
+
+  (endsAt.props.onChange as () => void)(); // 用户手动改过结束时间
+  ref.current.value = "2026-11-06T15:30";
+  (activityAt.props.onChange as (event: unknown) => void)({
+    currentTarget: { value: "2026-11-06T09:00" },
+  });
+  assert.equal(ref.current?.value, "2026-11-06T15:30", "手改过就不再覆盖");
+});
+
+test("活动编辑窗：关闭再打开后联动重新生效，不跨活动泄漏", async (t) => {
+  const app = await mount(t);
+  const first = app.openActivityEdit();
+  const firstEndsAt = app.activityEditInput("endsAt");
+  const ref = firstEndsAt.props.ref as { current: { value: string } | null };
+  (firstEndsAt.props.onChange as () => void)(); // 手改标记留在上一次编辑
+  (first.props.onClose as () => void)();
+  assert.equal(app.dialog(adminCopy.repairActivities.edit.title), undefined);
+
+  app.openActivityEdit();
+  const endsAt = app.activityEditInput("endsAt");
+  assert.equal(endsAt.props.ref, ref, "重开复用同一个 ref");
+  ref.current = { value: "" };
+  const activityAt = app.activityEditInput("activityAt");
+  (activityAt.props.onChange as (event: unknown) => void)({
+    currentTarget: { value: "2026-11-07T08:00" },
+  });
+  assert.equal(ref.current?.value, "2026-11-07T10:00", "重开后联动必须重新生效");
+});
 
 test("正常删除成功后关闭确认窗并刷新名单", async (t) => {
   const app = await mount(t);

@@ -49,6 +49,15 @@ export function validateCheckInIssueTypeUpdates(
 /** Capacity lower bound shared by server validation and admin form HTML min. */
 export const REPAIR_ACTIVITY_CAPACITY_MIN = 1;
 
+/**
+ * 新建活动时「结束时间」的默认时长（分钟）：结束时间 = 开始时间 + 2 小时。
+ * 管理端表单联动填充与展示默认值共用这一处，避免前后端各写一个数字。
+ */
+export const REPAIR_ACTIVITY_DEFAULT_DURATION_MINUTES = 120;
+
+/** 地点上限：与列宽一致（`VarChar(120)`），前端 HTML `maxLength` 也用它。 */
+export const REPAIR_ACTIVITY_LOCATION_MAX_LENGTH = 120;
+
 export const RepairActivityRegistrationStatus = ["REGISTERED", "CHECKED_IN", "SERVED"] as const;
 export type RepairActivityRegistrationStatus = (typeof RepairActivityRegistrationStatus)[number];
 
@@ -94,19 +103,23 @@ export type ActivityTimeFields = {
   activityAt: Date;
   signupOpensAt: Date;
   signupClosesAt: Date;
+  /** 结束时间：历史活动可能为空（不回填），为空时不参与时长规则。 */
+  endsAt?: Date | null;
 };
 
 /**
  * 写入时强制的时间规则：
  * 1. signupOpensAt < signupClosesAt
  * 2. signupClosesAt <= activityAt
+ * 3. endsAt 有值时 activityAt < endsAt
  */
 export function assertActivityTimeRules(fields: ActivityTimeFields): void {
-  const { activityAt, signupOpensAt, signupClosesAt } = fields;
+  const { activityAt, signupOpensAt, signupClosesAt, endsAt } = fields;
   if (
     Number.isNaN(activityAt.getTime()) ||
     Number.isNaN(signupOpensAt.getTime()) ||
-    Number.isNaN(signupClosesAt.getTime())
+    Number.isNaN(signupClosesAt.getTime()) ||
+    (endsAt != null && Number.isNaN(endsAt.getTime()))
   ) {
     throw new AppError("VALIDATION_FAILED", "活动时间无效");
   }
@@ -126,11 +139,21 @@ export function assertActivityTimeRules(fields: ActivityTimeFields): void {
       },
     });
   }
+  if (endsAt != null && !(activityAt.getTime() < endsAt.getTime())) {
+    throw new AppError("VALIDATION_FAILED", "活动结束时间必须晚于开始时间", {
+      fieldErrors: {
+        endsAt: ["结束必须晚于开始"],
+        activityAt: ["活动开始必须早于结束"],
+      },
+    });
+  }
 }
 
 export type DeriveStatusInput = {
   now: Date;
   activityAt: Date;
+  /** 活动结束时间；历史数据为空时回退 `activityEndExclusive(activityAt)`。 */
+  endsAt?: Date | string | null;
   signupOpensAt: Date;
   signupClosesAt: Date;
   /** 有效报名数（deletedAt IS NULL 且 status ∈ REGISTERED|CHECKED_IN|SERVED）。 */
@@ -142,17 +165,30 @@ export type DeriveStatusInput = {
  * 派生状态（不落库）。优先级从上到下：
  * ENDED → CLOSED → FULL → OPEN → UPCOMING
  *
- * ENDED 判定：活动**当天结束之后**（次日 00:00 上海起）才算已结束，
- * 即 `now >= activityEndExclusive(activityAt)`；活动当天仍按报名窗口判定（通常为 CLOSED）。
+ * ENDED 判定（issue #362）：活动有结束时间时 `now >= endsAt` 即已结束；
+ * 结束时间为空（历史数据）时回退 `now >= activityEndExclusive(activityAt)`。
+ * 成员端接待窗口不跟随本函数，仍以 `activityEndExclusive` 为界（见 canOperateActivityStaff）。
  */
 export function deriveRepairActivityStatus(input: DeriveStatusInput): RepairActivityStatus {
   const now = input.now.getTime();
-  if (now >= activityEndExclusive(input.activityAt).getTime()) return "ENDED";
+  if (now >= activityEndBoundary(input.activityAt, input.endsAt).getTime()) return "ENDED";
   if (now >= input.signupClosesAt.getTime()) return "CLOSED";
   if (now < input.signupOpensAt.getTime()) return "UPCOMING";
   // 报名窗口内
   if (input.effectiveRegistrationCount >= input.capacity) return "FULL";
   return "OPEN";
+}
+
+/**
+ * 「已结束」的排他上界：有结束时间用结束时间，否则用活动日次日 00:00（上海）。
+ * 结束时间解析失败按缺失处理，绝不把非法值当成「立刻结束」。
+ */
+export function activityEndBoundary(activityAt: Date, endsAt?: Date | string | null): Date {
+  if (endsAt != null) {
+    const parsed = new Date(endsAt);
+    if (!Number.isNaN(parsed.getTime())) return parsed;
+  }
+  return activityEndExclusive(activityAt);
 }
 
 /** 仅 OPEN 可新报；UPCOMING / CLOSED / FULL / ENDED 均不可。 */
@@ -165,7 +201,12 @@ type StaffActivityWindow = {
   activityAt: Date | string;
 };
 
-/** 现场操作窗口：报名截止起，活动上海自然日结束前；报满不代表截止。 */
+/**
+ * 现场操作窗口：报名截止起，活动上海自然日结束前；报满不代表截止。
+ *
+ * 刻意不跟随 `endsAt`（issue #362）：活动结束时间到了，成员端仍可接待到当日 24:00，
+ * 现场收尾不需要提前关门。
+ */
 export function canOperateActivityStaff(activity: StaffActivityWindow, now = new Date()): boolean {
   return (
     now.getTime() >= new Date(activity.signupClosesAt).getTime() &&
@@ -264,6 +305,33 @@ export function assertValidDeviceModel(value: unknown): string | null {
   return trimmed;
 }
 
+/**
+ * 地点：管理端表单必填，历史活动可能为空，因此服务层按「选填」处理 ——
+ * 缺省 / 空串落库为 null，前端在为空时不渲染该行。
+ */
+export function assertValidLocation(value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "string") {
+    throw new AppError("VALIDATION_FAILED", "活动地点格式无效", {
+      fieldErrors: { location: ["活动地点格式无效"] },
+    });
+  }
+  const trimmed = value.trim();
+  if (trimmed === "") return null;
+  if (trimmed.length > REPAIR_ACTIVITY_LOCATION_MAX_LENGTH) {
+    throw new AppError(
+      "VALIDATION_FAILED",
+      `地点不超过 ${REPAIR_ACTIVITY_LOCATION_MAX_LENGTH} 个字符`,
+      {
+        fieldErrors: {
+          location: [`不超过 ${REPAIR_ACTIVITY_LOCATION_MAX_LENGTH} 个字符`],
+        },
+      },
+    );
+  }
+  return trimmed;
+}
+
 export function assertValidIssueType(value: unknown): RepairActivityIssueType {
   if (
     typeof value !== "string" ||
@@ -334,23 +402,28 @@ export function shanghaiCalendarDay(activityAt: Date): string {
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
- * 「已结束」的排他上界：活动当天（Asia/Shanghai 自然日）结束后的次日 00:00（上海），
- * 返回对应的 UTC 时刻。ENDED 判定即 `now >= activityEndExclusive(activityAt)`。
+ * 「活动日结束」的排他上界：活动当天（Asia/Shanghai 自然日）结束后的次日 00:00（上海），
+ * 返回对应的 UTC 时刻。结束时间缺失时的 ENDED 判定与成员端接待窗口都用它：
+ * 有 `endsAt` 时 ENDED 用结束时间（见 `activityEndBoundary`），接待窗口始终用它。
  * 上海无夏令时，下一个自然日零点固定相隔 24 小时。
  */
 export function activityEndExclusive(activityAt: Date): Date {
   return new Date(startOfShanghaiDay(activityAt).getTime() + ONE_DAY_MS);
 }
 
-/** 公开排队只在活动开始后、活动上海自然日结束前展示。 */
+/**
+ * 公开排队只在活动开始后、活动结束前展示。
+ * 结束上界与 ENDED 判定同源（`activityEndBoundary`），避免公开页同时出现
+ * 「已结束」和「排队中」；历史活动缺结束时间时回退活动日次日 00:00（上海）。
+ */
 export function canShowPublicQueue(
-  activity: { activityAt: Date | string },
+  activity: { activityAt: Date | string; endsAt?: Date | string | null },
   now = new Date(),
 ): boolean {
   const activityAt = new Date(activity.activityAt);
   if (Number.isNaN(activityAt.getTime())) return false;
   return (
     now.getTime() >= activityAt.getTime() &&
-    now.getTime() < activityEndExclusive(activityAt).getTime()
+    now.getTime() < activityEndBoundary(activityAt, activity.endsAt).getTime()
   );
 }

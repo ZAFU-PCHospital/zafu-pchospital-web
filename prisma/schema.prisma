@@ -628,7 +628,9 @@ model RepairActivity {
   id             String                        @id @db.Char(36)
   version        Int                           @default(1)
   title          String                        @db.VarChar(120)
+  location       String?                       @db.VarChar(120)
   activityAt     DateTime                      @map("activity_at") @db.DateTime(3)
+  endsAt         DateTime?                     @map("ends_at") @db.DateTime(3)
   capacity       Int
   signupOpensAt  DateTime                      @map("signup_opens_at") @db.DateTime(3)
   signupClosesAt DateTime                      @map("signup_closes_at") @db.DateTime(3)

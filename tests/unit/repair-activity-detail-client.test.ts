@@ -81,10 +81,13 @@ function queueElement(node: ReactNode) {
 const activity: RepairActivityPublicView = {
   id: "a",
   title: "原活动",
+  location: "学 3-301 活动室",
   capacity: 10,
   registeredCount: 2,
   remaining: 8,
   activityAt: "2026-10-24T10:00:00Z",
+  // 缺结束时间的历史活动：排队 / 结束判定回退活动日次日 00:00（上海）。
+  endsAt: null,
   signupOpensAt: "2026-10-24T04:00:00Z",
   signupClosesAt: "2026-10-24T09:00:00Z",
   status: "UPCOMING",

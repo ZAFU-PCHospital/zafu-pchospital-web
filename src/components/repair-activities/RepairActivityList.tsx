@@ -14,6 +14,7 @@ import type { PaginationMeta } from "@/types/contracts";
 const PAGE_SIZE = 4;
 const TICKET_COPY: ActivityTicketCopy = {
   activityAt: repairActivitiesPage.activityAt,
+  location: repairActivitiesPage.location,
   capacity: repairActivitiesPage.capacity,
   remainingShort: repairActivitiesPage.remainingShort,
   endedHint: repairActivitiesPage.endedHint,
