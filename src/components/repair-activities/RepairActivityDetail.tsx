@@ -13,6 +13,7 @@ import { repairActivityStatusBadgeClass } from "@/components/repair-activities/a
 import { RepairActivityPrecautions } from "@/components/repair-activities/RepairActivityPrecautions";
 import { RepairActivityPreparation } from "@/components/repair-activities/RepairActivityPreparation";
 import { RepairActivityQueue } from "@/components/repair-activities/RepairActivityQueue";
+import { RepairActivityReceipt } from "@/components/repair-activities/RepairActivityReceipt";
 import { fetchRegistrationDeviceStatus } from "@/features/repair-activities/registration-device-client";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -1439,7 +1440,7 @@ export function RepairActivityDetail({ activityId }: Props) {
       {pendingSignup ? (
         <ConfirmDialog
           title={signupSucceeded ? copy.signupSuccessTitle : copy.consent.title}
-          confirmLabel={signupSucceeded ? copy.acknowledgePrecautions : copy.consent.agree}
+          confirmLabel={signupSucceeded ? copy.receipt.acknowledge : copy.consent.agree}
           cancelLabel={signupSucceeded ? undefined : copy.confirmEdit}
           busy={!signupSucceeded && busy}
           onConfirm={signupSucceeded ? closeSignupDialog : () => void confirmSignup()}
@@ -1464,10 +1465,26 @@ export function RepairActivityDetail({ activityId }: Props) {
               <p className="muted">{copy.confirmIdentityHint}</p>
             </div>
           ) : null}
-          <div className="admin-section">
-            <p className="muted">{signupSucceeded ? copy.signupSuccess : copy.consent.subtitle}</p>
-            {signupSucceeded ? <RepairActivityPreparation /> : <RepairActivityPrecautions />}
-          </div>
+          {/* 成功态换成一屏可截图的到场凭条：票根 + 一行到场准备（issue #363）。
+              完整四条准备仍在页面常驻区，凭条里不展开。 */}
+          {signupSucceeded ? (
+            registrationResult ? (
+              <div className={styles.receiptWrap}>
+                <RepairActivityReceipt activity={activity} registration={registrationResult} />
+                <div className={styles.receiptPrep}>
+                  <p className={styles.receiptPrepLabel}>{copy.receipt.preparationLabel}</p>
+                  <RepairActivityPreparation layout="inline" />
+                </div>
+              </div>
+            ) : (
+              <p className="muted">{copy.signupSuccess}</p>
+            )
+          ) : (
+            <div className="admin-section">
+              <p className="muted">{copy.consent.subtitle}</p>
+              <RepairActivityPrecautions />
+            </div>
+          )}
         </ConfirmDialog>
       ) : null}
 

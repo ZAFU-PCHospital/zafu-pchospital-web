@@ -383,3 +383,110 @@
     gap: var(--s-7);
   }
 }
+
+/* 报名成功凭条（issue #363）：票根式两段，窄屏一屏内可截图。 */
+.receiptWrap {
+  display: grid;
+  gap: var(--s-4);
+}
+
+.receipt {
+  display: grid;
+  gap: var(--s-3);
+  padding: var(--s-4);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-mid);
+  background: var(--surface-1);
+}
+
+.receiptHead {
+  display: grid;
+  gap: var(--s-1);
+}
+
+.receiptKicker {
+  margin: 0;
+  color: var(--accent-deep);
+  font-size: var(--t-xs);
+  font-weight: 600;
+  letter-spacing: 0.12em;
+}
+
+.receiptTitle {
+  margin: 0;
+  color: var(--ink);
+  font-size: var(--t-lg);
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.receiptMeta,
+.receiptFields {
+  display: grid;
+  gap: var(--s-2);
+  margin: 0;
+}
+
+.receiptMeta > div,
+.receiptFields > div {
+  display: grid;
+  grid-template-columns: minmax(4.5rem, auto) minmax(0, 1fr);
+  gap: var(--s-3);
+  align-items: baseline;
+}
+
+.receiptMeta dt,
+.receiptFields dt {
+  color: var(--ink-3);
+  font-size: var(--t-sm);
+}
+
+.receiptMeta dd,
+.receiptFields dd {
+  margin: 0;
+  color: var(--ink);
+  font-size: var(--t-sm);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.receiptDivider {
+  display: block;
+  border-block-start: 1px dashed var(--line-strong);
+}
+
+.receiptHint {
+  margin: 0;
+  color: var(--ink-3);
+  font-size: var(--t-xs);
+  text-align: center;
+}
+
+.receiptPrep {
+  display: grid;
+  gap: var(--s-1);
+}
+
+.receiptPrepLabel {
+  margin: 0;
+  color: var(--ink-3);
+  font-size: var(--t-xs);
+}
+
+/* 到场准备的一行摘要：完整四条仍由常驻区展示。 */
+.preparationInline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-1) var(--s-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--ink-2);
+  font-size: var(--t-sm);
+}
+
+.preparationInline li + li::before {
+  content: "·";
+  margin-inline-end: var(--s-2);
+  color: var(--ink-4);
+}

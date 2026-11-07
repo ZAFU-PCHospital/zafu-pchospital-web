@@ -588,6 +588,49 @@ test("完整须知可展开且提交前必须同意，成功只展示到场准�
   assert.equal(ui.requests.filter((request) => request.init.method === "POST").length, 1);
 });
 
+test("报名成功弹层渲染一屏凭条：活动名、起止时间、地点、凭条字段与一行到场准备", async (t) => {
+  const ui = await mount(t);
+  await ui.finish(0, { ...activity, endsAt: "2026-10-24T12:00:00Z" });
+  const consent = ui.requestSignup();
+  (consent.props.onConfirm as () => void)();
+  // 倒计时归零后组件会自行复查状态，GET 条数不固定：按方法定位那条 POST。
+  const postIndex = ui.requests.findIndex((request) => request.init.method === "POST");
+  assert.ok(postIndex >= 0, "确认后必须发出报名 POST");
+  ui.requests[postIndex].finish(Response.json({ success: true, data: registration }));
+  await setImmediate();
+
+  const { RepairActivityReceipt } =
+    await import("../../src/components/repair-activities/RepairActivityReceipt");
+  const { RepairActivityPreparation } =
+    await import("../../src/components/repair-activities/RepairActivityPreparation");
+  const { RepairActivityPrecautions } =
+    await import("../../src/components/repair-activities/RepairActivityPrecautions");
+
+  const success = signupDialog(ui.view());
+  assert.ok(success);
+  const receipt = findElement(success, (element) => element.type === RepairActivityReceipt);
+  assert.ok(receipt, "成功态必须是凭条，而不是一段纯文字");
+
+  const content = text(RepairActivityReceipt(receipt.props as never));
+  assert.ok(content.includes(activity.title), "凭条要有活动名称");
+  assert.ok(content.includes("2026/10/24 18:00–20:00"), "凭条要有起止时间区间");
+  assert.ok(content.includes(activity.location!), "凭条要有地点");
+  assert.ok(content.includes(registration.name), "凭条要有姓名");
+  assert.ok(content.includes(registration.phoneMasked), "凭条要有脱敏手机");
+  assert.ok(content.includes(repairActivitiesPage.detail.receipt.screenshotHint), "截图提示");
+
+  const preparation = findElement(
+    success,
+    (element) => element.type === RepairActivityPreparation,
+  );
+  assert.equal(preparation?.props.layout, "inline", "凭条下方只保留一行到场准备");
+  assert.equal(
+    findElement(success, (element) => element.type === RepairActivityPrecautions),
+    undefined,
+    "凭条里不展开完整须知",
+  );
+});
+
 test("非法手机号在打开确认弹层前拦截并可纠正", async (t) => {
   const ui = await mount(t);
   await ui.finish(0, { ...activity, status: "OPEN" });

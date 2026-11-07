@@ -116,7 +116,16 @@ export const repairActivitiesPage = {
     lookupConfirmed: "已确认报名成功",
     precautionsTitle: "到场前，记好这四件事",
     signupSuccessTitle: "报名成功",
-    acknowledgePrecautions: "我已知晓",
+    /** 报名成功凭条（issue #363）：一屏内可截图，字段名与提示统一在这里维护。 */
+    receipt: {
+      kicker: "报名凭条",
+      registeredAt: "报名时间",
+      deviceModel: "机型",
+      screenshotHint: "可截图保存本页，到场出示本凭条",
+      preparationLabel: "到场准备",
+      /** 凭条弹层的确认按钮：比「我已知晓」更贴合「拿着凭条到场」。 */
+      acknowledge: "知道了，我到场出示",
+    },
     signupConsentHint: "提交前会展示完整须知，征得同意后才会报名",
     fullPrecautions: "完整报名须知与免责声明 · {count} 条",
     serviceTitle: "服务说明",
