@@ -449,10 +449,16 @@
   background: var(--surface-1);
 }
 
+/* 活动信息段带一层成功色底（wash），像票根的上半联；负边距让底色铺满卡宽到圆角内侧。 */
 .receiptActivity {
   display: grid;
   gap: var(--s-3);
   min-width: 0;
+  margin: calc(var(--s-3) * -1) calc(var(--s-4) * -1) 0;
+  padding: var(--s-3) var(--s-4);
+  border-start-start-radius: 11px;
+  border-start-end-radius: 11px;
+  background: var(--status-success-wash);
   animation: receipt-block-in var(--d-mid) var(--ease-quart) 60ms both;
 }
 
@@ -463,7 +469,7 @@
 
 .receiptKicker {
   margin: 0;
-  color: var(--status-success-deep);
+  color: var(--ink);
   font-size: var(--t-xs);
   font-weight: 600;
   letter-spacing: 0.12em;
@@ -573,12 +579,14 @@
   overflow-wrap: anywhere;
 }
 
-/* 打孔撕票线：横向虚线贯穿卡宽，两端半圆缺口纯 CSS。 */
+/* 打孔撕票线：横向虚线贯穿卡宽，两端半圆缺口纯 CSS。
+   缺口底色与上方活动段同色（wash），并让整条线落在绿色块内，避免露出白底或错色。 */
 .receiptDivider {
   position: relative;
   align-self: stretch;
   border-block-start: 1px dashed var(--line-strong);
   margin-inline: calc(var(--s-4) * -1);
+  margin-block-start: -0.5rem;
 }
 
 .receiptDivider::before,
@@ -590,7 +598,7 @@
   block-size: 0.75rem;
   border: 1px solid var(--line-strong);
   border-radius: 50%;
-  background: var(--surface-1);
+  background: var(--status-success-wash);
   transform: translateY(-50%);
 }
 
@@ -644,7 +652,7 @@
   inline-size: 1rem;
   block-size: 1rem;
   flex: none;
-  color: var(--status-success-deep);
+  color: var(--accent);
 }
 
 @keyframes receipt-block-in {
