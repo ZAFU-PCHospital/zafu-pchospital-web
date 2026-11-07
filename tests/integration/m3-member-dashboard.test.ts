@@ -232,6 +232,44 @@ async function createApprovedRepair(
   );
 }
 
+/** 直接建一场活动及“已接待未建单”的登记行，用于工作台待补单断言。 */
+async function createPendingServe(
+  memberProfileId: string,
+  label: string,
+  phoneSuffix: string,
+  servedAt: Date = FIXED_NOW,
+) {
+  const now = FIXED_NOW;
+  const activity = await getDb().repairActivity.create({
+    data: {
+      id: randomUUID(),
+      title: `M3 待补单-${label}`,
+      activityAt: now,
+      capacity: 10,
+      signupOpensAt: new Date(now.getTime() - 60 * 60 * 1000),
+      signupClosesAt: new Date(now.getTime() + 60 * 60 * 1000),
+      createdAt: now,
+      updatedAt: now,
+    },
+  });
+  const registration = await getDb().repairActivityRegistration.create({
+    data: {
+      id: randomUUID(),
+      activityId: activity.id,
+      name: "M3 待补单客户",
+      phone: `1390000${phoneSuffix}`,
+      phoneLast4: phoneSuffix,
+      issueType: "OTHER",
+      status: "SERVED",
+      servedAt,
+      servedByMemberProfileId: memberProfileId,
+      createdAt: now,
+      updatedAt: now,
+    },
+  });
+  return { activity, registration };
+}
+
 // ---------------------------------------------------------------------------
 // Seed 与技能读取
 // ---------------------------------------------------------------------------
@@ -771,6 +809,7 @@ dbTest("M3 成员接口响应信封固定为 success/data/meta 且带私有缓�
     "degraded",
     "favorites",
     "notifications",
+    "pendingServes",
     "profile",
     "ranking",
     "recentActivity",
@@ -815,6 +854,95 @@ dbTest("M3 成员接口响应信封固定为 success/data/meta 且带私有缓�
     "metric",
     "scope",
   ]);
+});
+
+dbTest("M3 工作台只返回本人待补单，并带继续填写字段", async () => {
+  const owner = await createMember("待补单本人");
+  const other = await createMember("待补单他人");
+  const own = await createPendingServe(owner.member.id, "本人", "0001");
+  const later = await createPendingServe(
+    owner.member.id,
+    "较新",
+    "0004",
+    new Date(FIXED_NOW.getTime() + 60 * 1000),
+  );
+  const otherPending = await createPendingServe(other.member.id, "他人", "0002");
+  const removed = await createPendingServe(owner.member.id, "已删除", "0003");
+  await getDb().repairActivityRegistration.update({
+    where: { id: removed.registration.id },
+    data: { deletedAt: FIXED_NOW },
+  });
+  const removedActivity = await createPendingServe(owner.member.id, "活动已删除", "0005");
+  await getDb().repairActivity.update({
+    where: { id: removedActivity.activity.id },
+    data: { deletedAt: FIXED_NOW },
+  });
+  const recorded = await createPendingServe(owner.member.id, "已建单", "0006");
+  const draft = await repairService.createDraft(
+    { idempotencyKey: randomUUID() },
+    memberActor(owner.member.userId, "req_m3_pending_record"),
+  );
+  await getDb().repairActivityRegistration.update({
+    where: { id: recorded.registration.id },
+    data: { repairRecordId: draft.id },
+  });
+
+  try {
+    const dashboard = await memberDashboardService.getDashboard(
+      memberActor(owner.member.userId, "req_m3_pending_serve"),
+      FIXED_NOW,
+    );
+    assert.deepEqual(
+      dashboard.pendingServes.map((pending) => pending.registrationId),
+      [later.registration.id, own.registration.id],
+      "待补单按接待时间倒序，并排除已删除、活动已删除与已建单记录",
+    );
+    const item = dashboard.pendingServes[1];
+    assert.equal(item.name, "M3 待补单客户");
+    assert.equal(item.activityId, own.activity.id);
+    assert.equal(item.activityTitle, own.activity.title);
+    assert.equal(item.activityAt, FIXED_NOW.toISOString());
+    assert.equal(
+      dashboard.pendingServes.some(
+        (pending) => pending.registrationId === otherPending.registration.id,
+      ),
+      false,
+      "不能返回其他成员的待补单",
+    );
+    assert.equal(
+      dashboard.pendingServes.some((pending) => pending.registrationId === removed.registration.id),
+      false,
+      "已删除的待补单不能返回",
+    );
+    assert.equal(
+      dashboard.pendingServes.some(
+        (pending) => pending.registrationId === removedActivity.registration.id,
+      ),
+      false,
+      "活动已软删除的待补单不能返回",
+    );
+    assert.equal(
+      dashboard.pendingServes.some(
+        (pending) => pending.registrationId === recorded.registration.id,
+      ),
+      false,
+      "已建单的待补单不能返回",
+    );
+    assert.equal(dashboard.degraded.includes("pendingServes"), false);
+  } finally {
+    const activityIds = [
+      own.activity.id,
+      later.activity.id,
+      otherPending.activity.id,
+      removed.activity.id,
+      removedActivity.activity.id,
+      recorded.activity.id,
+    ];
+    await getDb().repairActivityRegistration.deleteMany({
+      where: { activityId: { in: activityIds } },
+    });
+    await getDb().repairActivity.deleteMany({ where: { id: { in: activityIds } } });
+  }
 });
 
 dbTest("M3 越权字段被拒而不是被静默忽略", async () => {

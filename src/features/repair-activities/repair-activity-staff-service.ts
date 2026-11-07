@@ -32,6 +32,7 @@ import { getDb } from "@/lib/db/client";
 import { inSerializableTransaction } from "@/lib/db/transaction";
 import type {
   AuthorizedActor,
+  MemberPendingServe,
   RepairDraftFields,
   RepairMemberOption,
   RepairStatus,
@@ -306,7 +307,36 @@ function pendingServeWhere(memberProfileId: string) {
     servedByMemberProfileId: memberProfileId,
     repairRecordId: null,
     deletedAt: null,
+    // 活动软删后无法再进入预填表单，遗留登记不能继续展示或拦截接待。
+    activity: { deletedAt: null },
   };
+}
+
+/**
+ * 本人全部待补单。工作台与接待台共用同一判据；
+ * 正常流程受全局接待拦截约束，至多一条；仍按列表返回以兼容历史数据。
+ * 调用方必须传入服务端会话推导出的 memberProfileId。
+ */
+export async function listPendingServesForMember(
+  memberProfileId: string,
+): Promise<MemberPendingServe[]> {
+  const registrations = await getDb().repairActivityRegistration.findMany({
+    where: pendingServeWhere(memberProfileId),
+    orderBy: [{ servedAt: "desc" }, { id: "desc" }],
+    select: {
+      id: true,
+      name: true,
+      activityId: true,
+      activity: { select: { title: true, activityAt: true } },
+    },
+  });
+  return registrations.map((registration) => ({
+    registrationId: registration.id,
+    name: registration.name,
+    activityId: registration.activityId,
+    activityTitle: registration.activity.title,
+    activityAt: registration.activity.activityAt.toISOString(),
+  }));
 }
 
 async function findPendingServe(memberProfileId: string): Promise<StaffPendingServe | null> {

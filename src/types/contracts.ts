@@ -1089,6 +1089,19 @@ export type MemberWorkQueue = {
   rejectedCount: number;
 };
 
+/**
+ * 成员已接待、但还没创建维修单的记录。
+ *
+ * 只下发给接待者本人；`registrationId + activityId` 用于打开现有预填表单。
+ */
+export type MemberPendingServe = {
+  registrationId: string;
+  name: string;
+  activityId: string;
+  activityTitle: string;
+  activityAt: string;
+};
+
 /** M4/M5 尚未接入的中性占位。**禁止**为其编造业务数字。 */
 export type DeferredModule = {
   available: false;
@@ -1107,6 +1120,7 @@ export type MemberDashboardDegraded =
   | "workQueue"
   | "recentRepairs"
   | "recentActivity"
+  | "pendingServes"
   | "notifications"
   | "favorites"
   | "ranking";
@@ -1278,6 +1292,8 @@ export type MemberDashboard = {
   profile: MemberProfileSummary;
   repairSummary: MemberRepairSummary;
   workQueue: MemberWorkQueue;
+  /** 本人已接待、尚未建单的记录；按接待时间倒序。 */
+  pendingServes: MemberPendingServe[];
   recentRepairs: MemberRecentRepair[];
   recentActivity: MemberRecentActivity[];
   /** 加载失败的区块清单；空数组表示全部成功。 */

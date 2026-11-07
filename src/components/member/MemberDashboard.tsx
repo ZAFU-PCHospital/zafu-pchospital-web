@@ -6,7 +6,9 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { DashGroup, DashStat, DashStats, DashTile } from "@/components/ui/dash";
 import { MemberAvatar } from "@/components/member/MemberAvatar";
+import { isDashboardAllClear } from "@/components/member/dashboard-all-clear";
 import { MemberMetrics } from "@/components/member/MemberMetrics";
+import { MemberPendingServes } from "@/components/member/MemberPendingServes";
 import { MemberRankingPreviewView } from "@/components/member/MemberRankingPreview";
 import { MemberRecentRepairs } from "@/components/member/MemberRecentRepairs";
 import { MemberSection } from "@/components/member/MemberSection";
@@ -88,17 +90,19 @@ export function MemberDashboard({ initialDisplayName, roles }: MemberDashboardPr
 
   const queueFailed = data?.degraded.includes("workQueue") ?? false;
   const queue = queueFailed ? null : (data?.workQueue ?? null);
+  const pendingServes = data?.pendingServes ?? [];
+  const pendingServesFailed = data?.degraded.includes("pendingServes") ?? false;
   const unread = data
     ? data.notifications.available
       ? data.notifications.unreadCount
       : null
     : null;
-  const allClear =
-    queue !== null &&
-    queue.draftCount === 0 &&
-    queue.pendingCount === 0 &&
-    queue.rejectedCount === 0 &&
-    (unread === null || unread === 0);
+  const allClear = isDashboardAllClear({
+    queue,
+    pendingServeCount: pendingServes.length,
+    pendingServesFailed,
+    unread,
+  });
 
   return (
     <>
@@ -149,6 +153,15 @@ export function MemberDashboard({ initialDisplayName, roles }: MemberDashboardPr
               </h2>
               <span className="dash-block__tag">{copy.actionTag}</span>
             </div>
+            {pendingServes.length > 0 ? <MemberPendingServes items={pendingServes} /> : null}
+            {pendingServesFailed ? (
+              <p className="dash-note">
+                {copy.pendingServeLoadFailed}{" "}
+                <button className="dash-note__retry" type="button" onClick={() => void load()}>
+                  {memberCopy.common.reload}
+                </button>
+              </p>
+            ) : null}
             <DashStats>
               <DashStat
                 label={copy.actionDraft}

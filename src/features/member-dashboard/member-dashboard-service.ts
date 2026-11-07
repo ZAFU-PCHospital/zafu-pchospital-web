@@ -10,6 +10,7 @@ import { toSkillView } from "@/features/skills/skill-service";
 import { summarizeFavorites } from "@/features/community/favorite-service";
 import { summarizeNotifications } from "@/features/community/notification-service";
 import { rankingService } from "@/features/analytics/ranking-service";
+import { listPendingServesForMember } from "@/features/repair-activities/repair-activity-staff-service";
 import {
   settleCommunity,
   toFavoriteSummary,
@@ -38,7 +39,7 @@ export const memberDashboardService: MemberDashboardServiceContract = {
     requirePermission(actor, "member.profile.read_self");
     const row = await memberProfileRepository.activeForUser(actor.userId);
 
-    const [skills, overview, notifications, favorites, ranking] = await Promise.all([
+    const [skills, overview, notifications, favorites, ranking, pendingServes] = await Promise.all([
       skillRepository.listMemberSkills(row.id),
       loadMemberOverview({
         memberProfileId: row.id,
@@ -48,6 +49,7 @@ export const memberDashboardService: MemberDashboardServiceContract = {
       settleCommunity(summarizeNotifications(row.id, actor)),
       settleCommunity(summarizeFavorites(row.id)),
       settleCommunity(rankingService.getYearPreview(row.id, actor, now)),
+      settleCommunity(listPendingServesForMember(row.id)),
     ]);
 
     return {
@@ -55,11 +57,13 @@ export const memberDashboardService: MemberDashboardServiceContract = {
       repairSummary:
         overview.repairSummary.status === "ready" ? overview.repairSummary.data : EMPTY_SUMMARY,
       workQueue: overview.workQueue.status === "ready" ? overview.workQueue.data : EMPTY_QUEUE,
+      pendingServes: pendingServes.status === "ready" ? pendingServes.data : [],
       recentRepairs: overview.recentRepairs.status === "ready" ? overview.recentRepairs.data : [],
       recentActivity:
         overview.recentActivity.status === "ready" ? overview.recentActivity.data : [],
       degraded: [
         ...degradedSections(overview),
+        ...(pendingServes.status === "failed" ? (["pendingServes"] as const) : []),
         ...(notifications.status === "failed" ? (["notifications"] as const) : []),
         ...(favorites.status === "failed" ? (["favorites"] as const) : []),
         ...(ranking.status === "failed" ? (["ranking"] as const) : []),

@@ -212,6 +212,14 @@ export const memberCopy = {
     actionUnread: "未读消息",
     actionAllClear: "待办都处理完了，去登记一次新的维修吧",
 
+    /** 活动接待完成后尚未建单的记录；入口复用现有预填维修表单。 */
+    pendingServeTitle: "接待待补单",
+    pendingServeHint: "已接待客户，还没有创建维修记录",
+    pendingServeCount: "{count} 条",
+    pendingServeActivityAt: "活动时间",
+    pendingServeContinue: "继续填写",
+    pendingServeLoadFailed: "待补单读取失败",
+
     metricsTitle: "维修概览",
     metricsTag: "Repair Metrics",
     metricTotal: "累计已通过",
