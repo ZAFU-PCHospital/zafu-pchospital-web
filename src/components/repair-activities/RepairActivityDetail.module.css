@@ -384,26 +384,76 @@
   }
 }
 
-/* 报名成功凭条（issue #363）：票根式两段 + 打孔撕票线，窄屏一屏内可截图。 */
-.receiptWrap {
+/* 报名成功凭条（issue #363）：成功提示 + 票根卡片 + 到场准备。
+   动效只动 transform / opacity；减弱动效时只保留淡入。 */
+.receiptSuccess {
   display: grid;
-  gap: var(--s-4);
+  gap: var(--s-3);
 }
 
+/* 顶部成功区：图标 + 标题 + 一句说明，不占高度。 */
+.successHero {
+  display: grid;
+  justify-items: center;
+  gap: var(--s-1);
+  text-align: center;
+  animation: receipt-block-in var(--d-mid) var(--ease-quart) both;
+}
+
+.successIcon {
+  display: grid;
+  place-items: center;
+  inline-size: 2.25rem;
+  block-size: 2.25rem;
+  border-radius: 50%;
+  color: var(--status-success-on);
+  background: var(--status-success);
+  animation: receipt-icon-in var(--d-slow) var(--ease-quart) both;
+}
+
+.successIcon svg {
+  inline-size: 1.35rem;
+  block-size: 1.35rem;
+}
+
+/* Check 用 stroke-dashoffset 描边绘制。 */
+.successCheck {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: receipt-check-draw var(--d-slow) var(--ease-quart) 80ms both;
+}
+
+.successTitle {
+  margin: 0;
+  color: var(--ink);
+  /* 1.3125 × --t-base（1rem）≈ 21px：成功标题，仍由令牌派生 */
+  font-size: calc(var(--t-base) * 1.3125);
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.successLead {
+  margin: 0;
+  color: var(--ink-3);
+  font-size: var(--t-sm);
+}
+
+/* 凭条卡片：白底、浅绿描边、12px 圆角、无阴影。 */
 .receipt {
   position: relative;
   display: grid;
-  gap: var(--s-4);
-  padding: var(--s-4);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r-mid);
+  gap: var(--s-3);
+  padding: var(--s-3) var(--s-4);
+  border: 1px solid var(--status-success-line);
+  border-radius: 12px;
   background: var(--surface-1);
 }
 
-/* 活动段：抬头 + 时间/地点；桌面左右两段时靠 min-width: 0 防长内容撑破网格。 */
 .receiptActivity {
   display: grid;
+  gap: var(--s-3);
   min-width: 0;
+  animation: receipt-block-in var(--d-mid) var(--ease-quart) 60ms both;
 }
 
 .receiptHead {
@@ -423,6 +473,7 @@
   margin: 0;
   color: var(--ink);
   font-size: var(--t-lg);
+  font-weight: 700;
   line-height: 1.3;
   overflow-wrap: anywhere;
 }
@@ -441,8 +492,18 @@
 }
 
 .receiptMeta dt {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1);
   color: var(--ink-3);
   font-size: var(--t-sm);
+}
+
+.receiptMeta dt svg {
+  inline-size: 0.9em;
+  block-size: 0.9em;
+  flex: none;
+  color: var(--ink-4);
 }
 
 .receiptMeta dd {
@@ -455,24 +516,31 @@
 
 .receiptHolder {
   display: grid;
-  gap: var(--s-3);
+  gap: var(--s-2);
   min-width: 0;
+  animation: receipt-block-in var(--d-mid) var(--ease-quart) 120ms both;
 }
 
 .receiptFields {
   display: grid;
-  gap: var(--s-3);
+  gap: var(--s-2);
   margin: 0;
 }
 
-/* 核验字段：姓名与手机号是第一眼，字号 ≈17px（由 --t-base 派生，不写死像素）。 */
+/* 参与者：姓名与手机号两列并排，是这一段的第一眼。 */
 .receiptIdentity {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--s-3);
 }
 
-.receiptIdentity dt {
+.receiptIdentity > div,
+.receiptBooking > div {
+  min-width: 0;
+}
+
+.receiptIdentity dt,
+.receiptBooking dt {
   color: var(--ink-3);
   font-size: var(--t-xs);
 }
@@ -480,33 +548,32 @@
 .receiptIdentity dd {
   margin: var(--s-1) 0 0;
   color: var(--ink);
-  /* 1.0625 × --t-base（1rem）≈ 17px：凭条第一眼字号，仍由令牌派生 */
+  /* 1.0625 × --t-base（1rem）≈ 17px：核验字段字号，仍由令牌派生 */
   font-size: calc(var(--t-base) * 1.0625);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
 }
 
-/* 次要信息三列；机型缺省时自动收窄为两列。 */
-.receiptSecondary {
+/* 预约信息：报名时间 + 故障类型两列，机型独占整行，长文本自动换行。 */
+.receiptBooking {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--s-3);
 }
 
-.receiptSecondary dt {
-  color: var(--ink-3);
-  font-size: var(--t-xs);
+.receiptBookingWide {
+  grid-column: 1 / -1;
 }
 
-.receiptSecondary dd {
+.receiptBooking dd {
   margin: var(--s-1) 0 0;
   color: var(--ink-2);
   font-size: var(--t-sm);
   overflow-wrap: anywhere;
 }
 
-/* 打孔撕票线：横向虚线贯穿卡宽，两端半圆缺口；桌面转竖向居中。 */
+/* 打孔撕票线：横向虚线贯穿卡宽，两端半圆缺口纯 CSS。 */
 .receiptDivider {
   position: relative;
   align-self: stretch;
@@ -544,7 +611,8 @@
 
 .receiptPrep {
   display: grid;
-  gap: var(--s-1);
+  gap: var(--s-2);
+  animation: receipt-block-in var(--d-mid) var(--ease-quart) 180ms both;
 }
 
 .receiptPrepLabel {
@@ -553,50 +621,82 @@
   font-size: var(--t-xs);
 }
 
-/* 到场准备的一行摘要：完整四条仍由常驻区展示。 */
-.preparationInline {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--s-1) var(--s-2);
+/* 到场准备：两列图标 + 标题，不再套一层卡片。 */
+.preparationCompact {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s-2) var(--s-3);
   margin: 0;
   padding: 0;
   list-style: none;
+}
+
+.preparationCompact li {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-width: 0;
   color: var(--ink-2);
   font-size: var(--t-sm);
 }
 
-.preparationInline li + li::before {
-  content: "·";
-  margin-inline-end: var(--s-2);
-  color: var(--ink-4);
+.preparationCompact svg {
+  inline-size: 1rem;
+  block-size: 1rem;
+  flex: none;
+  color: var(--status-success-deep);
 }
 
-@media (min-width: 40rem) {
-  /* 桌面：凭条左右两段，撕票线竖向居中，缺口在上下边缘。 */
-  .receipt {
-    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-    gap: var(--s-5);
-    padding: var(--s-5);
-    align-items: start;
+@keyframes receipt-block-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes receipt-icon-in {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes receipt-check-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes receipt-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* 减弱动效：保留淡入，去掉位移与缩放；描边仍画完（不产生位移）。 */
+@media (prefers-reduced-motion: reduce) {
+  .successHero,
+  .receiptActivity,
+  .receiptHolder,
+  .receiptPrep {
+    animation: receipt-fade-in var(--d-ui) ease both;
   }
 
-  .receiptDivider {
-    margin-inline: 0;
-    border-block-start: none;
-    border-inline-start: 1px dashed var(--line-strong);
-  }
-
-  .receiptDivider::before,
-  .receiptDivider::after {
-    top: -0.375rem;
-    bottom: auto;
-    inset-inline-start: 50%;
-    inset-inline-end: auto;
-    transform: translateX(-50%);
-  }
-
-  .receiptDivider::after {
-    top: auto;
-    bottom: -0.375rem;
+  .successIcon {
+    animation: none;
   }
 }

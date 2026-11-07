@@ -1441,8 +1441,12 @@ export function RepairActivityDetail({ activityId }: Props) {
         <ConfirmDialog
           title={signupSucceeded ? copy.signupSuccessTitle : copy.consent.title}
           titleTone={signupSucceeded ? "success" : "default"}
-          /* 成功态是只读凭条：隐藏确认与取消按钮，只留标题栏 ✕ / Esc / 遮罩关闭。 */
-          confirmLabel={signupSucceeded ? null : copy.consent.agree}
+          /* 成功态：标题只在读屏里，可见标题由凭条顶部承担；右上角只留图标 ✕。
+             底部单独给一个「关闭」按钮（fit 布局固定在底部），Esc / 遮罩同样可关。 */
+          titleHidden={signupSucceeded}
+          closeIconOnly={signupSucceeded}
+          layout={signupSucceeded ? "fit" : "scroll"}
+          confirmLabel={signupSucceeded ? copy.receipt.close : copy.consent.agree}
           cancelLabel={signupSucceeded ? undefined : copy.confirmEdit}
           busy={!signupSucceeded && busy}
           onConfirm={signupSucceeded ? closeSignupDialog : () => void confirmSignup()}
@@ -1468,17 +1472,10 @@ export function RepairActivityDetail({ activityId }: Props) {
               <p className="muted">{copy.confirmIdentityHint}</p>
             </div>
           ) : null}
-          {/* 成功态换成一屏可截图的到场凭条：票根 + 一行到场准备（issue #363）。
-              完整四条准备仍在页面常驻区，凭条里不展开。 */}
+          {/* 成功态换成一屏可截图的到场凭条（成功区 + 票根 + 到场准备），issue #363。 */}
           {signupSucceeded ? (
             registrationResult ? (
-              <div className={styles.receiptWrap}>
-                <RepairActivityReceipt activity={activity} registration={registrationResult} />
-                <div className={styles.receiptPrep}>
-                  <p className={styles.receiptPrepLabel}>{copy.receipt.preparationLabel}</p>
-                  <RepairActivityPreparation layout="inline" />
-                </div>
-              </div>
+              <RepairActivityReceipt activity={activity} registration={registrationResult} />
             ) : (
               <p className="muted">{copy.signupSuccess}</p>
             )

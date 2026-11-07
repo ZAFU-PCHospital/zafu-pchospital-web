@@ -7,19 +7,21 @@ import styles from "./RepairActivityDetail.module.css";
 /**
  * 常驻区、成功提醒与列表页共用的到场行动摘要；完整声明仍由 Precautions 展示。
  *
- * `inline` 用于报名成功凭条（issue #363）：只给一行要点（「备份数据 · 携带电源 · 自备耗材」），
- * 完整四条仍留在页面常驻区，避免凭条被撑长后一屏截不全。
+ * - `compact`：两列图标 + 标题（不带描述），用于报名成功凭条下方的到场准备模块。
  */
 export function RepairActivityPreparation({
   layout = "list",
-}: { layout?: "list" | "grid" | "inline" } = {}) {
+}: { layout?: "list" | "grid" | "compact" } = {}) {
   const items = repairActivitiesPage.detail.preparation;
 
-  if (layout === "inline") {
+  if (layout === "compact") {
     return (
-      <ul className={styles.preparationInline}>
+      <ul className={styles.preparationCompact}>
         {items.map((item) => (
-          <li key={item.title}>{item.title}</li>
+          <li key={item.title}>
+            <Icon name={item.icon} />
+            <span>{item.title}</span>
+          </li>
         ))}
       </ul>
     );

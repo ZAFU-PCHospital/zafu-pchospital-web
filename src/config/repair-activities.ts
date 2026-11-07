@@ -119,10 +119,12 @@ export const repairActivitiesPage = {
     /** 报名成功凭条（issue #363）：一屏内可截图，字段名与提示统一在这里维护。 */
     receipt: {
       kicker: "报名凭条",
+      successLead: "报名信息已确认，请按时到场",
       registeredAt: "报名时间",
       deviceModel: "机型",
-      screenshotHint: "可截图保存本页，到场出示本凭条",
+      screenshotHint: "请截图保存，到场后出示此凭条",
       preparationLabel: "到场准备",
+      close: "关闭",
     },
     signupConsentHint: "提交前会展示完整须知，征得同意后才会报名",
     fullPrecautions: "完整报名须知与免责声明 · {count} 条",

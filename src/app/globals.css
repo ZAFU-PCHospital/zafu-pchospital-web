@@ -6228,6 +6228,12 @@ html[data-theme="black-yellow"] {
        92% 不透明度：背景仍能看出「后面还有一页」，但已不可读，焦点稳定落在窗口上。 */
     background: var(--bg-deep);
     opacity: 0.92;
+    animation: admin-veil-in var(--d-mid) var(--ease-quart) both;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .admin-modal__veil {
+      animation: none;
+    }
   }
   .admin-modal__window {
     position: relative;
@@ -6247,6 +6253,73 @@ html[data-theme="black-yellow"] {
   /* 窄档：详情类内容（如报名成功凭条）在桌面也不铺满整宽。 */
   .admin-modal__window--narrow {
     inline-size: min(40rem, 100%);
+  }
+  /* 正文里有更大的可见标题时，弹层标题只留给读屏（aria-labelledby 仍指向它）。 */
+  .admin-modal__title--visually-hidden {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
+  /* 纯图标关闭按钮：方形点击区，触控与键盘都够大。 */
+  .admin-modal__close-icon {
+    inline-size: 2.5rem;
+    block-size: 2.5rem;
+    padding: 0;
+    justify-content: center;
+  }
+  /* fit 布局：窗口按内容自适应高度，动作区固定在底部、正文单独滚动。 */
+  .admin-modal .admin-modal__window--fit {
+    block-size: auto;
+    max-block-size: min(100dvh - var(--s-5), 52rem);
+    grid-template-rows: auto minmax(0, 1fr) auto;
+  }
+  .admin-modal__window--fit .admin-modal__body {
+    padding-block-end: var(--s-4);
+  }
+  .admin-modal__footer {
+    padding: var(--s-3) clamp(1.25rem, 3vw, 2rem);
+    border-top: 1px solid var(--line);
+    background: var(--surface-1);
+  }
+  .admin-modal__footer .signup__actions {
+    padding-top: 0;
+    border-top: none;
+  }
+  .admin-modal__footer .btn {
+    flex: 1 1 auto;
+    justify-content: center;
+    transition:
+      transform var(--d-fast) var(--ease-quart),
+      color var(--d-fast) var(--ease-quart),
+      background-color var(--d-fast) var(--ease-quart),
+      border-color var(--d-fast) var(--ease-quart);
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .admin-modal__footer .btn:hover {
+      transform: translateY(-1px);
+    }
+  }
+  .admin-modal__footer .btn:active {
+    transform: scale(0.99);
+  }
+  /* 关闭淡出：与进入对称（淡出 + 轻微下移），只由 fit 布局触发。 */
+  .admin-modal__window--closing {
+    animation: admin-modal-out var(--d-ui) var(--ease-quart) both;
+    pointer-events: none;
+  }
+  .admin-modal:has(.admin-modal__window--closing) .admin-modal__veil {
+    animation: admin-veil-out var(--d-ui) var(--ease-quart) both;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .admin-modal__window--closing {
+      animation: admin-modal-fade-out var(--d-ui) ease both;
+    }
   }
   /* 短 Alert：内容高度自适应并在屏幕居中，窄屏也不铺满整屏。 */
   .admin-modal .admin-modal__window--alert {
@@ -6684,11 +6757,49 @@ html[data-theme="black-yellow"] {
   @keyframes admin-modal-in {
     from {
       opacity: 0;
-      transform: translateY(8px);
+      transform: translateY(8px) scale(0.98);
     }
     to {
       opacity: 1;
       transform: none;
+    }
+  }
+  @keyframes admin-modal-out {
+    to {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+  }
+  @keyframes admin-modal-fade-out {
+    to {
+      opacity: 0;
+    }
+  }
+  @keyframes admin-veil-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 0.92;
+    }
+  }
+  @keyframes admin-veil-out {
+    to {
+      opacity: 0;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    /* 减弱动效：保留淡入，去掉位移与缩放。 */
+    .admin-modal__window {
+      animation: admin-modal-fade-in var(--d-ui) ease both;
+    }
+  }
+  @keyframes admin-modal-fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
     }
   }
 

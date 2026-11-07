@@ -561,7 +561,21 @@ test("完整须知可展开且提交前必须同意，成功只展示到场准�
     findElement(success, (element) => element.type === RepairActivityPrecautions),
     undefined,
   );
-  assert.ok(findElement(success, (element) => element.type === RepairActivityPreparation));
+  // 到场准备已收进凭条组件内部：在凭条渲染出的子树里找它。
+  const { RepairActivityReceipt: ReceiptForPrep } =
+    await import("../../src/components/repair-activities/RepairActivityReceipt");
+  const receiptForPrep = findElement(
+    success,
+    (element) => element.type === ReceiptForPrep,
+  );
+  assert.ok(receiptForPrep, "成功态应渲染凭条");
+  assert.ok(
+    findElement(
+      ReceiptForPrep(receiptForPrep.props as never),
+      (element) => element.type === RepairActivityPreparation,
+    ),
+    "凭条下方保留到场准备",
+  );
   for (const item of repairActivitiesPage.detail.preparation) {
     assert.ok(text(RepairActivityPreparation()).includes(item.title));
   }
@@ -608,9 +622,16 @@ test("报名成功弹层渲染一屏凭条：活动名、起止时间、地点�
 
   const success = signupDialog(ui.view());
   assert.ok(success);
-  assert.equal(success.props.confirmLabel, null, "成功态是只读凭条：不渲染确认按钮");
+  assert.equal(
+    success.props.confirmLabel,
+    repairActivitiesPage.detail.receipt.close,
+    "底部恢复「关闭」按钮",
+  );
   assert.equal(success.props.cancelLabel, undefined, "成功态不渲染取消按钮");
   assert.equal(success.props.titleTone, "success", "标题用成功色辅助表达状态");
+  assert.equal(success.props.titleHidden, true, "可见标题由凭条顶部承担，弹层标题只留给读屏");
+  assert.equal(success.props.closeIconOnly, true, "标题栏只留图标 ✕");
+  assert.equal(success.props.layout, "fit", "内容自适应高度、底部按钮固定");
   assert.equal(success.props.size, "narrow", "成功态用 640px 窄档，桌面不铺满");
   const receipt = findElement(success, (element) => element.type === RepairActivityReceipt);
   assert.ok(receipt, "成功态必须是凭条，而不是一段纯文字");
@@ -629,10 +650,10 @@ test("报名成功弹层渲染一屏凭条：活动名、起止时间、地点�
   );
 
   const preparation = findElement(
-    success,
+    RepairActivityReceipt(receipt.props as never),
     (element) => element.type === RepairActivityPreparation,
   );
-  assert.equal(preparation?.props.layout, "inline", "凭条下方只保留一行到场准备");
+  assert.equal(preparation?.props.layout, "compact", "凭条下方到场准备用紧凑两列");
   assert.equal(
     findElement(success, (element) => element.type === RepairActivityPrecautions),
     undefined,

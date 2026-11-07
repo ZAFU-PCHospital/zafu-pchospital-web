@@ -62,10 +62,12 @@ async function load() {
   return RepairActivityReceipt;
 }
 
-test("凭条集中展示活动、起止时间、地点与报名信息", async () => {
+test("凭条集中展示成功提示、活动、起止时间、地点与报名信息", async () => {
   const RepairActivityReceipt = await load();
   const content = text(RepairActivityReceipt({ activity, registration }));
 
+  assert.ok(content.includes(page.detail.signupSuccessTitle), "顶部成功标题");
+  assert.ok(content.includes(copy.successLead), "成功区辅助说明");
   assert.ok(content.includes(copy.kicker), "凭条要有「报名凭条」抬头");
   assert.ok(content.includes(activity.title), "活动名称");
   assert.ok(content.includes(page.activityAt), "活动时间标签");
@@ -120,14 +122,14 @@ test("跨天区间两端都显示完整日期时间；结束时间为空时只�
   assert.equal(legacy.includes("–"), false, "没有结束时间就不拼区间");
 });
 
-test("到场准备压成一行要点，完整说明不在凭条里展开", async () => {
+test("到场准备用紧凑两列，只保留标题不展开说明", async () => {
   const { RepairActivityPreparation } =
     await import("../../src/components/repair-activities/RepairActivityPreparation");
-  const inline = text(RepairActivityPreparation({ layout: "inline" }));
+  const compact = text(RepairActivityPreparation({ layout: "compact" }));
 
   for (const item of page.detail.preparation) {
-    assert.ok(inline.includes(item.title), item.title);
-    assert.equal(inline.includes(item.description), false, "凭条里只保留标题");
+    assert.ok(compact.includes(item.title), item.title);
+    assert.equal(compact.includes(item.description), false, "凭条里只保留标题");
   }
 });
 

@@ -2,6 +2,8 @@ import {
   formatShanghaiDateTime,
   formatShanghaiTimeRange,
 } from "@/components/repair-activities/activity-format";
+import { RepairActivityPreparation } from "@/components/repair-activities/RepairActivityPreparation";
+import { Icon } from "@/components/ui/Icon";
 import { repairActivitiesPage } from "@/config/repair-activities";
 import {
   repairActivityIssueTypeLabels,
@@ -23,12 +25,14 @@ type Props = {
 };
 
 /**
- * 报名成功凭条（issue #363）：票根式两段——上半是活动（抬头 / 名称 / 时间 / 地点），
- * 打孔撕票线分隔，下半是核验信息（姓名 / 脱敏手机为第一眼，报名时间 / 故障类型 / 机型
- * 压成次要三列）。窄屏上下两段，桌面（≥40rem）左右两段、撕票线竖向居中。
+ * 报名成功凭条（issue #363）：成功提示区 + 票根卡片 + 到场准备。
  *
- * 只负责凭条主体；到场准备由调用方按 `RepairActivityPreparation layout="inline"` 接在下方。
- * `endsAt` / `location` / `deviceModel` 为空时对应行不渲染，不编造。
+ * 卡片分两段：活动信息（抬头 / 名称 / 时间 / 地点）─ 打孔撕票线 ─ 核验信息
+ * （姓名·手机号两列；报名时间·故障类型两列，机型独占一行）。`endsAt` / `location` /
+ * `deviceModel` 为空时对应行不渲染，不编造。
+ *
+ * 动效：图标描边 + 四块错峰淡入（40–70ms 间隔），只动 transform / opacity；
+ * 减弱动效时只保留淡入。
  */
 export function RepairActivityReceipt({ activity, registration }: Props) {
   const timeRange = formatShanghaiTimeRange(activity.activityAt, activity.endsAt);
@@ -37,61 +41,85 @@ export function RepairActivityReceipt({ activity, registration }: Props) {
     registration.issueType;
 
   return (
-    <article className={styles.receipt}>
-      <div className={styles.receiptActivity}>
-        <header className={styles.receiptHead}>
-          {/* 不加 aria-label：凭条抬头由可见的 kicker 文本提供，再加同名标签会让读屏连念两遍。 */}
+    <div className={styles.receiptSuccess}>
+      <div className={styles.successHero}>
+        <span className={styles.successIcon} aria-hidden="true">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2.5}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path className={styles.successCheck} pathLength={1} d="M5 13l4 4L19 7" />
+          </svg>
+        </span>
+        <p className={styles.successTitle}>{page.detail.signupSuccessTitle}</p>
+        <p className={styles.successLead}>{copy.successLead}</p>
+      </div>
+
+      <article className={styles.receipt}>
+        <div className={styles.receiptActivity}>
           <p className={styles.receiptKicker}>{copy.kicker}</p>
           <h3 className={styles.receiptTitle}>{activity.title}</h3>
-        </header>
-        <dl className={styles.receiptMeta}>
-          <div>
-            <dt>{page.activityAt}</dt>
-            <dd>{timeRange ?? formatShanghaiDateTime(activity.activityAt)}</dd>
-          </div>
-          {activity.location ? (
+          <dl className={styles.receiptMeta}>
             <div>
-              <dt>{page.location}</dt>
-              <dd>{activity.location}</dd>
+              <dt>
+                <Icon name="calendar" />
+                {page.activityAt}
+              </dt>
+              <dd>{timeRange ?? formatShanghaiDateTime(activity.activityAt)}</dd>
             </div>
-          ) : null}
-        </dl>
-      </div>
-
-      {/* 打孔撕票线：窄屏横向贯穿卡宽，桌面竖向居中；两端半圆缺口纯 CSS。 */}
-      <span className={styles.receiptDivider} aria-hidden="true" />
-
-      <div className={styles.receiptHolder}>
-        <dl className={styles.receiptFields}>
-          <div className={styles.receiptIdentity}>
-            <div>
-              <dt>{page.detail.name}</dt>
-              <dd>{registration.name}</dd>
-            </div>
-            <div>
-              <dt>{page.detail.phone}</dt>
-              <dd>{registration.phoneMasked}</dd>
-            </div>
-          </div>
-          <div className={styles.receiptSecondary}>
-            <div>
-              <dt>{copy.registeredAt}</dt>
-              <dd>{formatShanghaiDateTime(registration.createdAt)}</dd>
-            </div>
-            <div>
-              <dt>{page.detail.issueType}</dt>
-              <dd>{issueTypeLabel}</dd>
-            </div>
-            {registration.deviceModel ? (
+            {activity.location ? (
               <div>
-                <dt>{copy.deviceModel}</dt>
-                <dd>{registration.deviceModel}</dd>
+                <dt>{page.location}</dt>
+                <dd>{activity.location}</dd>
               </div>
             ) : null}
-          </div>
-        </dl>
-        <p className={styles.receiptHint}>{copy.screenshotHint}</p>
+          </dl>
+        </div>
+
+        {/* 打孔撕票线：横向虚线贯穿卡宽，两端半圆缺口纯 CSS。 */}
+        <span className={styles.receiptDivider} aria-hidden="true" />
+
+        <div className={styles.receiptHolder}>
+          <dl className={styles.receiptFields}>
+            <div className={styles.receiptIdentity}>
+              <div>
+                <dt>{page.detail.name}</dt>
+                <dd>{registration.name}</dd>
+              </div>
+              <div>
+                <dt>{page.detail.phone}</dt>
+                <dd>{registration.phoneMasked}</dd>
+              </div>
+            </div>
+            <div className={styles.receiptBooking}>
+              <div>
+                <dt>{copy.registeredAt}</dt>
+                <dd>{formatShanghaiDateTime(registration.createdAt)}</dd>
+              </div>
+              <div>
+                <dt>{page.detail.issueType}</dt>
+                <dd>{issueTypeLabel}</dd>
+              </div>
+              {registration.deviceModel ? (
+                <div className={styles.receiptBookingWide}>
+                  <dt>{copy.deviceModel}</dt>
+                  <dd>{registration.deviceModel}</dd>
+                </div>
+              ) : null}
+            </div>
+          </dl>
+          <p className={styles.receiptHint}>{copy.screenshotHint}</p>
+        </div>
+      </article>
+
+      <div className={styles.receiptPrep}>
+        <p className={styles.receiptPrepLabel}>{copy.preparationLabel}</p>
+        <RepairActivityPreparation layout="compact" />
       </div>
-    </article>
+    </div>
   );
 }
