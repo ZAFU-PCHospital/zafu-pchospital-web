@@ -8733,9 +8733,12 @@ html[data-theme="black-yellow"] {
   border-color: var(--line);
   transform: none;
 }
-/* 成员端：CLOSED 是「可出勤」窗口，沿用强调色脊线；
+/* 成员端：强调色脊线跟随**签到窗口是否已开放**（活动开始前 30 分钟起，issue #367），
+   不再跟随报名状态——`CLOSED` 只表示报名已截止，报名一截止就挂脊线会出现「高亮但点不动」。
    已结束仍可进工作台，保持与可点卡片一致的反馈与不透明度。 */
-.member-activity-workspace .activity-list--ticket .activity-card--stub.activity-card--closed {
+.member-activity-workspace
+  .activity-list--ticket
+  .activity-card--stub.activity-card--checkin-open {
   --spine: var(--accent);
 }
 .member-activity-workspace .activity-list--ticket .activity-card--stub.activity-card--ended {

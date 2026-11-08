@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import test from "node:test";
 import type { ReactElement, ReactNode } from "react";
@@ -90,6 +91,40 @@ test("成员活动卡覆盖成员端五态，且始终可进入工作台", () =>
     assert.equal(props.href, "/member/repair-activities/activity-1");
     assert.ok(text(props.footer).includes(labels[status]));
   }
+});
+
+test("脊线高亮跟随签到窗口，不跟随报名状态（issue #367）", () => {
+  const modifierOf = (item: StaffActivityListItem) =>
+    (MemberRepairActivityTicketCard({ activity: item }).props as { modifier?: string }).modifier;
+
+  // 报名已截止但窗口未开（活动在 1 天后）→ 不高亮。
+  const future = new Date(Date.now() + 86_400_000).toISOString();
+  assert.equal(modifierOf({ ...activity, status: "CLOSED", activityAt: future }), undefined);
+  // 窗口已开（活动已开始 1 小时）→ 高亮。
+  const past = new Date(Date.now() - 3_600_000).toISOString();
+  assert.equal(
+    modifierOf({ ...activity, status: "CLOSED", activityAt: past }),
+    "activity-card--checkin-open",
+  );
+  // 已结束 → 不高亮。
+  assert.equal(modifierOf({ ...activity, status: "ENDED", activityAt: past }), undefined);
+});
+
+test("脊线 CSS 命中签到窗口类，不再命中报名状态类（issue #367）", () => {
+  const css = readFileSync("src/app/globals.css", "utf8");
+  const spineRule = (selector: string) => {
+    const start = css.indexOf(selector);
+    if (start < 0) return "";
+    return css.slice(start, css.indexOf("}", start));
+  };
+  const open = spineRule(".activity-card--stub.activity-card--checkin-open");
+  assert.ok(open.includes("--spine: var(--accent)"), "窗口已开放时应挂强调色脊线");
+  // 旧规则（按 CLOSED 高亮）必须消失：否则报名一截止就高亮、实际点不动。
+  assert.equal(
+    css.includes(".activity-card--stub.activity-card--closed {"),
+    false,
+    "不应再有按 CLOSED 挂脊线的规则",
+  );
 });
 
 test("成员票根壳输出日期桩与状态 class", () => {

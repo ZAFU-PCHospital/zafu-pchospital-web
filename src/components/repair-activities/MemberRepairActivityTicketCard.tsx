@@ -33,6 +33,8 @@ export function MemberRepairActivityTicketCard({ activity }: { activity: StaffAc
     <ActivityTicketCardShell
       activity={activity}
       href={`/member/repair-activities/${activity.id}`}
+      // 强调色脊线跟随签到窗口（issue #367），不再跟随报名状态。
+      modifier={checkInOpen ? "activity-card--checkin-open" : undefined}
       meta={
         <>
           <p>
