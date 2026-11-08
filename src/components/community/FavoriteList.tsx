@@ -6,7 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { communityCopy } from "@/config/community";
-import { formatShanghaiDate } from "@/config/member";
+import { formatShanghaiDate } from "@/lib/shanghai-date";
 import { repairCopy } from "@/config/repairs";
 import type { FavoriteView, PaginationMeta } from "@/types/contracts";
 

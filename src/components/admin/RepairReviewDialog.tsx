@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { adminCopy, adminShared } from "@/config/admin";
-import { formatShanghaiDate } from "@/config/member";
+import { formatShanghaiDate } from "@/lib/shanghai-date";
 import { adminFetch } from "@/features/admin/admin-client";
 import { createIdempotencyKey } from "@/lib/idempotency-key";
 import type { RepairView } from "@/types/contracts";

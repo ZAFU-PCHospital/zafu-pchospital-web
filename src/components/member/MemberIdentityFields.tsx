@@ -1,4 +1,5 @@
-import { memberCopy, formatShanghaiDate } from "@/config/member";
+import { memberCopy } from "@/config/member";
+import { formatShanghaiDate } from "@/lib/shanghai-date";
 import type { RoleCode } from "@/types/contracts";
 
 /**

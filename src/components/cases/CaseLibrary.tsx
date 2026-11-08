@@ -6,7 +6,8 @@ import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { casesCopy } from "@/config/cases";
-import { formatDurationMinutes, formatShanghaiDate } from "@/config/member";
+import { formatDurationMinutes } from "@/config/member";
+import { formatShanghaiDate } from "@/lib/shanghai-date";
 import { formatRepairParticipants, repairCopy, repairResultLabels } from "@/config/repairs";
 import type { PaginationMeta, RepairCategoryView, RepairView } from "@/types/contracts";
 

@@ -1,6 +1,7 @@
 import Link from "next/link";
 
-import { memberCopy, formatDurationMinutes, formatShanghaiDate } from "@/config/member";
+import { memberCopy, formatDurationMinutes } from "@/config/member";
+import { formatShanghaiDate } from "@/lib/shanghai-date";
 import { repairResultLabels } from "@/config/repairs";
 import type { MemberRecentRepair } from "@/types/contracts";
 

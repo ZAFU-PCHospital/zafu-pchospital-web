@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/Button";
-import { formatShanghaiDate, memberCopy } from "@/config/member";
+import { memberCopy } from "@/config/member";
+import { formatShanghaiDate } from "@/lib/shanghai-date";
 import type { MemberPendingServe } from "@/types/contracts";
 
 /** 工作台待办：已接待但还没有补建维修单的记录。 */

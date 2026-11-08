@@ -397,16 +397,3 @@ export function formatCount(value: number | null, unavailableLabel: string): str
   if (value === null) return unavailableLabel;
   return `${value} 次`;
 }
-
-/** 把 ISO 时间戳格式化为 `YYYY-MM-DD`（Asia/Shanghai），失败时返回占位。 */
-export function formatShanghaiDate(value: string | null | undefined): string {
-  if (!value) return "—";
-  const date = new Date(value);
-  if (Number.isNaN(date.valueOf())) return "—";
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Shanghai",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(date);
-}

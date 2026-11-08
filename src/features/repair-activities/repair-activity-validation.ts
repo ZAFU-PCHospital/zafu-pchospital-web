@@ -1,5 +1,6 @@
 import { startOfShanghaiDay } from "@/lib/academic-term";
 import { AppError } from "@/lib/api/errors";
+import { shanghaiDateOf } from "@/lib/shanghai-date";
 
 /** 对外五态。优先级：ENDED > CLOSED > FULL/OPEN > UPCOMING。 */
 export const RepairActivityStatus = ["UPCOMING", "OPEN", "FULL", "CLOSED", "ENDED"] as const;
@@ -391,12 +392,7 @@ export function sortQueueByCheckedInAt<T extends { checkedInAt: Date | string | 
 
 /** activityAt → Asia/Shanghai 日历日 `YYYY-MM-DD`（与 repairDate 存储约定一致）。 */
 export function shanghaiCalendarDay(activityAt: Date): string {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Shanghai",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(activityAt);
+  return shanghaiDateOf(activityAt);
 }
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;

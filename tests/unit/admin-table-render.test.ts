@@ -6,6 +6,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import type { MemberTableContext } from "../../src/components/admin/member-table-spec";
 import type { RepairTableContext } from "../../src/components/admin/repair-table-spec";
+import { formatShanghaiDate } from "../../src/lib/shanghai-date";
 import type { AuditLogEntry, MemberListEntry, RepairView } from "../../src/types/contracts";
 
 /** 验证表格的列顺序、单元格内容与可访问性标记。 */
@@ -669,7 +670,7 @@ test("维修表：成员列展示全部参与者（issue #114），创建人在�
 
 test("维修表：单元格内容与占位（未分类 / 空结果 / 空时长 / 标记标签）", async () => {
   modulesRef = await load();
-  const { formatDurationMinutes, formatShanghaiDate } = modulesRef.memberConfig;
+  const { formatDurationMinutes } = modulesRef.memberConfig;
   const item = repair({ deviceModel: "ThinkPad X1 Carbon" });
   const html = renderRepairs([item]);
   assert.ok(html.includes(formatShanghaiDate(item.repairDate)), "维修日期应当格式化");

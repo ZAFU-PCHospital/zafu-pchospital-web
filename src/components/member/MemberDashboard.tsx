@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { DashGroup, DashStat, DashStats, DashTile } from "@/components/ui/dash";
 import { MemberAvatar } from "@/components/member/MemberAvatar";
-import { isDashboardAllClear } from "@/components/member/dashboard-all-clear";
+import { isDashboardAllClear, pendingServesState } from "@/components/member/dashboard-state";
 import { MemberMetrics } from "@/components/member/MemberMetrics";
 import { MemberPendingServes } from "@/components/member/MemberPendingServes";
 import { MemberRankingPreviewView } from "@/components/member/MemberRankingPreview";
@@ -14,7 +14,8 @@ import { MemberRecentRepairs } from "@/components/member/MemberRecentRepairs";
 import { MemberSection } from "@/components/member/MemberSection";
 import { MemberSkillList } from "@/components/member/MemberSkillList";
 import { MemberUpcoming } from "@/components/member/MemberUpcoming";
-import { memberCopy, formatShanghaiDate } from "@/config/member";
+import { memberCopy } from "@/config/member";
+import { formatShanghaiDate } from "@/lib/shanghai-date";
 import { roleLabels } from "@/components/member/MemberIdentityFields";
 import type { MemberDashboard as MemberDashboardData } from "@/types/contracts";
 
@@ -90,8 +91,7 @@ export function MemberDashboard({ initialDisplayName, roles }: MemberDashboardPr
 
   const queueFailed = data?.degraded.includes("workQueue") ?? false;
   const queue = queueFailed ? null : (data?.workQueue ?? null);
-  const pendingServes = data?.pendingServes ?? [];
-  const pendingServesFailed = data?.degraded.includes("pendingServes") ?? false;
+  const { items: pendingServes, failed: pendingServesFailed } = pendingServesState(data);
   const unread = data
     ? data.notifications.available
       ? data.notifications.unreadCount
