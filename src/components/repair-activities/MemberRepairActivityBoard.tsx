@@ -14,6 +14,11 @@ import { AdminModal } from "@/components/admin/AdminModal";
 import { AdminToast, type AdminToastMessage } from "@/components/admin/AdminToast";
 import { memberRepairActivityStatusBadgeClass } from "@/components/repair-activities/activity-status-badge";
 import {
+  ATTENDED_TAG_CLASS,
+  recordStatusTagClass,
+  recordStatusTagIcon,
+} from "@/components/repair-activities/activity-record-tag";
+import {
   formatShanghaiDateTime,
   formatShanghaiTime,
 } from "@/components/repair-activities/activity-format";
@@ -619,7 +624,7 @@ export function MemberRepairActivityBoard({ activityId }: Props) {
           {copy.back}
         </Button>
         {board.attended ? (
-          <span className="admin-tag admin-tag--accent">{copy.attendedBadge}</span>
+          <span className={ATTENDED_TAG_CLASS}>{copy.attendedBadge}</span>
         ) : (
           <Button
             className="activity-board__attend-cta"
@@ -965,6 +970,8 @@ export function MemberRepairActivityBoard({ activityId }: Props) {
                   const recordId = row.repairRecordId;
                   // 待补建：接待已占位、维修单还没创建。
                   const pendingRecord = recordId === null;
+                  // 已通过打勾、待审核用「眼睛」：暗色下品牌黄与警示橙色相接近，靠图标再区分一层。
+                  const recordIcon = row.recordStatus ? recordStatusTagIcon(row.recordStatus) : null;
                   return (
                     <li key={row.id} className="activity-board__row">
                       <div className="activity-board__served-main">
@@ -975,10 +982,8 @@ export function MemberRepairActivityBoard({ activityId }: Props) {
                               {copy.servedPendingTag}
                             </span>
                           ) : row.recordStatus ? (
-                            <span
-                              className={`repair-tag repair-tag--${row.recordStatus.toLowerCase()}`}
-                            >
-                              {row.recordStatus === "APPROVED" ? <Icon name="check" /> : null}
+                            <span className={recordStatusTagClass(row.recordStatus)}>
+                              {recordIcon ? <Icon name={recordIcon} /> : null}
                               {repairStatusLabels[row.recordStatus]}
                             </span>
                           ) : null}
