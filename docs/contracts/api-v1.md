@@ -829,7 +829,8 @@ DELETE     /api/v1/admin/comments/:id
   （`servedByMemberProfileId` / `servedAt`），**不再创建维修单或草稿**（`repair_record_id` 保持空）。
   权限、出勤与操作窗口同「成员出勤、签到与接待的操作窗口」一节。
 - **全局拦截**：本成员存在「`SERVED` 且 `repair_record_id` 为空」的登记时，**任何活动**的 serve
-  都返回 409 `ACTIVITY_SERVE_PENDING`（消息含客户姓名）；撤销或提交后解除。
+  都返回 409 `ACTIVITY_SERVE_PENDING`（消息含客户姓名）；撤销或提交后解除。活动已软删除的
+  遗留登记不再计入该拦截（否则无法进入预填表单，会永久锁死成员）。
 - **继续填写**：
   - `GET /api/v1/member/repair-activities/:id/registrations/:registrationId/prefill`：仅接待者本人可读，
     返回客户姓名、完整电话、机型、故障类型映射后的启用分类、活动日，以及本场出勤的

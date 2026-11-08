@@ -394,6 +394,78 @@ dbTest("接待只占登记行：不建维修单，看板待补建，跨活动再
   );
 });
 
+dbTest("全局拦截排除活动已软删的待补单，但有效活动仍拦截", async () => {
+  const db = getDb();
+  const now = new Date();
+  const staleActivityId = randomUUID();
+  let staleRegistrationId: string | null = null;
+  let targetRegistrationId: string | null = null;
+
+  try {
+    await db.repairActivity.create({
+      data: {
+        id: staleActivityId,
+        title: `${PREFIX} 已软删活动`,
+        activityAt,
+        capacity: 10,
+        signupOpensAt: new Date(activityAt.getTime() - 24 * 60 * 60 * 1000),
+        signupClosesAt: new Date(activityAt.getTime() - 60 * 60 * 1000),
+        createdAt: now,
+        updatedAt: now,
+      },
+    });
+    const stale = await db.repairActivityRegistration.create({
+      data: {
+        id: randomUUID(),
+        activityId: staleActivityId,
+        name: `${PREFIX} 软删活动客户`,
+        phone: "13908887777",
+        phoneLast4: "7777",
+        issueType: "OTHER",
+        status: "SERVED",
+        servedAt: now,
+        servedByMemberProfileId: STAFF_PROFILE_ID,
+        createdAt: now,
+        updatedAt: now,
+      },
+    });
+    staleRegistrationId = stale.id;
+    const target = await checkedInRegistration(`${PREFIX} 软删后目标客户`, OTHER_ACTIVITY_ID);
+    targetRegistrationId = target.id;
+
+    // 活动仍有效：沿用既有全局拦截。
+    await expectCode(
+      () => repairActivityStaffService.serve(OTHER_ACTIVITY_ID, target.id, staffActor),
+      "ACTIVITY_SERVE_PENDING",
+    );
+    assert.equal(
+      (await db.repairActivityRegistration.findUniqueOrThrow({ where: { id: target.id } })).status,
+      "CHECKED_IN",
+      "被拦截时目标报名状态不变",
+    );
+
+    // 活动软删后，遗留待补单不再阻止其他活动接待。
+    await db.repairActivity.update({
+      where: { id: staleActivityId },
+      data: { deletedAt: now },
+    });
+    const served = await repairActivityStaffService.serve(OTHER_ACTIVITY_ID, target.id, staffActor);
+    assert.equal(served.registration.status, "SERVED");
+    const servedRow = await db.repairActivityRegistration.findUniqueOrThrow({
+      where: { id: target.id },
+    });
+    assert.equal(servedRow.servedByMemberProfileId, STAFF_PROFILE_ID);
+  } finally {
+    if (targetRegistrationId) {
+      await db.repairActivityRegistration.deleteMany({ where: { id: targetRegistrationId } });
+    }
+    if (staleRegistrationId) {
+      await db.repairActivityRegistration.deleteMany({ where: { id: staleRegistrationId } });
+    }
+    await db.repairActivity.deleteMany({ where: { id: staleActivityId } });
+  }
+});
+
 dbTest("继续填写预填：仅接待者本人，完整电话 + 分类映射 + 审计；建单后失效", async () => {
   const db = getDb();
   const registration = await checkedInRegistration(`${PREFIX} 预填客户`);

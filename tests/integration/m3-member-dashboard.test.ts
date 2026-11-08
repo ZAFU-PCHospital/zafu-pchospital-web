@@ -941,6 +941,10 @@ dbTest("M3 工作台只返回本人待补单，并带继续填写字段", async 
     await getDb().repairActivityRegistration.deleteMany({
       where: { activityId: { in: activityIds } },
     });
+    // 时间线与参与人先于草稿删除（外键 Restrict），避免把 M3 前缀的 DRAFT 留在测试库。
+    await getDb().repairTimelineEvent.deleteMany({ where: { repairRecordId: draft.id } });
+    await getDb().repairRecordParticipant.deleteMany({ where: { repairRecordId: draft.id } });
+    await getDb().repairRecord.deleteMany({ where: { id: draft.id } });
     await getDb().repairActivity.deleteMany({ where: { id: { in: activityIds } } });
   }
 });
