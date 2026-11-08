@@ -349,10 +349,23 @@ test("结束的看板保留历史、出勤状态和纠错，三项控件禁用�
   assert.deepEqual(ui.posts, []);
 });
 
-test("报名截止但活动未结束时，工作台状态显示「可出勤」而不是「报名截止」（issue #239）", async (t) => {
+test("报名已截止但窗口已开放时，状态显示「报名已截止」而不是「可出勤」（issue #367）", async (t) => {
   const ui = await mount(t, board(), new Date(end.getTime() - 60_000));
-  assert.ok(text(ui.view()).includes("可出勤"));
-  assert.equal(text(ui.view()).includes("报名截止"), false);
+  const view = text(ui.view());
+  assert.ok(view.includes("报名已截止"));
+  assert.equal(view.includes("可出勤"), false);
+  // 窗口已开放：不再出现「签到尚未开放」的提示。
+  assert.equal(view.includes(copy.signupNotClosed.replace("{time}", "")), false);
+});
+
+test("窗口未开放时工作台提示具体开放时刻，而不是「报名尚未截止」（issue #367）", async (t) => {
+  // 活动 2026-10-23 18:30（上海），窗口 18:00 开放；此刻是活动前 1 小时，尚未开放。
+  const ui = await mount(t, board(false), new Date("2026-10-23T09:30:00.000Z"));
+  const view = text(ui.view());
+  assert.ok(view.includes("签到尚未开放"));
+  assert.ok(view.includes("2026/10/23 18:00"));
+  assert.equal(view.includes("报名尚未截止"), false);
+  assert.equal(ui.button(copy.attendCta).disabled, true);
 });
 
 test("工作台搜索匹配公开给操作者的字段、保留真实位次和被筛选隐藏的签到选择", async (t) => {

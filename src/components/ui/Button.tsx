@@ -28,7 +28,8 @@ type BaseProps = {
   /** 后置图标 */
   trailingIcon?: IconName;
   className?: string;
-  children: ReactNode;
+  /** 纯图标按钮（如弹层右上角 ✕）可省略文案，此时必须自备 `aria-label`。 */
+  children?: ReactNode;
 };
 
 export type LinkButtonProps = BaseProps & {
@@ -55,7 +56,7 @@ export function Button(props: ButtonProps) {
   const content = (
     <>
       {icon ? <Icon name={icon} /> : null}
-      <span>{children}</span>
+      {children === undefined || children === null ? null : <span>{children}</span>}
       {trailingIcon ? <Icon name={trailingIcon} /> : null}
     </>
   );

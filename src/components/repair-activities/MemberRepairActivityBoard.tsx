@@ -14,6 +14,11 @@ import { AdminModal } from "@/components/admin/AdminModal";
 import { AdminToast, type AdminToastMessage } from "@/components/admin/AdminToast";
 import { memberRepairActivityStatusBadgeClass } from "@/components/repair-activities/activity-status-badge";
 import {
+  ATTENDED_TAG_CLASS,
+  recordStatusTagClass,
+  recordStatusTagIcon,
+} from "@/components/repair-activities/activity-record-tag";
+import {
   formatShanghaiDateTime,
   formatShanghaiTime,
 } from "@/components/repair-activities/activity-format";
@@ -36,6 +41,7 @@ import {
 import {
   activityEndExclusive,
   canOperateActivityStaff,
+  checkInOpensAt,
   sortQueueByCheckedInAt,
   type RepairActivityIssueType,
   type RepairActivityStatus,
@@ -53,8 +59,19 @@ import type {
 
 type Props = { activityId: string };
 
-/** 手机端一次只展示一个分区（<1100px；宽屏由 CSS 显示全部并排栏）。 */
+/** 手机端一次只展示一个分区（<1100px；宽屏由 CSS 显示全部并排列）。 */
 type MobilePane = "eligible" | "queue" | "served";
+
+/**
+ * 未开放提示（issue #367）：统一填充签到具体开放时刻。
+ * 文案模板在 config 里，这里只负责替换占位符，避免多处各拼一遍。
+ */
+function checkInClosedText(activityAt: string): string {
+  return memberRepairActivitiesCopy.board.signupNotClosed.replace(
+    "{time}",
+    formatShanghaiDateTime(checkInOpensAt(activityAt)),
+  );
+}
 
 export function MemberRepairActivityBoard({ activityId }: Props) {
   const router = useRouter();
@@ -289,7 +306,9 @@ export function MemberRepairActivityBoard({ activityId }: Props) {
     ) {
       return copy.activityEnded;
     }
-    return canOperateActivityStaff(board.activity, now) ? null : copy.signupNotClosed;
+    return canOperateActivityStaff(board.activity, now)
+      ? null
+      : checkInClosedText(board.activity.activityAt);
   }
 
   function allowStaffAction(): boolean {
@@ -492,7 +511,12 @@ export function MemberRepairActivityBoard({ activityId }: Props) {
    * 活动名来自看板数据，加载中就绪前先用「活动工作台」占位。
    * 状态徽章仅在已加载看板后出现（issue #239），与成员活动列表使用同一套文案。
    */
-  function renderHead(title: string, meta?: string, status?: RepairActivityStatus) {
+  function renderHead(
+    title: string,
+    meta?: string,
+    status?: RepairActivityStatus,
+    checkInOpen = false,
+  ) {
     return (
       <header className="member-page-head activity-board__head">
         <p className="member-section__tag">{copy.label}</p>
@@ -501,7 +525,7 @@ export function MemberRepairActivityBoard({ activityId }: Props) {
             {title}
           </h1>
           {status ? (
-            <span className={memberRepairActivityStatusBadgeClass(status)}>
+            <span className={memberRepairActivityStatusBadgeClass(status, checkInOpen)}>
               {memberRepairActivityStatusLabels[status]}
             </span>
           ) : null}
@@ -543,9 +567,11 @@ export function MemberRepairActivityBoard({ activityId }: Props) {
     board.activity.status === "ENDED" ||
     clock >= activityEndExclusive(new Date(board.activity.activityAt)).getTime();
   const staffOpen = !ended && canOperateActivityStaff(board.activity, new Date(clock));
+  /** 签到窗口起点文案（issue #367）：未开放时明确告诉成员几点能操作，不只报错。 */
+  const checkInClosedMessage = checkInClosedText(board.activity.activityAt);
   // 结束时只更新原提示；已出勤且无提示卡的看板用浮层，不能把整板向下挤。
-  const showAttendBanner =
-    clock < new Date(board.activity.signupClosesAt).getTime() || !board.attended;
+  // issue #367：未开放提示改为跟随签到窗口（活动开始前 30 分钟），不再跟随报名截止。
+  const showAttendBanner = (!staffOpen && !ended) || !board.attended;
   const floatingMessage = message || (ended && !showAttendBanner ? copy.activityEnded : "");
   const opsDisabled = !staffOpen || !board.attended || busy !== null;
   const withdrawBusy = withdrawTarget ? busy === `withdraw:${withdrawTarget.id}` : false;
@@ -591,13 +617,14 @@ export function MemberRepairActivityBoard({ activityId }: Props) {
         board.activity.title,
         formatShanghaiDateTime(board.activity.activityAt),
         ended ? "ENDED" : board.activity.status,
+        staffOpen,
       )}
       <div className="activity-board__toolbar">
         <Button href="/member/repair-activities" variant="ghost">
           {copy.back}
         </Button>
         {board.attended ? (
-          <span className="admin-tag admin-tag--accent">{copy.attendedBadge}</span>
+          <span className={ATTENDED_TAG_CLASS}>{copy.attendedBadge}</span>
         ) : (
           <Button
             className="activity-board__attend-cta"
@@ -644,7 +671,7 @@ export function MemberRepairActivityBoard({ activityId }: Props) {
                 ? board.canAdmin
                   ? copy.attendPrompt
                   : copy.attendPromptMember
-                : copy.signupNotClosed}
+                : checkInClosedMessage}
           </p>
         </Card>
       ) : null}
@@ -943,6 +970,8 @@ export function MemberRepairActivityBoard({ activityId }: Props) {
                   const recordId = row.repairRecordId;
                   // 待补建：接待已占位、维修单还没创建。
                   const pendingRecord = recordId === null;
+                  // 已通过打勾、待审核用「眼睛」：暗色下品牌黄与警示橙色相接近，靠图标再区分一层。
+                  const recordIcon = row.recordStatus ? recordStatusTagIcon(row.recordStatus) : null;
                   return (
                     <li key={row.id} className="activity-board__row">
                       <div className="activity-board__served-main">
@@ -953,10 +982,8 @@ export function MemberRepairActivityBoard({ activityId }: Props) {
                               {copy.servedPendingTag}
                             </span>
                           ) : row.recordStatus ? (
-                            <span
-                              className={`repair-tag repair-tag--${row.recordStatus.toLowerCase()}`}
-                            >
-                              {row.recordStatus === "APPROVED" ? <Icon name="check" /> : null}
+                            <span className={recordStatusTagClass(row.recordStatus)}>
+                              {recordIcon ? <Icon name={recordIcon} /> : null}
                               {repairStatusLabels[row.recordStatus]}
                             </span>
                           ) : null}

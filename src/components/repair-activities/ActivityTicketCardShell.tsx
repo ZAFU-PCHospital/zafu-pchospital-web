@@ -16,14 +16,19 @@ type Props = {
   href?: string;
   meta: ReactNode;
   footer: ReactNode;
+  /**
+   * 额外的修饰类（可选）。成员端用它标记「签到窗口已开放」→ `activity-card--checkin-open`，
+   * 让强调色脊线跟随窗口而不是报名状态（issue #367）。公开页不传，脊线回落中性。
+   */
+  modifier?: string;
 };
 
 /** 活动日期票根壳：公开列表、首页预览与成员活动列表共用同一套票根结构。 */
-export function ActivityTicketCardShell({ activity, href, meta, footer }: Props) {
+export function ActivityTicketCardShell({ activity, href, meta, footer, modifier }: Props) {
   const dateParts = formatShanghaiDateParts(activity.activityAt);
   const card = (
     <Card
-      className={`activity-card activity-card--stub activity-card--${activity.status.toLowerCase()} repair-panel`}
+      className={`activity-card activity-card--stub activity-card--${activity.status.toLowerCase()} repair-panel${modifier ? ` ${modifier}` : ""}`}
     >
       <span className="activity-card__spine" aria-hidden="true" />
       <div className="activity-card__stub">

@@ -13,6 +13,7 @@ import { repairActivityStatusBadgeClass } from "@/components/repair-activities/a
 import { RepairActivityPrecautions } from "@/components/repair-activities/RepairActivityPrecautions";
 import { RepairActivityPreparation } from "@/components/repair-activities/RepairActivityPreparation";
 import { RepairActivityQueue } from "@/components/repair-activities/RepairActivityQueue";
+import { RepairActivityReceipt } from "@/components/repair-activities/RepairActivityReceipt";
 import { fetchRegistrationDeviceStatus } from "@/features/repair-activities/registration-device-client";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -1439,11 +1440,18 @@ export function RepairActivityDetail({ activityId }: Props) {
       {pendingSignup ? (
         <ConfirmDialog
           title={signupSucceeded ? copy.signupSuccessTitle : copy.consent.title}
-          confirmLabel={signupSucceeded ? copy.acknowledgePrecautions : copy.consent.agree}
+          titleTone={signupSucceeded ? "success" : "default"}
+          /* 成功态：标题只在读屏里，可见标题由凭条顶部承担；右上角只留图标 ✕。
+             底部单独给一个「关闭」按钮（fit 布局固定在底部），Esc / 遮罩同样可关。 */
+          titleHidden={signupSucceeded}
+          closeIconOnly={signupSucceeded}
+          layout={signupSucceeded ? "fit" : "scroll"}
+          confirmLabel={signupSucceeded ? copy.receipt.close : copy.consent.agree}
           cancelLabel={signupSucceeded ? undefined : copy.confirmEdit}
           busy={!signupSucceeded && busy}
           onConfirm={signupSucceeded ? closeSignupDialog : () => void confirmSignup()}
           onClose={closeSignupDialog}
+          size={signupSucceeded ? "narrow" : "default"}
         >
           {!signupSucceeded && pendingSignup ? (
             <div className={styles.signupConfirm}>
@@ -1464,10 +1472,19 @@ export function RepairActivityDetail({ activityId }: Props) {
               <p className="muted">{copy.confirmIdentityHint}</p>
             </div>
           ) : null}
-          <div className="admin-section">
-            <p className="muted">{signupSucceeded ? copy.signupSuccess : copy.consent.subtitle}</p>
-            {signupSucceeded ? <RepairActivityPreparation /> : <RepairActivityPrecautions />}
-          </div>
+          {/* 成功态换成一屏可截图的到场凭条（成功区 + 票根 + 到场准备），issue #363。 */}
+          {signupSucceeded ? (
+            registrationResult ? (
+              <RepairActivityReceipt activity={activity} registration={registrationResult} />
+            ) : (
+              <p className="muted">{copy.signupSuccess}</p>
+            )
+          ) : (
+            <div className="admin-section">
+              <p className="muted">{copy.consent.subtitle}</p>
+              <RepairActivityPrecautions />
+            </div>
+          )}
         </ConfirmDialog>
       ) : null}
 

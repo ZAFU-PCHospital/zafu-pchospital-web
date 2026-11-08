@@ -21,10 +21,15 @@ export function repairActivityStatusBadgeClass(status: string): string {
 }
 
 /**
- * 成员端五态徽章（issue #239）：`CLOSED` 即可出勤窗口，用 accent 强调；
- * 其余保持中性，与后台 `admin-tag` 体系一致。文案见
- * `memberRepairActivityStatusLabels`。
+ * 成员端状态标签（issue #239 / #367）：报名状态本身一律中性。
+ *
+ * issue #367 起签到窗口（活动开始前 30 分钟）与报名截止解耦，`CLOSED` 不再等于
+ * 「可出勤」，所以不再按状态强调；改成按**签到窗口是否已开放**强调，
+ * 与「现在能不能操作」一致。文案见 `memberRepairActivityStatusLabels`。
  */
-export function memberRepairActivityStatusBadgeClass(status: string): string {
-  return status === "CLOSED" ? "admin-tag admin-tag--accent" : "admin-tag";
+export function memberRepairActivityStatusBadgeClass(
+  status: string,
+  checkInOpen = false,
+): string {
+  return checkInOpen && status !== "ENDED" ? "admin-tag admin-tag--accent" : "admin-tag";
 }

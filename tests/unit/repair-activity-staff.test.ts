@@ -11,11 +11,14 @@ import {
   assertActivityStaffOpen,
   canServeRegistration,
   canWithdrawRegistration,
+  CHECK_IN_LEAD_MS,
+  checkInOpensAt,
   mapIssueTypeToCategoryCode,
   shanghaiCalendarDay,
   sortQueueByCheckedInAt,
   validateCheckInIssueTypeUpdates,
 } from "../../src/features/repair-activities/repair-activity-validation";
+import { AppError } from "../../src/lib/api/errors";
 
 test("签到类型更新：兼容缺省 / 空数组，按规范化后的本批 ID 校验", () => {
   const ids = bodyRegistrationIds({ registrationIds: [" a ", "", "a", "b"] });
@@ -75,34 +78,64 @@ test("签到类型更新：拒绝非法形状、类型、重复、夹带与超�
   );
 });
 
-test("报名截止闸门：截止前禁止出勤、签到与接待，截止时刻起开放", () => {
-  const deadline = new Date("2026-10-08T02:00:00.000Z");
-  const activity = { signupClosesAt: deadline, activityAt: deadline };
-  const before = new Date(deadline.getTime() - 1);
+test("签到窗口：活动开始前 30 分钟开放，早 1 秒拒绝（issue #367）", () => {
+  const activityAt = new Date("2026-10-08T02:30:00.000Z");
+  // 报名截止远早于活动（3 天前），窗口不再跟随报名截止。
+  const activity = {
+    signupClosesAt: new Date("2026-10-05T02:00:00.000Z"),
+    activityAt,
+  };
+  const opensAt = new Date(activityAt.getTime() - CHECK_IN_LEAD_MS);
+  assert.equal(opensAt.toISOString(), "2026-10-08T02:00:00.000Z");
+  assert.equal(checkInOpensAt(activityAt).toISOString(), opensAt.toISOString());
+  assert.equal(checkInOpensAt(activityAt.toISOString()).toISOString(), opensAt.toISOString());
+
+  // 恰好开放时刻：可操作。
+  assert.equal(canOperateActivityStaff(activity, opensAt), true);
+  assert.doesNotThrow(() => assertActivityStaffOpen(activity, opensAt));
+  assert.equal(canOperateActivityStaff(activity, new Date(opensAt.getTime() + 1)), true);
+
+  // 早 1 秒：拒绝，且提示里带具体开放时刻。
+  const before = new Date(opensAt.getTime() - 1);
   assert.equal(canOperateActivityStaff(activity, before), false);
   assert.throws(() => assertActivityStaffOpen(activity, before), {
     code: "ACTIVITY_NOT_OPEN",
     status: 409,
   });
-  assert.equal(
-    canOperateActivityStaff(
-      { signupClosesAt: deadline.toISOString(), activityAt: deadline },
-      deadline,
-    ),
-    true,
+  assert.throws(
+    () => assertActivityStaffOpen(activity, before),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.message.includes("签到尚未开放") &&
+      error.message.includes("2026/10/08 10:00"),
   );
-  assert.doesNotThrow(() => assertActivityStaffOpen(activity, deadline));
-  assert.equal(canOperateActivityStaff(activity, new Date(deadline.getTime() + 1)), true);
+});
+
+test("报名截止早于窗口：截止后不再提前开放，仍等到活动前 30 分钟", () => {
+  const activityAt = new Date("2026-10-08T02:30:00.000Z");
+  const activity = { signupClosesAt: new Date("2026-10-05T02:00:00.000Z"), activityAt };
+  // 报名截止那一刻、以及截止后一小时，都不再等于「可操作」。
+  assert.equal(canOperateActivityStaff(activity, activity.signupClosesAt), false);
+  assert.equal(
+    canOperateActivityStaff(activity, new Date(activity.signupClosesAt.getTime() + 3_600_000)),
+    false,
+  );
+});
+
+test("报名截止晚于窗口起点：窗口仍按活动开始前 30 分钟，不受截止影响", () => {
+  const activityAt = new Date("2026-10-08T02:30:00.000Z");
+  // 截止 = 活动开始前 10 分钟，晚于窗口起点。
+  const activity = { signupClosesAt: new Date(activityAt.getTime() - 10 * 60_000), activityAt };
+  const opensAt = new Date(activityAt.getTime() - CHECK_IN_LEAD_MS);
+  assert.equal(canOperateActivityStaff(activity, opensAt), true);
 });
 
 test("活动结束上界：上海次日零点起关闭，包括已有出勤的请求重放", () => {
-  const activity = {
-    activityAt: new Date("2026-10-23T10:30:00.000Z"),
-    signupClosesAt: new Date("2026-10-23T04:00:00.000Z"),
-  };
+  const activityAt = new Date("2026-10-23T10:30:00.000Z");
+  const activity = { activityAt };
+  const opensAt = new Date(activityAt.getTime() - CHECK_IN_LEAD_MS);
   const end = new Date("2026-10-23T16:00:00.000Z");
-  // 报名截止后、活动尚未开始也仍可操作。
-  assert.equal(canOperateActivityStaff(activity, activity.signupClosesAt), true);
+  assert.equal(canOperateActivityStaff(activity, opensAt), true);
   assert.equal(canOperateActivityStaff(activity, new Date(end.getTime() - 1)), true);
   for (const now of [end, new Date(end.getTime() + 1)]) {
     assert.equal(canOperateActivityStaff(activity, now), false);
@@ -111,6 +144,14 @@ test("活动结束上界：上海次日零点起关闭，包括已有出勤的�
       status: 404,
     });
   }
+});
+
+test("活动有 endsAt 时，操作窗口终点仍是活动当日 24:00，不随 endsAt 提前关闭", () => {
+  const activityAt = new Date("2026-10-23T10:30:00.000Z");
+  // endsAt 早于当日 24:00；窗口上界只认 activityEndExclusive。
+  const activity = { activityAt, endsAt: new Date("2026-10-23T12:00:00.000Z") };
+  assert.equal(canOperateActivityStaff(activity, new Date("2026-10-23T15:59:59.000Z")), true);
+  assert.equal(canOperateActivityStaff(activity, new Date("2026-10-23T16:00:00.000Z")), false);
 });
 
 test("签到矩阵：仅 REGISTERED 可签到", () => {

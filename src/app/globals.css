@@ -3558,6 +3558,13 @@ html[data-theme="black-yellow"] {
     background: var(--status-neutral-wash);
     color: var(--status-neutral-deep);
   }
+  /* 成员工作台「待审核」（issue #368）：品牌色，与同列表「待补建」的警示橙区分。
+     只加成员端修饰类，不改 `--pending` 定义——后台招募列表与公开活动 FULL 标签共用它。 */
+  .repair-tag--review {
+    border-color: var(--accent-line);
+    background: var(--accent-wash);
+    color: var(--accent-deep);
+  }
 
   .repair-pagination,
   .admin-pagination {
@@ -6147,6 +6154,13 @@ html[data-theme="black-yellow"] {
     border-color: var(--line);
     color: var(--ink-3);
   }
+  /* 成员工作台「你已出勤」（issue #368）：成功色。原本用 `--accent`，与「待审核」同色，
+     两处同屏时语义会串；改成功后与「待补建」橙、「待审核」品牌色两两可辨。 */
+  .admin-tag--served {
+    border-color: var(--status-success-line);
+    background: var(--status-success-wash);
+    color: var(--status-success-deep);
+  }
 
   .admin-check {
     width: 1.05rem;
@@ -6228,6 +6242,12 @@ html[data-theme="black-yellow"] {
        92% 不透明度：背景仍能看出「后面还有一页」，但已不可读，焦点稳定落在窗口上。 */
     background: var(--bg-deep);
     opacity: 0.92;
+    animation: admin-veil-in var(--d-mid) var(--ease-quart) both;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .admin-modal__veil {
+      animation: none;
+    }
   }
   .admin-modal__window {
     position: relative;
@@ -6243,6 +6263,77 @@ html[data-theme="black-yellow"] {
   }
   .admin-modal__window--compact {
     inline-size: min(30rem, 100%);
+  }
+  /* 窄档：详情类内容（如报名成功凭条）在桌面也不铺满整宽。 */
+  .admin-modal__window--narrow {
+    inline-size: min(40rem, 100%);
+  }
+  /* 正文里有更大的可见标题时，弹层标题只留给读屏（aria-labelledby 仍指向它）。 */
+  .admin-modal__title--visually-hidden {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
+  /* 纯图标关闭按钮：方形点击区，触控与键盘都够大。 */
+  .admin-modal__close-icon {
+    inline-size: 2.5rem;
+    block-size: 2.5rem;
+    padding: 0;
+    justify-content: center;
+  }
+  /* fit 布局：窗口按内容自适应高度，动作区固定在底部、正文单独滚动。 */
+  .admin-modal .admin-modal__window--fit {
+    block-size: auto;
+    max-block-size: min(100dvh - var(--s-5), 52rem);
+    grid-template-rows: auto minmax(0, 1fr) auto;
+  }
+  .admin-modal__window--fit .admin-modal__body {
+    padding-block-end: var(--s-4);
+  }
+  .admin-modal__footer {
+    padding: var(--s-3) clamp(1.25rem, 3vw, 2rem);
+    border-top: 1px solid var(--line);
+    background: var(--surface-1);
+  }
+  .admin-modal__footer .signup__actions {
+    padding-top: 0;
+    border-top: none;
+  }
+  .admin-modal__footer .btn {
+    flex: 1 1 auto;
+    justify-content: center;
+    transition:
+      transform var(--d-fast) var(--ease-quart),
+      color var(--d-fast) var(--ease-quart),
+      background-color var(--d-fast) var(--ease-quart),
+      border-color var(--d-fast) var(--ease-quart);
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .admin-modal__footer .btn:hover {
+      transform: translateY(-1px);
+    }
+  }
+  .admin-modal__footer .btn:active {
+    transform: scale(0.99);
+  }
+  /* 关闭淡出：与进入对称（淡出 + 轻微下移），只由 fit 布局触发。 */
+  .admin-modal__window--closing {
+    animation: admin-modal-out var(--d-ui) var(--ease-quart) both;
+    pointer-events: none;
+  }
+  .admin-modal:has(.admin-modal__window--closing) .admin-modal__veil {
+    animation: admin-veil-out var(--d-ui) var(--ease-quart) both;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .admin-modal__window--closing {
+      animation: admin-modal-fade-out var(--d-ui) ease both;
+    }
   }
   /* 短 Alert：内容高度自适应并在屏幕居中，窄屏也不铺满整屏。 */
   .admin-modal .admin-modal__window--alert {
@@ -6276,6 +6367,10 @@ html[data-theme="black-yellow"] {
     font-weight: 800;
     line-height: 1.2;
     color: var(--ink);
+  }
+  /* 成功态标题：颜色只作辅助，文字本身仍表达状态。 */
+  .admin-modal__title--success {
+    color: var(--status-success-deep);
   }
   .admin-modal__lead {
     margin: var(--s-2) 0 0;
@@ -6676,11 +6771,49 @@ html[data-theme="black-yellow"] {
   @keyframes admin-modal-in {
     from {
       opacity: 0;
-      transform: translateY(8px);
+      transform: translateY(8px) scale(0.98);
     }
     to {
       opacity: 1;
       transform: none;
+    }
+  }
+  @keyframes admin-modal-out {
+    to {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+  }
+  @keyframes admin-modal-fade-out {
+    to {
+      opacity: 0;
+    }
+  }
+  @keyframes admin-veil-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 0.92;
+    }
+  }
+  @keyframes admin-veil-out {
+    to {
+      opacity: 0;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    /* 减弱动效：保留淡入，去掉位移与缩放。 */
+    .admin-modal__window {
+      animation: admin-modal-fade-in var(--d-ui) ease both;
+    }
+  }
+  @keyframes admin-modal-fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
     }
   }
 
@@ -8698,9 +8831,12 @@ html[data-theme="black-yellow"] {
   border-color: var(--line);
   transform: none;
 }
-/* 成员端：CLOSED 是「可出勤」窗口，沿用强调色脊线；
+/* 成员端：强调色脊线跟随**签到窗口是否已开放**（活动开始前 30 分钟起，issue #367），
+   不再跟随报名状态——`CLOSED` 只表示报名已截止，报名一截止就挂脊线会出现「高亮但点不动」。
    已结束仍可进工作台，保持与可点卡片一致的反馈与不透明度。 */
-.member-activity-workspace .activity-list--ticket .activity-card--stub.activity-card--closed {
+.member-activity-workspace
+  .activity-list--ticket
+  .activity-card--stub.activity-card--checkin-open {
   --spine: var(--accent);
 }
 .member-activity-workspace .activity-list--ticket .activity-card--stub.activity-card--ended {

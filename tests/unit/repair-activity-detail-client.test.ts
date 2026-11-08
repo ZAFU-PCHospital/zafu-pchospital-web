@@ -561,7 +561,21 @@ test("完整须知可展开且提交前必须同意，成功只展示到场准�
     findElement(success, (element) => element.type === RepairActivityPrecautions),
     undefined,
   );
-  assert.ok(findElement(success, (element) => element.type === RepairActivityPreparation));
+  // 到场准备已收进凭条组件内部：在凭条渲染出的子树里找它。
+  const { RepairActivityReceipt: ReceiptForPrep } =
+    await import("../../src/components/repair-activities/RepairActivityReceipt");
+  const receiptForPrep = findElement(
+    success,
+    (element) => element.type === ReceiptForPrep,
+  );
+  assert.ok(receiptForPrep, "成功态应渲染凭条");
+  assert.ok(
+    findElement(
+      ReceiptForPrep(receiptForPrep.props as never),
+      (element) => element.type === RepairActivityPreparation,
+    ),
+    "凭条下方保留到场准备",
+  );
   for (const item of repairActivitiesPage.detail.preparation) {
     assert.ok(text(RepairActivityPreparation()).includes(item.title));
   }
@@ -586,6 +600,65 @@ test("完整须知可展开且提交前必须同意，成功只展示到场准�
     "凭条应包含报名状态",
   );
   assert.equal(ui.requests.filter((request) => request.init.method === "POST").length, 1);
+});
+
+test("报名成功弹层渲染一屏凭条：活动名、起止时间、地点、凭条字段与一行到场准备", async (t) => {
+  const ui = await mount(t);
+  await ui.finish(0, { ...activity, endsAt: "2026-10-24T12:00:00Z" });
+  const consent = ui.requestSignup();
+  (consent.props.onConfirm as () => void)();
+  // 倒计时归零后组件会自行复查状态，GET 条数不固定：按方法定位那条 POST。
+  const postIndex = ui.requests.findIndex((request) => request.init.method === "POST");
+  assert.ok(postIndex >= 0, "确认后必须发出报名 POST");
+  ui.requests[postIndex].finish(Response.json({ success: true, data: registration }));
+  await setImmediate();
+
+  const { RepairActivityReceipt } =
+    await import("../../src/components/repair-activities/RepairActivityReceipt");
+  const { RepairActivityPreparation } =
+    await import("../../src/components/repair-activities/RepairActivityPreparation");
+  const { RepairActivityPrecautions } =
+    await import("../../src/components/repair-activities/RepairActivityPrecautions");
+
+  const success = signupDialog(ui.view());
+  assert.ok(success);
+  assert.equal(
+    success.props.confirmLabel,
+    repairActivitiesPage.detail.receipt.close,
+    "底部恢复「关闭」按钮",
+  );
+  assert.equal(success.props.cancelLabel, undefined, "成功态不渲染取消按钮");
+  assert.equal(success.props.titleTone, "success", "标题用成功色辅助表达状态");
+  assert.equal(success.props.titleHidden, true, "可见标题由凭条顶部承担，弹层标题只留给读屏");
+  assert.equal(success.props.closeIconOnly, true, "标题栏只留图标 ✕");
+  assert.equal(success.props.layout, "fit", "内容自适应高度、底部按钮固定");
+  assert.equal(success.props.size, "narrow", "成功态用 640px 窄档，桌面不铺满");
+  const receipt = findElement(success, (element) => element.type === RepairActivityReceipt);
+  assert.ok(receipt, "成功态必须是凭条，而不是一段纯文字");
+
+  const content = text(RepairActivityReceipt(receipt.props as never));
+  assert.ok(content.includes(activity.title), "凭条要有活动名称");
+  assert.ok(content.includes("2026/10/24 18:00–20:00"), "凭条要有起止时间区间");
+  assert.ok(content.includes(activity.location!), "凭条要有地点");
+  assert.ok(content.includes(registration.name), "凭条要有姓名");
+  assert.ok(content.includes(registration.phoneMasked), "凭条要有脱敏手机");
+  assert.ok(content.includes(repairActivitiesPage.detail.receipt.screenshotHint), "截图提示");
+  assert.equal(
+    content.includes(registration.id),
+    false,
+    "用户已裁定凭条不放报名编号，编号仍在常驻成功面板",
+  );
+
+  const preparation = findElement(
+    RepairActivityReceipt(receipt.props as never),
+    (element) => element.type === RepairActivityPreparation,
+  );
+  assert.equal(preparation?.props.layout, "compact", "凭条下方到场准备用紧凑两列");
+  assert.equal(
+    findElement(success, (element) => element.type === RepairActivityPrecautions),
+    undefined,
+    "凭条里不展开完整须知",
+  );
 });
 
 test("非法手机号在打开确认弹层前拦截并可纠正", async (t) => {
