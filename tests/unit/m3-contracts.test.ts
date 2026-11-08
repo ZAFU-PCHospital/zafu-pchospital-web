@@ -9,12 +9,8 @@ import {
   Permission,
 } from "../../src/types/contracts";
 import { rolePermissions } from "../../src/lib/auth/permissions";
-import {
-  memberCopy,
-  formatCount,
-  formatDurationMinutes,
-  formatShanghaiDate,
-} from "../../src/config/member";
+import { memberCopy, formatCount, formatDurationMinutes } from "../../src/config/member";
+import { formatShanghaiDate } from "../../src/lib/shanghai-date";
 import { mergeSkillOptions } from "../../src/features/skills/skill-options";
 import { approvedRepairWhere } from "../../src/features/repairs/repair-query-service";
 

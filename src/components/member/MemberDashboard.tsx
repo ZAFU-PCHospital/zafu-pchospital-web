@@ -6,13 +6,16 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { DashGroup, DashStat, DashStats, DashTile } from "@/components/ui/dash";
 import { MemberAvatar } from "@/components/member/MemberAvatar";
+import { isDashboardAllClear, pendingServesState } from "@/components/member/dashboard-state";
 import { MemberMetrics } from "@/components/member/MemberMetrics";
+import { MemberPendingServes } from "@/components/member/MemberPendingServes";
 import { MemberRankingPreviewView } from "@/components/member/MemberRankingPreview";
 import { MemberRecentRepairs } from "@/components/member/MemberRecentRepairs";
 import { MemberSection } from "@/components/member/MemberSection";
 import { MemberSkillList } from "@/components/member/MemberSkillList";
 import { MemberUpcoming } from "@/components/member/MemberUpcoming";
-import { memberCopy, formatShanghaiDate } from "@/config/member";
+import { memberCopy } from "@/config/member";
+import { formatShanghaiDate } from "@/lib/shanghai-date";
 import { roleLabels } from "@/components/member/MemberIdentityFields";
 import type { MemberDashboard as MemberDashboardData } from "@/types/contracts";
 
@@ -88,17 +91,18 @@ export function MemberDashboard({ initialDisplayName, roles }: MemberDashboardPr
 
   const queueFailed = data?.degraded.includes("workQueue") ?? false;
   const queue = queueFailed ? null : (data?.workQueue ?? null);
+  const { items: pendingServes, failed: pendingServesFailed } = pendingServesState(data);
   const unread = data
     ? data.notifications.available
       ? data.notifications.unreadCount
       : null
     : null;
-  const allClear =
-    queue !== null &&
-    queue.draftCount === 0 &&
-    queue.pendingCount === 0 &&
-    queue.rejectedCount === 0 &&
-    (unread === null || unread === 0);
+  const allClear = isDashboardAllClear({
+    queue,
+    pendingServeCount: pendingServes.length,
+    pendingServesFailed,
+    unread,
+  });
 
   return (
     <>
@@ -149,6 +153,15 @@ export function MemberDashboard({ initialDisplayName, roles }: MemberDashboardPr
               </h2>
               <span className="dash-block__tag">{copy.actionTag}</span>
             </div>
+            {pendingServes.length > 0 ? <MemberPendingServes items={pendingServes} /> : null}
+            {pendingServesFailed ? (
+              <p className="dash-note">
+                {copy.pendingServeLoadFailed}{" "}
+                <button className="dash-note__retry" type="button" onClick={() => void load()}>
+                  {memberCopy.common.reload}
+                </button>
+              </p>
+            ) : null}
             <DashStats>
               <DashStat
                 label={copy.actionDraft}

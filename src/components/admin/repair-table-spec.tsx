@@ -1,7 +1,8 @@
 import { Button } from "@/components/ui/Button";
 import { adminCopy, adminShared } from "@/config/admin";
 import { tableField } from "@/config/table-queries";
-import { formatDurationMinutes, formatShanghaiDate } from "@/config/member";
+import { formatDurationMinutes } from "@/config/member";
+import { formatShanghaiDate } from "@/lib/shanghai-date";
 import {
   formatRepairParticipants,
   repairCopy,

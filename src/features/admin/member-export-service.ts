@@ -1,5 +1,5 @@
 import { adminCopy, memberRoleLabels, memberStatusLabels } from "@/config/admin";
-import { formatShanghaiDate } from "@/config/member";
+import { formatShanghaiDate } from "@/lib/shanghai-date";
 import { memberDepartmentLabels } from "@/config/member-department";
 import { memberRepository } from "@/features/members/member-repository";
 import { AppError } from "@/lib/api/errors";

@@ -34,6 +34,14 @@ export function shanghaiDateOf(instant: Date | string): string {
   return `${value("year")}-${value("month")}-${value("day")}`;
 }
 
+/** 把 ISO 时间戳 / Date 格式化为 `YYYY-MM-DD`（Asia/Shanghai），空值或非法输入返回占位。 */
+export function formatShanghaiDate(value: string | Date | null | undefined): string {
+  if (!value) return "—";
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.valueOf())) return "—";
+  return shanghaiDateOf(date);
+}
+
 /** 完整日期时间展示（`2026/10/01 13:30`），按 Asia/Shanghai 取。 */
 export function formatShanghaiDateTime(value: Date | string): string {
   return new Intl.DateTimeFormat("zh-CN", {

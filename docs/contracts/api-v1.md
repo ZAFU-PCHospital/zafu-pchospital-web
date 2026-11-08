@@ -336,16 +336,21 @@ GET   /api/v1/skills                               # 启用中的技能标签（
 - 他人主页对不存在、已软删除、非有效成员与无权访问统一返回 `MEMBER_PROFILE_NOT_FOUND` 404，
   避免成员枚举；
 - 工作台 `notifications` / `favorites` 为 M4 真实摘要（`available: true` + 计数 + `latest`）；
-  `ranking` 仍固定为 `{ available: false, module: "M5" }`，不携带任何业务数字。
+  `ranking` 为 M5 本学年维修数量榜预览（`available: true`），失败时降级为 `available: false`。
 
 局部降级与日期口径：
 
 - `GET /member/dashboard` 额外返回 `degraded: MemberDashboardDegraded[]`，列出加载失败的区块
-  （`repairSummary` / `workQueue` / `recentRepairs` / `recentActivity` / `notifications` / `favorites`）。
-  维修四路与通知、收藏查询相互独立，任一路失败**不得**让其余区块一并报错，客户端只对失败区块
-  渲染错误态；全部成功时该字段为空数组。失败区块回退为空数组 / 空队列，`repairSummary` 回退时
-  所有 `MetricValue` 标为 `UNAVAILABLE`，**绝不**伪造 `0`。通知/收藏失败时摘要仍为
-  `{ available: true, unreadCount|count: 0, latest: [] }`，由 `degraded` 标明该区块失败。
+  （`repairSummary` / `workQueue` / `recentRepairs` / `recentActivity` / `pendingServes` / `notifications` / `favorites` / `ranking`）。
+  维修四路与待补单、通知、收藏、排行查询相互独立，任一路失败**不得**让其余区块一并报错，
+  客户端只对失败区块渲染错误态；全部成功时该字段为空数组。失败区块回退为空数组 / 空队列，
+  `repairSummary` 回退时所有 `MetricValue` 标为 `UNAVAILABLE`，**绝不**伪造 `0`。
+  通知 / 收藏失败时摘要标为 `available: false`，计数为 `null`、列表为空；
+  排行失败时 `available: false`、榜单为空，均由 `degraded` 标明该区块失败。
+- `pendingServes` 只包含当前登录成员本人「已接待、尚未建单」的记录（按 `servedAt` 倒序；
+  活动已软删除的记录不再返回），每条包含 `registrationId`、客户姓名、活动 ID / 标题与活动时间，
+  供工作台继续填写预填维修表单；查询失败时返回空数组，并在 `degraded` 中标记 `pendingServes`，
+  不能渲染成「没有待补单」。
 - 「本月 / 本学年」是日期相对口径。`GET /member/profile`、
   `GET /members/:memberProfileId/profile` 与工作台共用同一套
   `resolveMemberRanges(now)`，三个入口的同名指标必须相等。
@@ -829,7 +834,8 @@ DELETE     /api/v1/admin/comments/:id
   （`servedByMemberProfileId` / `servedAt`），**不再创建维修单或草稿**（`repair_record_id` 保持空）。
   权限、出勤与操作窗口同「成员出勤、签到与接待的操作窗口」一节。
 - **全局拦截**：本成员存在「`SERVED` 且 `repair_record_id` 为空」的登记时，**任何活动**的 serve
-  都返回 409 `ACTIVITY_SERVE_PENDING`（消息含客户姓名）；撤销或提交后解除。
+  都返回 409 `ACTIVITY_SERVE_PENDING`（消息含客户姓名）；撤销或提交后解除。活动已软删除的
+  遗留登记不再计入该拦截（否则无法进入预填表单，会永久锁死成员）。
 - **继续填写**：
   - `GET /api/v1/member/repair-activities/:id/registrations/:registrationId/prefill`：仅接待者本人可读，
     返回客户姓名、完整电话、机型、故障类型映射后的启用分类、活动日，以及本场出勤的

@@ -9,7 +9,6 @@
 
 import type { ShellTab } from "@/components/layout/ShellTabBar";
 import type { NavItem } from "@/config/navigation";
-import { shanghaiDateOf } from "@/lib/shanghai-date";
 
 /** 成员导航按任务分组。 */
 export type MemberNavGroup = {
@@ -213,6 +212,14 @@ export const memberCopy = {
     actionUnread: "未读消息",
     actionAllClear: "待办都处理完了，去登记一次新的维修吧",
 
+    /** 活动接待完成后尚未建单的记录；入口复用现有预填维修表单。 */
+    pendingServeTitle: "接待待补单",
+    pendingServeHint: "已接待客户，还没有创建维修记录",
+    pendingServeCount: "{count} 条",
+    pendingServeActivityAt: "活动时间",
+    pendingServeContinue: "继续填写",
+    pendingServeLoadFailed: "待补单读取失败",
+
     metricsTitle: "维修概览",
     metricsTag: "Repair Metrics",
     metricTotal: "累计已通过",
@@ -389,13 +396,4 @@ export function formatDurationMinutes(minutes: number): string {
 export function formatCount(value: number | null, unavailableLabel: string): string {
   if (value === null) return unavailableLabel;
   return `${value} 次`;
-}
-
-/** 把 ISO 时间戳格式化为 `YYYY-MM-DD`（Asia/Shanghai），失败时返回占位。 */
-export function formatShanghaiDate(value: string | null | undefined): string {
-  if (!value) return "—";
-  const date = new Date(value);
-  if (Number.isNaN(date.valueOf())) return "—";
-  // 日历日的唯一实现见 `lib/shanghai-date.ts`（formatToParts，不依赖 format() 的地区形态）。
-  return shanghaiDateOf(date);
 }

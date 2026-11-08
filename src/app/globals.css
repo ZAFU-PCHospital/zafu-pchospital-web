@@ -7509,6 +7509,90 @@ html[data-theme="black-yellow"] {
     font-size: var(--t-sm);
     font-weight: 600;
   }
+  /* 接待待补单：比普通待办更靠近行动，使用强调色淡底但不抢主 CTA。 */
+  .dash-pending {
+    display: grid;
+    gap: var(--s-3);
+    margin-block-end: var(--s-3);
+    padding: var(--s-3);
+    border: 1px solid var(--accent-line);
+    border-radius: var(--r-base);
+    background: var(--accent-wash);
+  }
+  .dash-pending__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--s-2);
+  }
+  .dash-pending__title {
+    margin: 0;
+    color: var(--ink);
+    font-size: var(--t-base);
+    font-weight: 750;
+  }
+  .dash-pending__hint {
+    margin: var(--s-1) 0 0;
+    color: var(--ink-3);
+    font-size: var(--t-sm);
+  }
+  .dash-pending__count {
+    color: var(--accent-deep);
+    font-size: var(--t-sm);
+    font-weight: 700;
+  }
+  .dash-pending__list {
+    display: grid;
+    gap: var(--s-2);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .dash-pending__item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--s-3);
+    padding-block-start: var(--s-2);
+    border-block-start: 1px solid var(--line-soft);
+  }
+  .dash-pending__item:first-child {
+    padding-block-start: 0;
+    border-block-start: 0;
+  }
+  .dash-pending__text {
+    display: grid;
+    gap: 1px;
+    min-width: 0;
+  }
+  .dash-pending__name {
+    color: var(--ink);
+    font-size: var(--t-sm);
+    font-weight: 700;
+  }
+  .dash-pending__activity {
+    color: var(--ink-2);
+    font-size: var(--t-sm);
+    overflow-wrap: anywhere;
+  }
+  .dash-pending__date {
+    color: var(--ink-4);
+    font-size: var(--t-xs);
+  }
+  .dash-pending__action {
+    flex: 0 0 auto;
+  }
+  @media (max-width: 759px) {
+    .dash-pending__item {
+      flex-direction: column;
+      align-items: stretch;
+    }
+    .dash-pending__action {
+      width: 100%;
+      justify-content: center;
+    }
+  }
   .dash-note {
     margin: var(--s-2) 0 0;
     color: var(--ink-3);
