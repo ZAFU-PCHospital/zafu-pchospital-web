@@ -53,11 +53,26 @@ test("成员活动卡复用票根壳，保留成员字段与工作台入口", ()
   assert.ok(meta.includes("18:00"));
   assert.ok(meta.includes("名额 3 / 10"));
   assert.ok(meta.includes("已出勤"));
+  // issue #367：卡片额外给出签到窗口信息，成员不必点进工作台才知道能否操作。
+  assert.ok(meta.includes("签到"));
 
   const footer = text(props.footer);
-  assert.ok(footer.includes("可出勤"));
+  assert.ok(footer.includes("报名已截止"));
   assert.ok(footer.includes("进入工作台"));
-  assert.equal(footer.includes("报名截止"), false);
+});
+
+test("签到窗口（issue #367）：未开放显示具体开放时刻，开放后显示已开放，已结束不显示", () => {
+  const meta = (item: StaffActivityListItem) =>
+    text((MemberRepairActivityTicketCard({ activity: item }).props as { meta: ReactNode }).meta);
+
+  // 活动 2099-01-01 10:00（上海）→ 窗口 09:30 开放；未到时刻显示具体开放时刻。
+  assert.ok(meta({ ...activity, status: "OPEN", activityAt: "2099-01-01T02:00:00Z" }).includes(
+    "2099/01/01 09:30",
+  ));
+  // 活动时间已过 → 窗口已开放。
+  assert.ok(meta({ ...activity, status: "OPEN" }).includes("签到已开放"));
+  // 已结束的活动不再提示签到窗口。
+  assert.equal(meta({ ...activity, status: "ENDED" }).includes("签到"), false);
 });
 
 test("成员活动卡覆盖成员端五态，且始终可进入工作台", () => {
@@ -65,7 +80,7 @@ test("成员活动卡覆盖成员端五态，且始终可进入工作台", () =>
     UPCOMING: "未开始",
     OPEN: "报名中",
     FULL: "已报满",
-    CLOSED: "可出勤",
+    CLOSED: "报名已截止",
     ENDED: "已结束",
   } as const;
 

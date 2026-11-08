@@ -1,5 +1,6 @@
 import { ActivityTicketCardShell } from "@/components/repair-activities/ActivityTicketCardShell";
 import {
+  formatShanghaiDateTime,
   formatShanghaiTime,
   formatShanghaiTimeRange,
 } from "@/components/repair-activities/activity-format";
@@ -8,6 +9,7 @@ import {
   memberRepairActivitiesCopy,
   memberRepairActivityStatusLabels,
 } from "@/config/repair-activities";
+import { checkInOpensAt } from "@/features/repair-activities/repair-activity-validation";
 import type { StaffActivityListItem } from "@/features/repair-activities/repair-activity-staff-service";
 
 const copy = memberRepairActivitiesCopy.list;
@@ -19,6 +21,13 @@ export function MemberRepairActivityTicketCard({ activity }: { activity: StaffAc
     .replace("{capacity}", String(activity.capacity));
   const attendance = activity.attended ? copy.attended : copy.notAttended;
   const timeRange = formatShanghaiTimeRange(activity.activityAt, activity.endsAt);
+  // 签到窗口（issue #367）：活动开始前 30 分钟开放；卡片只在取到数据后由客户端渲染，
+  // 因此这里按当前时刻判断不会产生水合不一致。
+  const opensAt = checkInOpensAt(activity.activityAt);
+  const checkInOpen = activity.status !== "ENDED" && Date.now() >= opensAt.getTime();
+  const checkInLine = checkInOpen
+    ? copy.checkInOpen
+    : copy.checkInOpensAt.replace("{time}", formatShanghaiDateTime(opensAt));
 
   return (
     <ActivityTicketCardShell
@@ -37,11 +46,12 @@ export function MemberRepairActivityTicketCard({ activity }: { activity: StaffAc
           <p>
             {capacity} · {attendance}
           </p>
+          {activity.status === "ENDED" ? null : <p>{checkInLine}</p>}
         </>
       }
       footer={
         <>
-          <span className={memberRepairActivityStatusBadgeClass(activity.status)}>
+          <span className={memberRepairActivityStatusBadgeClass(activity.status, checkInOpen)}>
             {memberRepairActivityStatusLabels[activity.status]}
           </span>
           <span className="activity-card__cta">

@@ -85,17 +85,22 @@ test("优先级：已结束压过报名截止与报满", () => {
   );
 });
 
-test("成员端状态文案：CLOSED 显示可出勤，公开页仍为报名截止（issue #239）", () => {
-  assert.equal(memberRepairActivityStatusLabels.CLOSED, "可出勤");
+test("成员端状态文案：CLOSED 只表示报名已截止，不再等于可出勤（issue #367）", () => {
+  assert.equal(memberRepairActivityStatusLabels.CLOSED, "报名已截止");
   assert.equal(repairActivityStatusLabels.CLOSED, "报名截止");
-  assert.equal(Object.values(memberRepairActivityStatusLabels).includes("报名截止"), false);
   assert.deepEqual(
     Object.keys(memberRepairActivityStatusLabels).sort(),
     [...RepairActivityStatus].sort(),
     "成员端状态文案必须覆盖全部五态",
   );
-  assert.ok(memberRepairActivityStatusBadgeClass("CLOSED").includes("admin-tag--accent"));
+  // 强调改由「签到窗口是否已开放」决定，不再按报名状态。
+  assert.equal(memberRepairActivityStatusBadgeClass("CLOSED").includes("admin-tag--accent"), false);
+  assert.ok(memberRepairActivityStatusBadgeClass("CLOSED", true).includes("admin-tag--accent"));
   assert.equal(memberRepairActivityStatusBadgeClass("OPEN").includes("admin-tag--accent"), false);
+  assert.equal(
+    memberRepairActivityStatusBadgeClass("ENDED", true).includes("admin-tag--accent"),
+    false,
+  );
 });
 
 test("软删释放名额后 FULL 回到 OPEN", () => {
