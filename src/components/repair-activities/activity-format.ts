@@ -1,8 +1,8 @@
 import {
   formatShanghaiDateTime as formatDateTime,
   formatShanghaiTime as formatTime,
-  shanghaiDayKey,
-} from "@/lib/format/shanghai-time";
+  shanghaiDateOf,
+} from "@/lib/shanghai-date";
 
 /** Asia/Shanghai 日期时间展示（公开/成员端共用）。 */
 export function formatShanghaiDateTime(value: Date | string): string {
@@ -27,7 +27,7 @@ export function formatShanghaiTimeRange(
   const start = new Date(startIso);
   const end = new Date(endsAt);
   if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return null;
-  if (shanghaiDayKey(start) === shanghaiDayKey(end)) {
+  if (shanghaiDateOf(start) === shanghaiDateOf(end)) {
     return `${formatShanghaiDateTime(startIso)}–${formatShanghaiTime(endsAt)}`;
   }
   return `${formatShanghaiDateTime(startIso)} — ${formatShanghaiDateTime(endsAt)}`;

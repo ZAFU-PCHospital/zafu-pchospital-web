@@ -9,6 +9,7 @@
 
 import type { ShellTab } from "@/components/layout/ShellTabBar";
 import type { NavItem } from "@/config/navigation";
+import { shanghaiDateOf } from "@/lib/shanghai-date";
 
 /** 成员导航按任务分组。 */
 export type MemberNavGroup = {
@@ -395,10 +396,6 @@ export function formatShanghaiDate(value: string | null | undefined): string {
   if (!value) return "—";
   const date = new Date(value);
   if (Number.isNaN(date.valueOf())) return "—";
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Shanghai",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(date);
+  // 日历日的唯一实现见 `lib/shanghai-date.ts`（formatToParts，不依赖 format() 的地区形态）。
+  return shanghaiDateOf(date);
 }

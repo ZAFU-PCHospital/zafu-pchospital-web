@@ -1,6 +1,6 @@
 import { startOfShanghaiDay } from "@/lib/academic-term";
 import { AppError } from "@/lib/api/errors";
-import { formatShanghaiDateTime } from "@/lib/format/shanghai-time";
+import { formatShanghaiDateTime, shanghaiDateOf } from "@/lib/shanghai-date";
 
 /** 对外五态。优先级：ENDED > CLOSED > FULL/OPEN > UPCOMING。 */
 export const RepairActivityStatus = ["UPCOMING", "OPEN", "FULL", "CLOSED", "ENDED"] as const;
@@ -227,16 +227,16 @@ export function canOperateActivityStaff(activity: StaffActivityWindow, now = new
 }
 
 export function assertActivityStaffOpen(activity: StaffActivityWindow, now = new Date()): void {
+  // 单一判据：能不能操作只由 canOperateActivityStaff 决定，这里只把「为什么不能」翻译成错误码。
+  // 不要再在这里重写一遍边界——issue #367 改的就是这条边界，写两份迟早只改一处。
+  if (canOperateActivityStaff(activity, now)) return;
   if (now.getTime() >= activityEndExclusive(new Date(activity.activityAt)).getTime()) {
     throw new AppError("ACTIVITY_ENDED", "活动已结束，不能再出勤、签到或接待");
   }
-  const opensAt = checkInOpensAt(activity.activityAt);
-  if (now.getTime() < opensAt.getTime()) {
-    throw new AppError(
-      "ACTIVITY_NOT_OPEN",
-      `签到尚未开放，将于 ${formatShanghaiDateTime(opensAt)} 开放（活动开始前 30 分钟）`,
-    );
-  }
+  throw new AppError(
+    "ACTIVITY_NOT_OPEN",
+    `签到尚未开放，将于 ${formatShanghaiDateTime(checkInOpensAt(activity.activityAt))} 开放（活动开始前 30 分钟）`,
+  );
 }
 
 /**
@@ -407,12 +407,7 @@ export function sortQueueByCheckedInAt<T extends { checkedInAt: Date | string | 
 
 /** activityAt → Asia/Shanghai 日历日 `YYYY-MM-DD`（与 repairDate 存储约定一致）。 */
 export function shanghaiCalendarDay(activityAt: Date): string {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Shanghai",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(activityAt);
+  return shanghaiDateOf(activityAt);
 }
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
