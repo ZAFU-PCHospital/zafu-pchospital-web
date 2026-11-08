@@ -639,8 +639,9 @@ DELETE     /api/v1/admin/comments/:id
 
 ### 仍由应用层表达的展示顺序
 
-- **报名队列位次**：队列本就按签到时间升序（服务端顺序即口径），位次取渲染顺序（从 1 起），
-  没有新增字段或接口。
+- **报名队列位次**：队列按签到时间升序；同一签到时间再按 `checkInOrder` 升序，
+  历史空值排在有序行之后并按 ID 稳定排列。位次取渲染顺序（从 1 起）；
+  `checkInOrder` 由批量签到的提交顺序写入，另外体现在 `StaffRegistrationView`。
 - **首页近场活动「报名开放中优先」**：`pickNonEndedRepairActivitiesForHomePreview`
   按 OPEN → UPCOMING → FULL / CLOSED 分档，同档内 `activityAt` 升序，`ENDED` 不进预览；
   公开列表的未结束 / 已结束分段排序已下推到数据库（见下方「公开活动列表分页」），
@@ -781,7 +782,10 @@ DELETE     /api/v1/admin/comments/:id
   属于本批且不能重复；数量不能超过本批客户数，类型必须是现有四种枚举。
   null / 错误形状 / 非本批 ID / 重复 / 无效类型 / 超限均为 400 `VALIDATION_FAILED`。
 - 锁定活动的 Serializable 事务同时更新 REGISTERED 客户的明确类型修改、CHECKED_IN 状态、
-  checkedInAt 和审计。未附更新的客户保留事务读取的当前类型；一条不存在、跨活动、软删除
+  checkedInAt、`checkInOrder` 和审计。`registrationIds` 的提交顺序就是入队顺序：同一批的
+  `checkInOrder` 从本场当前最大值起递增（首值为 0），响应 `StaffRegistrationView` 带回该字段；队列按
+  `checkedInAt` 升序、同一时间再按 `checkInOrder` 升序、历史空值按 `id` 稳定排序。
+  未附更新的客户保留事务读取的当前类型；一条不存在、跨活动、软删除
   （404 `ACTIVITY_REGISTRATION_NOT_FOUND`）或不可签到（409 `ACTIVITY_REGISTRATION_STATE_INVALID`）
   时整批回滚，包含已经处理的类型、状态与审计。
 - CHECKED_IN 重试没有更新或更新与当前类型相同时幂等返回，不重置时间或队列位置；
@@ -789,8 +793,9 @@ DELETE     /api/v1/admin/comments/:id
 - 保留 `repair_activity.registrations_checked_in` 摘要；真正的类型变更逐条写 USER 审计
   `repair_activity.registration_issue_type_updated`，actorUserId 为当前成员账号，before / after
   只记 issueType；无实际变更及幂等重试不重复写类型审计，不记录姓名、完整电话或凭证。
-- 成员看板在确认弹窗中按待签到列表顺序核对姓名、脱敏电话、已填机型与类型，只在最终确认时
-  一次提交快照 ID 及实际编辑项。取消丢弃草稿，失败保留草稿。成功后刷新失败保留已渲染看板，
+- 成员看板在待签到列表按勾选先后显示序号，确认弹窗按该序号核对姓名、脱敏电话、已填机型与
+  类型，只在最终确认时一次提交快照 ID 及实际编辑项；服务端按提交顺序写入 `checkInOrder`。
+  取消丢弃草稿，失败保留草稿。成功后刷新失败保留已渲染看板，
   明确提示签到成功与刷新失败，成功反馈使用不占布局的浮层。
 
 影响范围：成员看板 → check-in Route → Staff Service；原三参数 Service 调用

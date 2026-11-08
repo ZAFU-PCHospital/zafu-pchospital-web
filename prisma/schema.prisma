@@ -663,6 +663,8 @@ model RepairActivityRegistration {
   consentVersion          String?        @map("consent_version") @db.VarChar(16)
   consentAcceptedAt       DateTime?      @map("consent_accepted_at") @db.DateTime(3)
   checkedInAt             DateTime?      @map("checked_in_at") @db.DateTime(3)
+  /// 批量签到按提交顺序分配的本场入队序号（issue #358）；历史行与未签到行为空。
+  checkInOrder            Int?           @map("check_in_order")
   servedAt                DateTime?      @map("served_at") @db.DateTime(3)
   servedByMemberProfileId String?        @map("served_by_member_profile_id") @db.Char(36)
   repairRecordId          String?        @unique(map: "repair_activity_regs_repair_record_uq") @map("repair_record_id") @db.Char(36)

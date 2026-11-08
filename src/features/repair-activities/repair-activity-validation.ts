@@ -392,16 +392,25 @@ export function canServeRegistration(status: string): boolean {
 }
 
 /**
- * 排队序：CHECKED_IN 按 checkedInAt ASC；null 排最后（防御）。
+ * 排队序：CHECKED_IN 按 checkedInAt ASC；同一时间按 checkInOrder ASC，
+ * 历史空值（无顺序）排在有序行之后，再按 id 稳定排序；checkedInAt 为 null 排最后（防御）。
  * 返回新数组，不改原数组。
  */
-export function sortQueueByCheckedInAt<T extends { checkedInAt: Date | string | null }>(
-  rows: readonly T[],
-): T[] {
+export function sortQueueByCheckedInAt<
+  T extends {
+    checkedInAt: Date | string | null;
+    checkInOrder?: number | null;
+    id?: string;
+  },
+>(rows: readonly T[]): T[] {
   return [...rows].sort((a, b) => {
     const ta = a.checkedInAt ? new Date(a.checkedInAt).getTime() : Number.POSITIVE_INFINITY;
     const tb = b.checkedInAt ? new Date(b.checkedInAt).getTime() : Number.POSITIVE_INFINITY;
-    return ta - tb;
+    if (ta !== tb) return ta - tb;
+    const oa = a.checkInOrder ?? Number.POSITIVE_INFINITY;
+    const ob = b.checkInOrder ?? Number.POSITIVE_INFINITY;
+    if (oa !== ob) return oa - ob;
+    return (a.id ?? "").localeCompare(b.id ?? "");
   });
 }
 

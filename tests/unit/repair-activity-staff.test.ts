@@ -195,6 +195,22 @@ test("排队序按 checkedInAt ASC；null 排最后", () => {
   assert.equal(rows[0].id, "c");
 });
 
+test("同一签到时间按 checkInOrder；历史空值排后并按 id 稳定", () => {
+  const at = new Date("2026-09-25T10:00:00.000Z");
+  const earlier = new Date("2026-09-25T09:00:00.000Z");
+  const rows = [
+    { id: "c", checkedInAt: at, checkInOrder: null },
+    { id: "a", checkedInAt: at, checkInOrder: 2 },
+    { id: "b", checkedInAt: at, checkInOrder: 0 },
+    { id: "d", checkedInAt: at, checkInOrder: null },
+    { id: "early", checkedInAt: earlier, checkInOrder: 99 },
+  ];
+  assert.deepEqual(
+    sortQueueByCheckedInAt(rows).map((r) => r.id),
+    ["early", "b", "a", "c", "d"],
+  );
+});
+
 test("出勤闸门语义：未出勤操作码为 ACTIVITY_ATTENDANCE_REQUIRED（403）", async () => {
   const { ApiErrorCode, defaultStatusFor } = await importErrorStatus();
   assert.ok((ApiErrorCode as readonly string[]).includes("ACTIVITY_ATTENDANCE_REQUIRED"));

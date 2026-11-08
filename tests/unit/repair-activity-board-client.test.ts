@@ -18,6 +18,8 @@ type Props = {
   children?: ReactNode;
   disabled?: boolean;
   checked?: boolean;
+  id?: string;
+  "aria-label"?: string;
   type?: string;
   className?: string;
   message?: string;
@@ -56,6 +58,7 @@ const row: StaffRegistrationView = {
   deviceModel: null,
   status: "REGISTERED",
   checkedInAt: null,
+  checkInOrder: null,
   servedAt: null,
   repairRecordId: null,
   createdAt: "2026-10-23T00:00:00Z",
@@ -212,10 +215,12 @@ async function mount(
   const reads: { view: string; at: number }[] = [];
   let postResponse: (() => Promise<Response>) | null = null;
   const posts: string[] = [];
+  const postBodies: string[] = [];
   let gets = 0;
   t.mock.method(globalThis, "fetch", async (input: unknown, init?: RequestInit) => {
     if (init?.method === "POST") {
       posts.push(String(input));
+      postBodies.push(typeof init.body === "string" ? init.body : "");
       if (postResponse) return postResponse();
       assert.ok(rejectEnded, "截止后不能发出写请求");
       return Response.json(
@@ -314,6 +319,7 @@ async function mount(
     button,
     dialog,
     posts,
+    postBodies,
     gets: () => gets,
     elements: () => elements(view()),
   };
@@ -584,6 +590,60 @@ for (const desktop of [true, false]) {
     });
   }
 }
+
+test("勾选序号决定确认窗与入队顺序（issue #358）", async (t) => {
+  const data = board();
+  data.eligible = [
+    { ...row, id: "a", name: "甲" },
+    { ...row, id: "b", name: "乙" },
+    { ...row, id: "c", name: "丙" },
+  ];
+  const ui = await mount(t, data, new Date(end.getTime() - 600_000));
+  const checkbox = (id: string) =>
+    ui
+      .elements()
+      .find(
+        (element) => element.props.type === "checkbox" && element.props.id === `registration-${id}`,
+      )!;
+  const selectedNumbers = () =>
+    ui
+      .elements()
+      .filter(
+        (element) =>
+          typeof element.props.className === "string" &&
+          element.props.className.includes("is-selected"),
+      )
+      .map((element) => String(element.props.children ?? ""));
+
+  checkbox("b").props.onChange!();
+  checkbox("c").props.onChange!();
+  checkbox("a").props.onChange!();
+  ui.view();
+  assert.deepEqual(selectedNumbers(), ["3", "1", "2"], "DOM 顺序为甲/乙/丙，序号按勾选先后");
+
+  checkbox("b").props.onChange!();
+  ui.view();
+  assert.deepEqual(selectedNumbers(), ["2", "1"], "取消勾选后剩余序号自动收紧且保持相对顺序");
+
+  checkbox("b").props.onChange!();
+  ui.view();
+  assert.deepEqual(selectedNumbers(), ["2", "3", "1"], "重新勾选排到末尾");
+  assert.equal(checkbox("a").props["aria-label"], "姓名 甲，第 2 位");
+
+  ui.button(copy.checkIn).onClick!();
+  const dialogText = text(ui.dialog()!.children);
+  assert.ok(dialogText.indexOf("丙") < dialogText.indexOf("甲"));
+  assert.ok(dialogText.indexOf("甲") < dialogText.indexOf("乙"));
+
+  ui.replyToPost(async () => Response.json({ success: true, data: { checkedIn: [] } }));
+  ui.dialog()!.onConfirm!();
+  await setImmediate();
+  assert.deepEqual(
+    (JSON.parse(ui.postBodies[0]!) as { registrationIds: string[] }).registrationIds,
+    ["c", "a", "b"],
+    "提交顺序必须与勾选序号一致",
+  );
+});
 
 test("旧签到确认窗跨过结束上限不能提交，取消仍可用，既有看板不卸载", async (t) => {
   const ui = await mount(t, board(), new Date(end.getTime() - 1_000));
