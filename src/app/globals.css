@@ -3558,6 +3558,13 @@ html[data-theme="black-yellow"] {
     background: var(--status-neutral-wash);
     color: var(--status-neutral-deep);
   }
+  /* 成员工作台「待审核」（issue #368）：品牌色，与同列表「待补建」的警示橙区分。
+     只加成员端修饰类，不改 `--pending` 定义——后台招募列表与公开活动 FULL 标签共用它。 */
+  .repair-tag--review {
+    border-color: var(--accent-line);
+    background: var(--accent-wash);
+    color: var(--accent-deep);
+  }
 
   .repair-pagination,
   .admin-pagination {
@@ -6146,6 +6153,13 @@ html[data-theme="black-yellow"] {
   .admin-tag--muted {
     border-color: var(--line);
     color: var(--ink-3);
+  }
+  /* 成员工作台「你已出勤」（issue #368）：成功色。原本用 `--accent`，与「待审核」同色，
+     两处同屏时语义会串；改成功后与「待补建」橙、「待审核」品牌色两两可辨。 */
+  .admin-tag--served {
+    border-color: var(--status-success-line);
+    background: var(--status-success-wash);
+    color: var(--status-success-deep);
   }
 
   .admin-check {

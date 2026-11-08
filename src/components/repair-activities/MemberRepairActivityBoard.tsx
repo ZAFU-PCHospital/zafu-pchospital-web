@@ -14,6 +14,10 @@ import { AdminModal } from "@/components/admin/AdminModal";
 import { AdminToast, type AdminToastMessage } from "@/components/admin/AdminToast";
 import { memberRepairActivityStatusBadgeClass } from "@/components/repair-activities/activity-status-badge";
 import {
+  ATTENDED_TAG_CLASS,
+  recordStatusTagClass,
+} from "@/components/repair-activities/activity-record-tag";
+import {
   formatShanghaiDateTime,
   formatShanghaiTime,
 } from "@/components/repair-activities/activity-format";
@@ -597,7 +601,7 @@ export function MemberRepairActivityBoard({ activityId }: Props) {
           {copy.back}
         </Button>
         {board.attended ? (
-          <span className="admin-tag admin-tag--accent">{copy.attendedBadge}</span>
+          <span className={ATTENDED_TAG_CLASS}>{copy.attendedBadge}</span>
         ) : (
           <Button
             className="activity-board__attend-cta"
@@ -953,9 +957,7 @@ export function MemberRepairActivityBoard({ activityId }: Props) {
                               {copy.servedPendingTag}
                             </span>
                           ) : row.recordStatus ? (
-                            <span
-                              className={`repair-tag repair-tag--${row.recordStatus.toLowerCase()}`}
-                            >
+                            <span className={recordStatusTagClass(row.recordStatus)}>
                               {row.recordStatus === "APPROVED" ? <Icon name="check" /> : null}
                               {repairStatusLabels[row.recordStatus]}
                             </span>
