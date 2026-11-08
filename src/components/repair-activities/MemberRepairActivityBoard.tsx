@@ -16,6 +16,7 @@ import { memberRepairActivityStatusBadgeClass } from "@/components/repair-activi
 import {
   ATTENDED_TAG_CLASS,
   recordStatusTagClass,
+  recordStatusTagIcon,
 } from "@/components/repair-activities/activity-record-tag";
 import {
   formatShanghaiDateTime,
@@ -947,6 +948,8 @@ export function MemberRepairActivityBoard({ activityId }: Props) {
                   const recordId = row.repairRecordId;
                   // 待补建：接待已占位、维修单还没创建。
                   const pendingRecord = recordId === null;
+                  // 已通过打勾、待审核用「眼睛」：暗色下品牌黄与警示橙色相接近，靠图标再区分一层。
+                  const recordIcon = row.recordStatus ? recordStatusTagIcon(row.recordStatus) : null;
                   return (
                     <li key={row.id} className="activity-board__row">
                       <div className="activity-board__served-main">
@@ -958,7 +961,7 @@ export function MemberRepairActivityBoard({ activityId }: Props) {
                             </span>
                           ) : row.recordStatus ? (
                             <span className={recordStatusTagClass(row.recordStatus)}>
-                              {row.recordStatus === "APPROVED" ? <Icon name="check" /> : null}
+                              {recordIcon ? <Icon name={recordIcon} /> : null}
                               {repairStatusLabels[row.recordStatus]}
                             </span>
                           ) : null}

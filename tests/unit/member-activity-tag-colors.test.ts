@@ -5,6 +5,7 @@ import test from "node:test";
 import {
   ATTENDED_TAG_CLASS,
   recordStatusTagClass,
+  recordStatusTagIcon,
 } from "../../src/components/repair-activities/activity-record-tag";
 
 const read = (path: string) => readFileSync(path, "utf8");
@@ -60,6 +61,14 @@ test("新修饰类只用既有令牌，不改公共类定义", () => {
   assert.ok(review.includes("var(--accent-wash)"));
   assert.ok(review.includes("var(--accent-deep)"));
 
+  // 暗色不再单独改样式：区分改由图标承担（见下一条用例），这里只确认没有残留的
+  // 主题分支改写了填充方式。
+  assert.equal(
+    source.includes('html[data-theme="black-yellow"] .repair-tag--review'),
+    false,
+    "暗色不应再改写 review 的填充",
+  );
+
   // 两个新类不得出现硬编码色值（只允许 var(--token)）。
   for (const blockText of [served, review]) {
     assert.equal(/#[0-9a-f]{3,8}\b/i.test(blockText), false, "不得硬编码十六进制色值");
@@ -71,6 +80,19 @@ test("新修饰类只用既有令牌，不改公共类定义", () => {
   assert.ok(pending.includes("var(--status-warning-line)"));
   assert.ok(pending.includes("var(--status-warning-wash)"));
   assert.ok(pending.includes("var(--status-warning-deep)"));
+});
+
+test("待审核带 eye 图标：暗色下与待补建不只靠颜色区分（issue #368）", () => {
+  // 已通过沿用既有 check，待审核加 eye（审＝查看），其余无图标。
+  assert.equal(recordStatusTagIcon("APPROVED"), "check");
+  assert.equal(recordStatusTagIcon("PENDING"), "eye");
+  assert.equal(recordStatusTagIcon("DRAFT"), null);
+  assert.equal(recordStatusTagIcon("REJECTED"), null);
+  assert.equal(recordStatusTagIcon("SOMETHING_NEW"), null);
+  // 看板按映射渲染图标，不再硬编码 `=== "APPROVED"` 一处判断。
+  const board = read("src/components/repair-activities/MemberRepairActivityBoard.tsx");
+  assert.ok(board.includes("recordStatusTagIcon(row.recordStatus)"));
+  assert.ok(board.includes("<Icon name={recordIcon} />"));
 });
 
 test("看板接线：使用共享映射，不再拼 `repair-tag--${status}`", () => {
