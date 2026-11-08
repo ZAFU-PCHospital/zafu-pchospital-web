@@ -198,6 +198,11 @@ M6 批次 2 的其余能力（技能标签库 CRUD、原评论管理、邀请码
 按 `<key>:<index>` 保存派生键。历史行与不带键的旧客户端保持 `NULL`（唯一索引允许多个
 NULL），删除照片时释放键。不新增表、权限或回填。
 
+批量签到顺序（issue #358）迁移 `20261108000000_repair_activity_check_in_order` 为报名记录
+增加可空 `check_in_order INTEGER`；历史行保持 `NULL`，撤回时清空。队列读取先按
+`checked_in_at`，同一时间再按 `check_in_order` 升序，空值按 `id` 稳定排列。发布需先执行
+版本化迁移。
+
 ```powershell
 pnpm db:health
 pnpm test

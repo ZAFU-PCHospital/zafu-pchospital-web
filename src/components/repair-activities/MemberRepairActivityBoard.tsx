@@ -339,7 +339,11 @@ export function MemberRepairActivityBoard({ activityId }: Props) {
 
   function openCheckInConfirm() {
     if (busy !== null || checkInPending.current || !allowStaffAction()) return;
-    const rows = board?.eligible.filter((row) => selected.has(row.id)) ?? [];
+    const rowsById = new Map((board?.eligible ?? []).map((row) => [row.id, row] as const));
+    // 按勾选先后入队：Set 保留首次选中的插入顺序，取消后再选会排到末尾。
+    const rows = [...selected]
+      .map((id) => rowsById.get(id))
+      .filter((row): row is StaffRegistrationView => Boolean(row));
     if (rows.length === 0) {
       setMessage(copy.selectNone);
       return;
@@ -590,9 +594,14 @@ export function MemberRepairActivityBoard({ activityId }: Props) {
         ? copy.searchCountFailed
         : copy.searchCountUnknown
     : board.servedCount;
+  const eligibleIds = new Set(board.eligible.map((row) => row.id));
+  const orderedSelectedIds = [...selected].filter((id) => eligibleIds.has(id));
+  const selectionOrder = new Map(orderedSelectedIds.map((id, index) => [id, index + 1] as const));
+  const selectedCount = orderedSelectedIds.length;
   const hiddenSelected = matches
-    ? board.eligible.filter((row) => selected.has(row.id) && !matches(row)).length
+    ? board.eligible.filter((row) => selectionOrder.has(row.id) && !matches(row)).length
     : 0;
+  // 勾选序号即入队顺序；隐藏的已选行仍占用原序号，取消后自动重排。
   // 手机端切换项（与 panes 的可见性一致：成员没有「待签到」）。
   const mobilePanes: Array<[MobilePane, string, number | string]> = [];
   if (board.canAdmin)
@@ -777,14 +786,30 @@ export function MemberRepairActivityBoard({ activityId }: Props) {
                   {eligibleRows.map((row) => (
                     <li key={row.id} className="activity-board__row">
                       <div className="activity-board__check">
-                        <input
-                          type="checkbox"
-                          id={`registration-${row.id}`}
-                          checked={selected.has(row.id)}
-                          disabled={opsDisabled}
-                          aria-label={`${copy.name} ${row.name}`}
-                          onChange={() => toggle(row.id)}
-                        />
+                        <label className="activity-board__check-select">
+                          <input
+                            type="checkbox"
+                            id={`registration-${row.id}`}
+                            className="activity-board__check-input"
+                            checked={selected.has(row.id)}
+                            disabled={opsDisabled}
+                            aria-label={
+                              selected.has(row.id)
+                                ? `${copy.name} ${row.name}，第 ${selectionOrder.get(row.id)} 位`
+                                : `${copy.name} ${row.name}`
+                            }
+                            onChange={() => toggle(row.id)}
+                          />
+                          <span
+                            className={cn(
+                              "activity-board__check-box",
+                              selected.has(row.id) && "is-selected",
+                            )}
+                            aria-hidden="true"
+                          >
+                            {selectionOrder.get(row.id) ?? ""}
+                          </span>
+                        </label>
                         <div>
                           <div className="activity-board__check-heading">
                             <label htmlFor={`registration-${row.id}`}>
@@ -811,8 +836,8 @@ export function MemberRepairActivityBoard({ activityId }: Props) {
             </div>
             <div className="activity-board__actions">
               <p className="muted m-0">
-                {selected.size
-                  ? copy.selectedCount.replace("{count}", String(selected.size))
+                {selectedCount
+                  ? copy.selectedCount.replace("{count}", String(selectedCount))
                   : copy.selectHint}
                 {hiddenSelected
                   ? copy.selectedHidden.replace("{count}", String(hiddenSelected))
@@ -821,7 +846,7 @@ export function MemberRepairActivityBoard({ activityId }: Props) {
               <Button
                 variant="solid"
                 onClick={openCheckInConfirm}
-                disabled={opsDisabled || selected.size === 0}
+                disabled={opsDisabled || selectedCount === 0}
               >
                 {busy === "check-in" ? copy.checkingIn : copy.checkIn}
               </Button>
