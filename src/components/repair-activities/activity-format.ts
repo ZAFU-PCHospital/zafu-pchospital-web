@@ -1,24 +1,17 @@
+import {
+  formatShanghaiDateTime as formatDateTime,
+  formatShanghaiTime as formatTime,
+  shanghaiDateOf,
+} from "@/lib/shanghai-date";
+
 /** Asia/Shanghai 日期时间展示（公开/成员端共用）。 */
-export function formatShanghaiDateTime(iso: string): string {
-  return new Intl.DateTimeFormat("zh-CN", {
-    timeZone: "Asia/Shanghai",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).format(new Date(iso));
+export function formatShanghaiDateTime(value: Date | string): string {
+  return formatDateTime(value);
 }
 
 /** Asia/Shanghai 时间（时:分）展示，用于出勤成员名单。 */
-export function formatShanghaiTime(iso: string): string {
-  return new Intl.DateTimeFormat("zh-CN", {
-    timeZone: "Asia/Shanghai",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).format(new Date(iso));
+export function formatShanghaiTime(value: Date | string): string {
+  return formatTime(value);
 }
 
 /**
@@ -34,20 +27,10 @@ export function formatShanghaiTimeRange(
   const start = new Date(startIso);
   const end = new Date(endsAt);
   if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return null;
-  if (shanghaiDayKey(start) === shanghaiDayKey(end)) {
+  if (shanghaiDateOf(start) === shanghaiDateOf(end)) {
     return `${formatShanghaiDateTime(startIso)}–${formatShanghaiTime(endsAt)}`;
   }
   return `${formatShanghaiDateTime(startIso)} — ${formatShanghaiDateTime(endsAt)}`;
-}
-
-/** Asia/Shanghai 自然日键（`YYYY-MM-DD`），只用于比较两天是否同一天。 */
-function shanghaiDayKey(date: Date): string {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Shanghai",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(date);
 }
 
 /** 公开列表日期票根：月份、两位日、星期，统一按 Asia/Shanghai 取。 */

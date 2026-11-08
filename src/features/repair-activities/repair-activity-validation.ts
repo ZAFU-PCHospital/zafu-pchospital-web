@@ -1,5 +1,6 @@
 import { startOfShanghaiDay } from "@/lib/academic-term";
 import { AppError } from "@/lib/api/errors";
+import { formatShanghaiDateTime, shanghaiDateOf } from "@/lib/shanghai-date";
 
 /** 对外五态。优先级：ENDED > CLOSED > FULL/OPEN > UPCOMING。 */
 export const RepairActivityStatus = ["UPCOMING", "OPEN", "FULL", "CLOSED", "ENDED"] as const;
@@ -167,7 +168,10 @@ export type DeriveStatusInput = {
  *
  * ENDED 判定（issue #362）：活动有结束时间时 `now >= endsAt` 即已结束；
  * 结束时间为空（历史数据）时回退 `now >= activityEndExclusive(activityAt)`。
- * 成员端接待窗口不跟随本函数，仍以 `activityEndExclusive` 为界（见 canOperateActivityStaff）。
+ *
+ * `CLOSED` 只表示「报名已截止」，不代表现场已可操作：出勤 / 签到 / 接待另有窗口
+ * （活动开始前 30 分钟起，见 checkInOpensAt / canOperateActivityStaff）。
+ * 两者不再绑定（issue #367），成员端文案不能把 CLOSED 说成「可出勤」。
  */
 export function deriveRepairActivityStatus(input: DeriveStatusInput): RepairActivityStatus {
   const now = input.now.getTime();
@@ -197,30 +201,42 @@ export function canAcceptNewRegistration(status: RepairActivityStatus): boolean 
 }
 
 type StaffActivityWindow = {
-  signupClosesAt: Date | string;
   activityAt: Date | string;
 };
 
+/** 签到开放提前量：活动开始前 30 分钟（issue #367）。 */
+export const CHECK_IN_LEAD_MS = 30 * 60 * 1000;
+
+/** 签到窗口起点：活动开始前 30 分钟，与报名截止解耦（issue #367）。 */
+export function checkInOpensAt(activityAt: Date | string): Date {
+  return new Date(new Date(activityAt).getTime() - CHECK_IN_LEAD_MS);
+}
+
 /**
- * 现场操作窗口：报名截止起，活动上海自然日结束前；报满不代表截止。
+ * 现场操作窗口：活动开始前 30 分钟起，到活动上海自然日结束前；
+ * 报满不代表截止，报名截止也不再是下界（issue #367 与报名截止解耦）。
  *
  * 刻意不跟随 `endsAt`（issue #362）：活动结束时间到了，成员端仍可接待到当日 24:00，
  * 现场收尾不需要提前关门。
  */
 export function canOperateActivityStaff(activity: StaffActivityWindow, now = new Date()): boolean {
   return (
-    now.getTime() >= new Date(activity.signupClosesAt).getTime() &&
+    now.getTime() >= checkInOpensAt(activity.activityAt).getTime() &&
     now.getTime() < activityEndExclusive(new Date(activity.activityAt)).getTime()
   );
 }
 
 export function assertActivityStaffOpen(activity: StaffActivityWindow, now = new Date()): void {
+  // 单一判据：能不能操作只由 canOperateActivityStaff 决定，这里只把「为什么不能」翻译成错误码。
+  // 不要再在这里重写一遍边界——issue #367 改的就是这条边界，写两份迟早只改一处。
+  if (canOperateActivityStaff(activity, now)) return;
   if (now.getTime() >= activityEndExclusive(new Date(activity.activityAt)).getTime()) {
     throw new AppError("ACTIVITY_ENDED", "活动已结束，不能再出勤、签到或接待");
   }
-  if (!canOperateActivityStaff(activity, now)) {
-    throw new AppError("ACTIVITY_NOT_OPEN", "报名尚未截止，暂不可出勤、签到或接待");
-  }
+  throw new AppError(
+    "ACTIVITY_NOT_OPEN",
+    `签到尚未开放，将于 ${formatShanghaiDateTime(checkInOpensAt(activity.activityAt))} 开放（活动开始前 30 分钟）`,
+  );
 }
 
 /**
@@ -391,12 +407,7 @@ export function sortQueueByCheckedInAt<T extends { checkedInAt: Date | string | 
 
 /** activityAt → Asia/Shanghai 日历日 `YYYY-MM-DD`（与 repairDate 存储约定一致）。 */
 export function shanghaiCalendarDay(activityAt: Date): string {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Shanghai",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(activityAt);
+  return shanghaiDateOf(activityAt);
 }
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;

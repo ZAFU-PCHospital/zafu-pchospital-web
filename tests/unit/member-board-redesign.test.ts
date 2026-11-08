@@ -23,8 +23,9 @@ test("页头：小标签 + 活动名主标题 + 日期行，三种状态共用�
   assert.match(boardSource, /<h1 className="sec-title" id="member-activity-board-title">/);
   assert.ok(boardSource.includes("board.activity.title"));
   assert.ok(boardSource.includes("formatShanghaiDateTime(board.activity.activityAt)"));
-  // 状态徽章（issue #239）：与列表共用成员端文案，结束时按本地时钟先切到 ENDED。
-  assert.ok(boardSource.includes("memberRepairActivityStatusBadgeClass(status)"));
+  // 状态徽章（issue #239 / #367）：与列表共用成员端文案，强调按签到窗口是否开放，
+  // 结束时按本地时钟先切到 ENDED。
+  assert.ok(boardSource.includes("memberRepairActivityStatusBadgeClass(status, checkInOpen)"));
   assert.match(boardSource, /ended \? "ENDED" : board\.activity\.status/);
   // 加载态与错误态用固定标题兜底占位（共 2 处），活动名就绪后替换。
   assert.equal((boardSource.match(/\{renderHead\(copy\.title\)\}/g) ?? []).length, 2);

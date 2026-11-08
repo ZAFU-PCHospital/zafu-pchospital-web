@@ -17,10 +17,10 @@ test("成员端状态文案接线（issue #239）：列表 / 工作台用成员�
     assert.equal(source.includes("repairActivityStatusLabels"), false);
   }
   assert.ok(memberList.includes("MemberRepairActivityTicketCard"));
-  assert.ok(memberCard.includes("memberRepairActivityStatusBadgeClass(activity.status)"));
+  assert.ok(memberCard.includes("memberRepairActivityStatusBadgeClass(activity.status, checkInOpen)"));
   assert.ok(memberCard.includes("ActivityTicketCardShell"));
   assert.ok(memberCard.includes("/member/repair-activities/"));
-  assert.ok(memberBoard.includes("memberRepairActivityStatusBadgeClass(status)"));
+  assert.ok(memberBoard.includes("memberRepairActivityStatusBadgeClass(status, checkInOpen)"));
   assert.ok(publicList.includes("ActivityTicketCard"));
   assert.ok(
     publicCard.includes("repairActivityStatusLabels[activity.status as RepairActivityStatus]"),

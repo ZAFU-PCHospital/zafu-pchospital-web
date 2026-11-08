@@ -192,14 +192,18 @@ export const repairActivitiesPage = {
 } as const;
 
 /**
- * 成员端活动状态文案（issue #239）：`CLOSED` 是报名截止后的可出勤窗口，
- * 不能沿用公开页的「报名截止」；公开列表 / 详情与后台仍用公开五态文案。
+ * 成员端活动状态文案（issue #239 / #367）：`CLOSED` 只表示报名已截止。
+ *
+ * 现场窗口（出勤 / 签到 / 接待）自 issue #367 起是「活动开始前 30 分钟」，
+ * 与报名截止解耦，因此不能再把 `CLOSED` 写成「可出勤」——否则会出现
+ * 「显示可出勤、实际签到未开放」的矛盾。开放时刻由签到窗口行单独表达。
+ * 公开列表 / 详情与后台仍用公开五态文案。
  */
 export const memberRepairActivityStatusLabels: Record<RepairActivityStatus, string> = {
   UPCOMING: "未开始",
   OPEN: "报名中",
   FULL: "已报满",
-  CLOSED: "可出勤",
+  CLOSED: "报名已截止",
   ENDED: "已结束",
 };
 
@@ -220,6 +224,9 @@ export const memberRepairActivitiesCopy = {
     activityAt: "活动时间",
     /** 活动地点（issue #362）：为空时不渲染该行。 */
     location: "地点",
+    /** 签到窗口（issue #367）：{time} 为上海时间的具体开放时刻。 */
+    checkInOpensAt: "签到 {time} 开放",
+    checkInOpen: "签到已开放",
   },
   board: {
     title: "活动工作台",
@@ -233,7 +240,8 @@ export const memberRepairActivitiesCopy = {
     attendPrompt: "请先参加本场，再为客户签到",
     /** 成员视角（成员无「待签到」区）：出勤后可接待排队中的客户。 */
     attendPromptMember: "请先参加本场，再接待客户",
-    signupNotClosed: "报名尚未截止，暂不可出勤、签到或接待",
+    /** 未到窗口时的统一提示（issue #367）：{time} 为签到具体开放时刻，由调用方填充。 */
+    signupNotClosed: "签到尚未开放，{time} 起可出勤、签到或接待",
     activityEnded: "活动已结束",
     dismissAlert: "关闭",
     attendedBadge: "你已出勤",
