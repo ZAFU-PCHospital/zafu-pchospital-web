@@ -9,12 +9,11 @@ import { AdminTableQuery } from "@/components/admin/AdminTableQuery";
 import { AdminListToolbar } from "@/components/admin/AdminListToolbar";
 import { AdminToast } from "@/components/admin/AdminToast";
 import type { AdminToastMessage } from "@/components/admin/AdminToast";
+import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
+import { AdminListSkeleton } from "@/components/admin/AdminListSkeleton";
 import { AdminTable } from "@/components/admin/AdminTable";
-import {
-  formatDateTime,
-  inviteCodeEmptyText,
-  inviteCodeTableSpec,
-} from "@/components/admin/invite-code-table-spec";
+import { formatDateTime, inviteCodeTableSpec } from "@/components/admin/invite-code-table-spec";
+import { hasActiveTableFilters } from "@/lib/table/query-state";
 import { AdminListEnd, useAdminList } from "@/components/admin/useAdminList";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -255,11 +254,7 @@ export function InviteCodeAdminPanel() {
         problem={list.problem}
       />
 
-      {state === "loading" ? (
-        <p className="admin-status" role="status">
-          {adminShared.loading}
-        </p>
-      ) : null}
+      {state === "loading" ? <AdminListSkeleton /> : null}
 
       {state === "error" ? (
         <Card variant="notice">
@@ -281,7 +276,14 @@ export function InviteCodeAdminPanel() {
             sort={sortRules}
             onSortChange={setSortRules}
             items={items}
-            emptyText={inviteCodeEmptyText}
+            empty={
+              <AdminEmptyState
+                filtered={hasActiveTableFilters(query.value)}
+                busy={list.refreshing}
+                onClearFilters={query.reset}
+                onReload={() => void list.reload()}
+              />
+            }
             renderContext={{
               busy,
               onEditPolicy: setEditingId,

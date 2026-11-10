@@ -79,7 +79,7 @@ async function render(
     createElement(AdminTable<InviteCodeAdminView, InviteCodeTableContext>, {
       spec,
       items,
-      emptyText,
+      empty: emptyText,
       renderContext: { busy: false, onEditPolicy: noop, onRevoke: noop },
       rowProps: (item: InviteCodeAdminView) => ({ "data-row-id": item.id }),
       renderRow: options.renderRow

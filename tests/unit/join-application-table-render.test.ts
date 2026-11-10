@@ -69,7 +69,7 @@ async function render(items: JoinApplicationSummary[], busy = false): Promise<st
     createElement(AdminTable<JoinApplicationSummary, JoinApplicationTableContext>, {
       spec,
       items,
-      emptyText,
+      empty: emptyText,
       renderContext: { onDetail: noop, onApprove: noop, busy },
       rowProps: (item: JoinApplicationSummary) => ({ "data-row-id": item.id }),
     }),

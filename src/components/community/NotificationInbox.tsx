@@ -3,8 +3,12 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
+import { CommunityListSkeleton } from "@/components/community/CommunityListSkeleton";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { LoadFailure } from "@/components/ui/LoadFailure";
+import { PageAlert } from "@/components/ui/PageAlert";
+import { useWriteAction } from "@/components/ui/useWriteAction";
 import { MEMBER_NOTIFICATIONS_CHANGED_EVENT } from "@/config/member";
 import { communityCopy } from "@/config/community";
 import type { NotificationStatus, NotificationView, PaginationMeta } from "@/types/contracts";
@@ -44,44 +48,68 @@ export function NotificationInbox() {
     window.dispatchEvent(new CustomEvent(MEMBER_NOTIFICATIONS_CHANGED_EVENT));
   }
 
-  async function markRead(id: string) {
-    const response = await fetch(`/api/v1/member/notifications/${id}/read`, { method: "POST" });
-    const json = await response.json();
-    if (json.success) {
+  const write = useWriteAction({
+    onSuccess: async () => {
       await load();
       notifyNavUnreadChanged();
-    }
+    },
+  });
+
+  async function markRead(id: string) {
+    await write.run(
+      `read:${id}`,
+      async () => {
+        const response = await fetch(`/api/v1/member/notifications/${id}/read`, {
+          method: "POST",
+        });
+        const json = await response.json();
+        return json.success ? { ok: true } : { ok: false, message: json.error?.message };
+      },
+      copy.markReadFailed,
+    );
   }
 
   async function markAll() {
-    const response = await fetch("/api/v1/member/notifications/read-all", { method: "POST" });
-    const json = await response.json();
-    if (json.success) {
-      await load();
-      notifyNavUnreadChanged();
-    }
+    await write.run(
+      "all",
+      async () => {
+        const response = await fetch("/api/v1/member/notifications/read-all", { method: "POST" });
+        const json = await response.json();
+        return json.success ? { ok: true } : { ok: false, message: json.error?.message };
+      },
+      copy.markAllFailed,
+    );
   }
 
   async function remove(id: string) {
-    const response = await fetch(`/api/v1/member/notifications/${id}`, { method: "DELETE" });
-    const json = await response.json();
-    if (json.success) {
-      await load();
-      notifyNavUnreadChanged();
-    }
+    await write.run(
+      `delete:${id}`,
+      async () => {
+        const response = await fetch(`/api/v1/member/notifications/${id}`, {
+          method: "DELETE",
+        });
+        const json = await response.json();
+        return json.success ? { ok: true } : { ok: false, message: json.error?.message };
+      },
+      copy.deleteFailed,
+    );
   }
 
   if (state === "error") {
     return (
-      <Card variant="notice">
-        <p>{copy.loadError}</p>
-        <Button onClick={() => void load()}>{copy.reload}</Button>
-      </Card>
+      <LoadFailure message={copy.loadError} retryLabel={copy.reload} onRetry={() => void load()} />
     );
   }
 
   return (
     <div className="community-page">
+      {write.error ? (
+        <PageAlert
+          message={write.error}
+          closeLabel={communityCopy.common.dismiss}
+          onClose={write.clearError}
+        />
+      ) : null}
       <div className="community-toolbar">
         <div className="community-toolbar__filters">
           {(
@@ -104,18 +132,38 @@ export function NotificationInbox() {
             </Button>
           ))}
         </div>
-        <Button type="button" onClick={() => void markAll()} disabled={unreadCount === 0}>
-          {copy.markAllRead}
+        <Button
+          type="button"
+          onClick={() => void markAll()}
+          disabled={unreadCount === 0 || write.busy}
+        >
+          {write.busyKey === "all" ? copy.marking : copy.markAllRead}
         </Button>
       </div>
       <p className="community-block__meta">
         {copy.unreadCount.replace("{count}", String(unreadCount))}
       </p>
-      {state === "loading" ? <p role="status">{copy.loading}</p> : null}
+      {state === "loading" ? <CommunityListSkeleton label={copy.loading} /> : null}
       {state === "ready" && items.length === 0 ? (
-        <p className="member-section__note">
-          {filter === "UNREAD" ? copy.unreadEmpty : copy.empty}
-        </p>
+        <EmptyState
+          title={
+            filter === "UNREAD" ? copy.unreadEmpty : filter === "READ" ? copy.readEmpty : copy.empty
+          }
+          action={
+            filter ? (
+              <Button
+                onClick={() => {
+                  setFilter("");
+                  setPage(1);
+                }}
+              >
+                {copy.filterAll}
+              </Button>
+            ) : (
+              <Button onClick={() => void load()}>{copy.reload}</Button>
+            )
+          }
+        />
       ) : null}
       <ul className="community-list">
         {items.map((item) => (
@@ -126,12 +174,22 @@ export function NotificationInbox() {
             <NotificationRow item={item} />
             <div className="community-list__actions">
               {item.status === "UNREAD" ? (
-                <Button type="button" variant="ghost" onClick={() => void markRead(item.id)}>
-                  {copy.markRead}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  disabled={write.busy}
+                  onClick={() => void markRead(item.id)}
+                >
+                  {write.busyKey === `read:${item.id}` ? copy.marking : copy.markRead}
                 </Button>
               ) : null}
-              <Button type="button" variant="ghost" onClick={() => void remove(item.id)}>
-                {copy.delete}
+              <Button
+                type="button"
+                variant="ghost"
+                disabled={write.busy}
+                onClick={() => void remove(item.id)}
+              >
+                {write.busyKey === `delete:${item.id}` ? copy.marking : copy.delete}
               </Button>
             </div>
           </li>

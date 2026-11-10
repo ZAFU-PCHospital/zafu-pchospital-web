@@ -6,7 +6,10 @@ import {
   ActivityTicketCard,
   type ActivityTicketCopy,
 } from "@/components/repair-activities/ActivityTicketCard";
+import { ActivityListSkeleton } from "@/components/repair-activities/ActivityListSkeleton";
 import { Button } from "@/components/ui/Button";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { LoadFailure } from "@/components/ui/LoadFailure";
 import { repairActivitiesPage } from "@/config/repair-activities";
 import type { RepairActivityPublicView } from "@/features/repair-activities/repair-activity-service";
 import type { PaginationMeta } from "@/types/contracts";
@@ -136,17 +139,26 @@ export function RepairActivityList() {
   const safePage = Math.min(page, totalPages);
 
   if (state === "loading") {
-    return <p className="muted">正在加载活动…</p>;
+    return <ActivityListSkeleton />;
   }
   if (state === "error") {
     return (
-      <p className="admin-status admin-status--error" role="alert">
-        {message}
-      </p>
+      <LoadFailure
+        message={message}
+        retryLabel={repairActivitiesPage.reload}
+        onRetry={() => void loadPage(1, "initial")}
+      />
     );
   }
   if (items.length === 0) {
-    return <p className="muted">{repairActivitiesPage.empty}</p>;
+    return (
+      <EmptyState
+        title={repairActivitiesPage.empty}
+        action={
+          <Button onClick={() => void loadPage(1, "initial")}>{repairActivitiesPage.reload}</Button>
+        }
+      />
+    );
   }
 
   const busy = loadingPage !== null;

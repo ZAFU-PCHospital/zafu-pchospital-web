@@ -18,6 +18,7 @@ import { fetchRegistrationDeviceStatus } from "@/features/repair-activities/regi
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { LoadFailure } from "@/components/ui/LoadFailure";
 import { PageAlert } from "@/components/ui/PageAlert";
 import { repairActivitiesPage } from "@/config/repair-activities";
 import {
@@ -851,9 +852,13 @@ export function RepairActivityDetail({ activityId }: Props) {
         <h1 className="admin-panel__title" id="repair-activity-detail-title">
           {copy.breadcrumb}
         </h1>
-        <p className="admin-status admin-status--error" role="alert">
-          {problem}
-        </p>
+        <LoadFailure
+          message={problem}
+          retryLabel={copy.reload}
+          onRetry={() => void load()}
+          backHref="/repair-activities"
+          backLabel={copy.backToList}
+        />
       </div>
     );
   }

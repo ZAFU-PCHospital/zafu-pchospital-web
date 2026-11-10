@@ -4164,9 +4164,7 @@ html[data-theme="black-yellow"] {
     padding-left: var(--s-2);
   }
 
-  /* 加载骨架：与 ready 共用 member-workspace__content / __main / __aside，
-     ≥1100px 时 :has(> .member-workspace__main) 双列同样生效，降低 CLS。
-     .member-skeleton 仅作标识；栅格由 .member-workspace__content 负责。 */
+  /* 成员骨架基础条：资料页与工作台骨架共用，颜色 / 圆角只走令牌。 */
   .member-skeleton__bar {
     display: block;
     height: 1rem;
@@ -7818,6 +7816,122 @@ html[data-theme="black-yellow"] {
     block-size: 2rem;
     margin-inline: var(--s-2);
     border-radius: var(--r-base);
+  }
+  .admin-skeleton__head {
+    display: block;
+    block-size: 2.25rem;
+    margin-inline: var(--s-2);
+    border-radius: var(--r-base);
+    background: var(--surface-2);
+  }
+
+  /* 共享空态 / 加载失败 / 首屏骨架（issue #377）。 */
+  .empty-state {
+    display: grid;
+    gap: var(--s-2);
+    justify-items: center;
+    padding: var(--s-6) var(--s-4);
+    text-align: center;
+  }
+  .empty-state__title {
+    margin: 0;
+    color: var(--ink);
+    font-size: var(--t-base);
+    font-weight: 650;
+  }
+  .empty-state__description {
+    max-width: 56ch;
+    margin: 0;
+    color: var(--ink-3);
+    font-size: var(--t-sm);
+    line-height: 1.7;
+  }
+  .empty-state__action {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: var(--s-2);
+    margin-block-start: var(--s-1);
+  }
+  .admin-table__empty .empty-state {
+    padding: 0;
+  }
+
+  .load-failure {
+    display: grid;
+    gap: var(--s-3);
+    justify-items: start;
+    padding: var(--s-4);
+    border: 1px solid var(--line);
+    border-radius: var(--r-mid);
+    background: var(--surface-2);
+  }
+  .load-failure__message {
+    margin: 0;
+    color: var(--ink-2);
+    font-size: var(--t-sm);
+    line-height: 1.7;
+  }
+  .load-failure__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s-2);
+  }
+
+  .community-skeleton {
+    gap: var(--s-3);
+  }
+  .community-skeleton__row {
+    display: block;
+    block-size: 4.5rem;
+    border-radius: var(--r-base);
+    background: var(--surface-2);
+  }
+
+  .member-skeleton__avatar {
+    display: block;
+    inline-size: 4.5rem;
+    block-size: 4.5rem;
+    border-radius: 999px;
+    background: var(--surface-2);
+  }
+  .member-skeleton__button {
+    display: block;
+    inline-size: 8rem;
+    block-size: 2.5rem;
+    border-radius: var(--r-base);
+    background: var(--surface-2);
+  }
+
+  .activity-skeleton-list {
+    display: grid;
+    gap: var(--s-3);
+  }
+  .activity-skeleton {
+    pointer-events: none;
+  }
+  .activity-skeleton .activity-card__body {
+    display: grid;
+    gap: var(--s-2);
+    align-content: start;
+  }
+  .activity-skeleton__bar {
+    display: block;
+    block-size: 0.85rem;
+    border-radius: var(--r-base);
+    background: var(--surface-2);
+  }
+  .activity-skeleton__bar--title {
+    block-size: 1.4rem;
+    inline-size: min(18rem, 80%);
+  }
+  .activity-skeleton__bar--short {
+    inline-size: 40%;
+  }
+  .activity-skeleton__bar--stub {
+    inline-size: 3rem;
+    block-size: 4.5rem;
+    margin-inline: auto;
   }
 
   @media (min-width: 760px) {

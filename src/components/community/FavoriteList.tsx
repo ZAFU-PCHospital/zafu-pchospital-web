@@ -3,8 +3,12 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
+import { CommunityListSkeleton } from "@/components/community/CommunityListSkeleton";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { LoadFailure } from "@/components/ui/LoadFailure";
+import { PageAlert } from "@/components/ui/PageAlert";
+import { useWriteAction } from "@/components/ui/useWriteAction";
 import { communityCopy } from "@/config/community";
 import { formatShanghaiDate } from "@/lib/shanghai-date";
 import { repairCopy } from "@/config/repairs";
@@ -36,32 +40,58 @@ export function FavoriteList() {
     void load();
   }, [load]);
 
+  const write = useWriteAction({ onSuccess: load });
+
   async function remove(repairRecordId: string) {
-    const response = await fetch(`/api/v1/member/favorites/${repairRecordId}`, { method: "DELETE" });
-    const json = await response.json();
-    if (json.success) await load();
+    await write.run(
+      `favorite:${repairRecordId}`,
+      async () => {
+        const response = await fetch(`/api/v1/member/favorites/${repairRecordId}`, {
+          method: "DELETE",
+        });
+        const json = await response.json();
+        return json.success ? { ok: true } : { ok: false, message: json.error?.message };
+      },
+      copy.removeFailed,
+    );
   }
 
   if (state === "error") {
     return (
-      <Card variant="notice">
-        <p>{copy.loadError}</p>
-        <Button onClick={() => void load()}>{copy.reload}</Button>
-      </Card>
+      <LoadFailure message={copy.loadError} retryLabel={copy.reload} onRetry={() => void load()} />
     );
   }
 
   return (
     <div className="community-page">
-      {state === "loading" ? <p role="status">{copy.loading}</p> : null}
-      {state === "ready" && items.length === 0 ? <p className="member-section__note">{copy.empty}</p> : null}
+      {write.error ? (
+        <PageAlert
+          message={write.error}
+          closeLabel={communityCopy.common.dismiss}
+          onClose={write.clearError}
+        />
+      ) : null}
+      {state === "loading" ? <CommunityListSkeleton label={copy.loading} /> : null}
+      {state === "ready" && items.length === 0 ? (
+        <EmptyState
+          title={copy.empty}
+          action={<Button href="/member/repairs">{copy.browseRepairs}</Button>}
+        />
+      ) : null}
       <ul className="community-list">
         {items.map((item) => (
           <li className="community-list__item" key={item.id}>
             <FavoriteRow item={item} />
             <div className="community-list__actions">
-              <Button type="button" variant="ghost" onClick={() => void remove(item.repairRecordId)}>
-                {copy.remove}
+              <Button
+                type="button"
+                variant="ghost"
+                disabled={write.busy}
+                onClick={() => void remove(item.repairRecordId)}
+              >
+                {write.busyKey === `favorite:${item.repairRecordId}`
+                  ? communityCopy.favorite.removing
+                  : copy.remove}
               </Button>
             </div>
           </li>

@@ -67,7 +67,7 @@ function render(items: RepairCategoryAdminView[], extra: Record<string, unknown>
       spec: cached.categoryTableSpec,
       items,
       renderContext: contextOf(),
-      emptyText: cached.admin.adminShared.empty,
+      empty: cached.admin.adminShared.empty,
       ...extra,
     }),
   );

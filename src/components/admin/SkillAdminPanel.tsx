@@ -3,10 +3,12 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { AdminListToolbar } from "@/components/admin/AdminListToolbar";
 
+import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
+import { AdminListSkeleton } from "@/components/admin/AdminListSkeleton";
 import { AdminTable } from "@/components/admin/AdminTable";
 import { AdminToast } from "@/components/admin/AdminToast";
 import type { AdminToastMessage } from "@/components/admin/AdminToast";
-import { skillEmptyText, skillTableSpec } from "@/components/admin/skill-table-spec";
+import { skillTableSpec } from "@/components/admin/skill-table-spec";
 import { useRowDragSort } from "@/components/admin/useRowDragSort";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -204,11 +206,7 @@ export function SkillAdminPanel() {
         </form>
       </Card>
 
-      {state === "loading" ? (
-        <p className="admin-status" role="status">
-          {adminShared.loading}
-        </p>
-      ) : null}
+      {state === "loading" ? <AdminListSkeleton /> : null}
 
       {state === "error" ? (
         <Card variant="notice">
@@ -227,7 +225,7 @@ export function SkillAdminPanel() {
           <AdminTable
             spec={skillTableSpec}
             items={items}
-            emptyText={skillEmptyText}
+            empty={<AdminEmptyState filtered={false} busy={false} onReload={() => void load()} />}
             renderContext={{
               busy,
               total: items.length,

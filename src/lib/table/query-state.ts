@@ -13,6 +13,11 @@ export const emptyTableQuery = <F extends Record<string, string>>(
   fixed: F,
 ): TableQueryState<F> => ({ fixed: { ...fixed }, sort: [], filters: [], groupBy: "" });
 
+/** 是否应用了会收窄结果的查询条件；排序 / 分组不算筛选。 */
+export function hasActiveTableFilters(value: TableQueryState): boolean {
+  return value.filters.length > 0 || Object.values(value.fixed).some((entry) => Boolean(entry));
+}
+
 /** 可分享 URL 严格只允许日期/枚举，不按“看起来不像个人信息”猜测文本值。 */
 export function shareableTableParams(value: TableQueryState, options: TableQueryOptions) {
   const params = new URLSearchParams();

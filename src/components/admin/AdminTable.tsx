@@ -24,8 +24,8 @@ export type AdminTableProps<T, C = unknown> = {
    * 拖动列宽时尤其危险。spec 保持模块级常量，会变的值每次渲染从这里进。
    */
   renderContext: C;
-  /** 空列表文案（`adminShared.empty`）。内核不持有文案：`AGENTS.md` 要求文案在 `src/config/`。 */
-  emptyText: string;
+  /** 空列表内容（由页面提供文案与下一步动作）。 */
+  empty: ReactNode;
   /** 当前排序规则。 */
   sort?: readonly SortRule[];
   /** 表头点击后的新排序（三态循环）；不传则不渲染排序控件。 */
@@ -72,7 +72,7 @@ export function AdminTable<T, C = unknown>({
   spec,
   items,
   renderContext,
-  emptyText,
+  empty,
   sort,
   onSortChange,
   widths,
@@ -203,7 +203,7 @@ export function AdminTable<T, C = unknown>({
           {items.length === 0 ? (
             <tr>
               <td className="admin-table__empty" colSpan={Math.max(visibleColumns.length, 1)}>
-                {emptyText}
+                {empty}
               </td>
             </tr>
           ) : (

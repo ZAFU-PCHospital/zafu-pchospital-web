@@ -158,6 +158,7 @@ export const memberCopy = {
     /** 局部区块加载失败：与整页 loadError 区分，避免用户误以为整页不可用 */
     sectionLoadError: "这部分内容暂时无法加载，其余内容不受影响",
     reload: "重新加载",
+    backToDashboard: "返回工作台",
     saving: "保存中…",
     save: "保存",
     cancel: "取消",

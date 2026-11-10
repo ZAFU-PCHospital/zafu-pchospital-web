@@ -5,6 +5,9 @@
  */
 
 export const communityCopy = {
+  common: {
+    dismiss: "关闭提示",
+  },
   pagination: {
     previous: "上一页",
     next: "下一页",
@@ -28,12 +31,16 @@ export const communityCopy = {
     label: "Notifications",
     empty: "暂时没有通知",
     unreadEmpty: "没有未读通知",
+    readEmpty: "没有已读通知",
     loading: "正在加载通知…",
     loadError: "通知加载失败，请稍后重试",
     reload: "重新加载",
     markRead: "标为已读",
     markAllRead: "全部标为已读",
     marking: "正在更新…",
+    markReadFailed: "标为已读失败，请稍后重试",
+    markAllFailed: "全部标为已读失败，请稍后重试",
+    deleteFailed: "删除通知失败，请稍后重试",
     delete: "删除",
     filterAll: "全部",
     filterUnread: "未读",
@@ -54,5 +61,7 @@ export const communityCopy = {
     count: "共 {count} 条",
     open: "查看记录",
     remove: "取消收藏",
+    removeFailed: "取消收藏失败，请稍后重试",
+    browseRepairs: "去看维修记录",
   },
 } as const;
