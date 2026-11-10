@@ -4,6 +4,7 @@ import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 
 import { createPortal } from "react-dom";
 
 import { Button } from "@/components/ui/Button";
+import { useFocusTrap } from "./useFocusTrap";
 import { cn } from "@/lib/utils";
 
 /**
@@ -69,7 +70,7 @@ export function ConfirmDialog({
 }) {
   const titleId = useId();
   const windowRef = useRef<HTMLDivElement>(null);
-  const returnFocusRef = useRef<HTMLElement | null>(null);
+
   /** fit 布局的关闭淡出：先播完再真正卸载，其他布局保持同步关闭。 */
   const [closing, setClosing] = useState(false);
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -120,50 +121,15 @@ export function ConfirmDialog({
     [],
   );
 
-  useEffect(() => {
-    returnFocusRef.current =
-      document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    document.body.style.overflow = "hidden";
-    windowRef.current?.focus();
-
-    return () => {
-      document.body.style.overflow = "";
-      returnFocusRef.current?.focus();
-    };
-  }, []);
+  useFocusTrap(windowRef, () => {
+    if (!busy) requestClose();
+  });
 
   useEffect(() => {
     // 同一窗口从确认切换为成功提醒时，从正文开头阅读并重新宣告标题。
     windowRef.current?.focus();
     windowRef.current?.querySelector(".admin-modal__body")?.scrollTo(0, 0);
   }, [title]);
-
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !busy) requestClose();
-      if (event.key !== "Tab" || !windowRef.current) return;
-      const controls = [
-        ...windowRef.current.querySelectorAll<HTMLElement>(
-          'button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href], [tabindex="0"]',
-        ),
-      ].filter((element) => element.getClientRects().length > 0);
-      const first = controls[0];
-      const last = controls.at(-1);
-      if (!first || !last) {
-        event.preventDefault();
-        windowRef.current.focus();
-      } else if (
-        !controls.includes(document.activeElement as HTMLElement) ||
-        (event.shiftKey && document.activeElement === first) ||
-        (!event.shiftKey && document.activeElement === last)
-      ) {
-        event.preventDefault();
-        (event.shiftKey ? last : first).focus();
-      }
-    };
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [busy, requestClose]);
 
   if (typeof document === "undefined") return null;
 
@@ -247,9 +213,7 @@ export function ConfirmDialog({
           {children}
           {animateExit ? null : actions}
         </div>
-        {animateExit && actions ? (
-          <div className="admin-modal__footer">{actions}</div>
-        ) : null}
+        {animateExit && actions ? <div className="admin-modal__footer">{actions}</div> : null}
       </div>
     </div>,
     document.body,

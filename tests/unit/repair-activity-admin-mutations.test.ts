@@ -198,6 +198,7 @@ async function mount(t: TestContext) {
   await setImmediate();
   return {
     view,
+    button,
     dialog,
     registration,
     signals,
@@ -279,6 +280,37 @@ async function mount(t: TestContext) {
     },
   };
 }
+
+test("活动编辑异常在窗口内报错，finally 解除提交禁用并允许重试", async (t) => {
+  const ui = await mount(t);
+  (ui.button(adminCopy.repairActivities.action.edit).props.onClick as () => void)();
+  t.mock.method(globalThis, "FormData", function () {
+    throw new Error("保存失败测试");
+  });
+  const modal = ui.dialog(adminCopy.repairActivities.edit.title)!;
+  const form = find(modal.props.children as ReactNode, (el) => el.type === "form")!;
+  await (form.props.onSubmit as (event: unknown) => Promise<void>)({
+    preventDefault() {},
+    currentTarget: {},
+  });
+  const updated = ui.dialog(adminCopy.repairActivities.edit.title)!;
+  assert.equal(updated.props.error, "保存失败测试");
+  const submit = find(updated.props.children as ReactNode, (el) => el.props.type === "submit")!;
+  assert.equal(submit.props.disabled, false);
+});
+
+test("活动删除失败留在确认窗内且恢复提交按钮", async (t) => {
+  const ui = await mount(t);
+  ui.setMutation(async () => failure("FORBIDDEN", 403));
+  (ui.button(adminCopy.repairActivities.action.remove).props.onClick as () => void)();
+  const modal = ui.dialog(adminCopy.repairActivities.removePanel.title)!;
+  await (modal.props.onConfirm as () => Promise<void>)();
+  await setImmediate();
+  const updated = ui.dialog(adminCopy.repairActivities.removePanel.title)!;
+  const alert = find(updated.props.children as ReactNode, (el) => el.props.role === "alert");
+  assert.ok(alert && text(alert.props.children as ReactNode).length > 0);
+  assert.equal(updated.props.busy, false);
+});
 
 test("活动编辑窗：改开始时间自动填结束时间 +2h，手动改过后不再覆盖", async (t) => {
   const app = await mount(t);

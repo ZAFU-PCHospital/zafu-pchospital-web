@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
+import { useFocusTrap } from "@/components/ui/useFocusTrap";
 import { Icon, type IconName } from "@/components/ui/Icon";
 import type { NavItem } from "@/config/navigation";
 
@@ -64,14 +65,8 @@ export function ShellTabBar({ tabs, ariaLabel, more }: ShellTabBarProps) {
     setMoreOpen(false);
   }, [pathname]);
 
-  useEffect(() => {
-    if (!moreOpen) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setMoreOpen(false);
-    };
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [moreOpen]);
+  const panelRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(panelRef, () => setMoreOpen(false), moreOpen);
 
   const moreActive =
     more !== undefined &&
@@ -128,10 +123,19 @@ export function ShellTabBar({ tabs, ariaLabel, more }: ShellTabBarProps) {
           <button
             type="button"
             className="shell-more__backdrop"
+            aria-hidden="true"
+            tabIndex={-1}
             aria-label={more.closeLabel}
             onClick={() => setMoreOpen(false)}
           />
-          <div className="shell-more__panel" role="dialog" aria-label={more.menuLabel}>
+          <div
+            ref={panelRef}
+            className="shell-more__panel"
+            role="dialog"
+            aria-modal="true"
+            aria-label={more.menuLabel}
+            tabIndex={-1}
+          >
             {more.groups.map((group) => (
               <div className="shell-more__group" key={group.id}>
                 <p className="shell-more__group-title">{group.title}</p>
