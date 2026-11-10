@@ -1,3 +1,5 @@
+import { requestJson } from "@/lib/client/request";
+
 /** 看板三个读取视图共用单飞、失效与退避；写操作不经过这里。 */
 export type BoardReadState<T> = {
   data: T | null;
@@ -78,23 +80,13 @@ export function createBoardReader<T>(options: Options<T>) {
       change({ pending: true });
       request.promise = (async () => {
         try {
-          const response = await fetch(options.url, {
+          const json = await requestJson<T>(options.url, {
             cache: "no-store",
             signal: request.controller.signal,
           });
-          const json = (await response.json()) as {
-            success: boolean;
-            data?: T;
-            error?: { message?: string };
-          };
           if (active !== request || disposed) return null;
           if (request.background && (options.paused() || document.visibilityState !== "visible"))
             return null;
-          if (!response.ok || !json.success || !json.data) {
-            const error = new Error(json.error?.message ?? response.statusText);
-            Object.assign(error, { terminal: [401, 403, 404].includes(response.status) });
-            throw error;
-          }
           options.succeeded?.(json.data);
           due = Date.now() + options.interval();
           change({
@@ -112,7 +104,7 @@ export function createBoardReader<T>(options: Options<T>) {
           change({
             failures,
             error: error instanceof Error ? error.message : "",
-            stopped: Boolean((error as { terminal?: boolean } | null)?.terminal),
+            stopped: [401, 403, 404].includes((error as { status?: number })?.status ?? 0),
           });
           return null;
         } finally {

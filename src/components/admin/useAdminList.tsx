@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { AdminApiResult } from "@/features/admin/admin-client";
 import { applyOrder, movedManyIds } from "@/lib/list-order";
+import { requestError, withRequest } from "@/lib/client/request";
 import type { PaginationMeta } from "@/types/contracts";
 import type { TableGroupSummary } from "@/types/table";
 
@@ -21,7 +22,7 @@ export type AdminListController<T> = {
   reload: () => Promise<void>;
   /** 写操作后刷新已加载的页数，保留长列表上下文。 */
   refreshLoaded: () => Promise<void>;
-  /** 追加下一页；已在末页或正在加载时无动作。 */
+  /** 追加下一页；刷新期间合并排队，追加期间保持单飞。 */
   loadMore: () => void;
   /**
    * **乐观排序**：按 `lib/list-order.ts` 的同一套规则把本地顺序先改掉，并返回改动前的
@@ -66,14 +67,20 @@ export function useAdminList<T extends { id: string }>(
   const requestDone = useRef<Promise<void>>(Promise.resolve());
   const generation = useRef(0);
   const controller = useRef<AbortController | null>(null);
+  const appending = useRef(false);
+  const queuedMore = useRef<object | null>(null);
+  const paginationRef = useRef<PaginationMeta | null>(null);
 
   const run = useCallback(async (targetPage: number, append: boolean, refreshLoaded = false) => {
     if (inFlight.current) return;
     inFlight.current = true;
+    appending.current = append;
     const requestGeneration = generation.current;
     const active = new AbortController();
     controller.current = active;
-    const fetch = fetchRef.current;
+    const fetchPage = fetchRef.current;
+    const fetch = (page: number) =>
+      withRequest((signal) => fetchPage(page, signal), { signal: active.signal });
     let completeRequest = () => {};
     requestDone.current = new Promise<void>((resolve) => {
       completeRequest = resolve;
@@ -84,13 +91,13 @@ export function useAdminList<T extends { id: string }>(
     setProblem("");
 
     try {
-      let result = await fetch(refreshLoaded ? 1 : targetPage, active.signal);
+      let result = await fetch(refreshLoaded ? 1 : targetPage);
       if (requestGeneration !== generation.current) return;
       if (refreshLoaded && result.ok) {
         result = { ...result, data: [...result.data] };
         const lastPage = Math.min(targetPage, result.pagination?.totalPages || 1);
         for (let nextPage = 2; nextPage <= lastPage; nextPage++) {
-          const next = await fetch(nextPage, active.signal);
+          const next = await fetch(nextPage);
           if (requestGeneration !== generation.current) return;
           if (!next.ok) {
             setProblem(next.message);
@@ -111,15 +118,23 @@ export function useAdminList<T extends { id: string }>(
       }
       setItems((current) => (append ? [...current, ...result.data] : result.data));
       setPagination(result.pagination ?? null);
+      paginationRef.current = result.pagination ?? null;
       setSummary(result.summary);
       setPage(targetPage);
       pageRef.current = targetPage;
       setState("ready");
+    } catch (error) {
+      if (requestGeneration !== generation.current) return;
+      setState((current) => (current === "ready" ? current : "error"));
+      setProblem(requestError(error).message);
     } finally {
       if (controller.current === active) controller.current = null;
       inFlight.current = false;
-      if (append) setLoadingMore(false);
-      setRefreshing(false);
+      appending.current = false;
+      if (requestGeneration === generation.current) {
+        setLoadingMore(false);
+        setRefreshing(false);
+      }
       completeRequest();
     }
   }, []);
@@ -152,6 +167,8 @@ export function useAdminList<T extends { id: string }>(
 
   const invalidate = useCallback(() => {
     const next = ++generation.current;
+    queuedMore.current = null;
+    paginationRef.current = null;
     controller.current?.abort();
     return next;
   }, []);
@@ -171,10 +188,21 @@ export function useAdminList<T extends { id: string }>(
   }, [run]);
 
   const loadMore = useCallback(() => {
-    const total = pagination?.totalPages ?? 1;
-    if (page >= total) return;
-    void run(page + 1, true);
-  }, [page, pagination, run]);
+    if ((inFlight.current && appending.current) || queuedMore.current) return;
+    const queued = {};
+    queuedMore.current = queued;
+    const requestedGeneration = generation.current;
+    void (async () => {
+      try {
+        while (inFlight.current) await requestDone.current;
+        if (requestedGeneration !== generation.current) return;
+        const total = paginationRef.current?.totalPages ?? 1;
+        if (pageRef.current < total) await run(pageRef.current + 1, true);
+      } finally {
+        if (queuedMore.current === queued) queuedMore.current = null;
+      }
+    })();
+  }, [run]);
 
   useEffect(() => {
     if (options.queryKey === null) return;
@@ -242,7 +270,7 @@ export function AdminListEnd({
     );
     observer.observe(node);
     return () => observer.disconnect();
-  }, [hasMore, onLoadMore]);
+  }, [hasMore, loaded, onLoadMore]);
 
   // 空列表不显示「已全部加载」——表格里已经写着「暂无数据」，再加一句是废话。
   if (!pagination || pagination.total === 0) return null;

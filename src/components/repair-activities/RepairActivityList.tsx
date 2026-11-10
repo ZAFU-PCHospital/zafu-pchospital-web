@@ -9,7 +9,8 @@ import {
 import { Button } from "@/components/ui/Button";
 import { repairActivitiesPage } from "@/config/repair-activities";
 import type { RepairActivityPublicView } from "@/features/repair-activities/repair-activity-service";
-import type { PaginationMeta } from "@/types/contracts";
+import { createLatestRequest } from "@/lib/client/latest-request";
+import { requestError, requestJson } from "@/lib/client/request";
 
 const PAGE_SIZE = 4;
 const TICKET_COPY: ActivityTicketCopy = {
@@ -18,13 +19,6 @@ const TICKET_COPY: ActivityTicketCopy = {
   capacity: repairActivitiesPage.capacity,
   remainingShort: repairActivitiesPage.remainingShort,
   endedHint: repairActivitiesPage.endedHint,
-};
-
-type PublicActivityListResponse = {
-  success: boolean;
-  data?: RepairActivityPublicView[];
-  meta?: { pagination?: PaginationMeta };
-  error?: { message?: string };
 };
 
 function pageUrl(page: number): string {
@@ -43,15 +37,11 @@ export function RepairActivityList() {
   const [message, setMessage] = useState("");
   const [loadingPage, setLoadingPage] = useState<number | null>(null);
   const [pageMessage, setPageMessage] = useState("");
-  const requestSequence = useRef(0);
-  const requestController = useRef<AbortController | null>(null);
+  const requests = useRef(createLatestRequest());
   const listRef = useRef<HTMLUListElement | null>(null);
 
   const loadPage = useCallback(async (requestedPage: number, mode: "initial" | "page") => {
-    const requestId = ++requestSequence.current;
-    requestController.current?.abort();
-    const controller = new AbortController();
-    requestController.current = controller;
+    const request = requests.current.begin();
     if (mode === "initial") {
       setState("loading");
       setMessage("");
@@ -61,18 +51,15 @@ export function RepairActivityList() {
     }
 
     let targetPage = Math.max(1, requestedPage);
-    let lastPayload: PublicActivityListResponse | null = null;
     try {
       // 翻页途中活动可能减少：若服务端总页数变小，改取最后一页而不是停在越界页。
       for (let attempt = 0; attempt < 2; attempt += 1) {
-        const response = await fetch(pageUrl(targetPage), {
+        const payload = await requestJson<RepairActivityPublicView[]>(pageUrl(targetPage), {
           cache: "no-store",
-          signal: controller.signal,
+          signal: request.signal,
         });
-        const payload = (await response.json()) as PublicActivityListResponse;
-        if (requestId !== requestSequence.current) return;
-        lastPayload = payload;
-        if (!response.ok || !payload.success || !Array.isArray(payload.data)) break;
+        if (!request.isCurrent()) return;
+        if (!Array.isArray(payload.data)) break;
         const nextPagination = payload.meta?.pagination;
         if (!nextPagination) break;
         const nextTotalPages = Math.max(1, nextPagination.totalPages);
@@ -84,7 +71,8 @@ export function RepairActivityList() {
           setPageMessage("");
           if (mode === "page" && typeof requestAnimationFrame === "function") {
             requestAnimationFrame(() => {
-              listRef.current?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+              if (request.isCurrent())
+                listRef.current?.scrollIntoView?.({ behavior: "smooth", block: "start" });
             });
           }
           return;
@@ -96,40 +84,39 @@ export function RepairActivityList() {
         mode === "initial"
           ? repairActivitiesPage.loadFailed
           : formatPageCopy(repairActivitiesPage.pageLoadFailed, requestedPage);
-      const nextMessage =
-        lastPayload && !lastPayload.success ? (lastPayload.error?.message ?? fallback) : fallback;
-      if (mode === "initial") {
-        setState("error");
-        setMessage(nextMessage);
-      } else {
-        setPageMessage(nextMessage);
-      }
-    } catch (error) {
-      if (requestId !== requestSequence.current) return;
-      if (error instanceof DOMException && error.name === "AbortError") return;
-      const fallback =
-        mode === "initial"
-          ? repairActivitiesPage.loadFailed
-          : formatPageCopy(repairActivitiesPage.pageLoadFailed, requestedPage);
       if (mode === "initial") {
         setState("error");
         setMessage(fallback);
       } else {
         setPageMessage(fallback);
       }
-    } finally {
-      if (requestId === requestSequence.current) {
-        setLoadingPage(null);
-        requestController.current = null;
+    } catch (error) {
+      if (!request.isCurrent()) return;
+      const failure = requestError(error);
+      if (failure.code === "REQUEST_ABORTED") return;
+      const fallback =
+        mode === "initial"
+          ? repairActivitiesPage.loadFailed
+          : formatPageCopy(repairActivitiesPage.pageLoadFailed, requestedPage);
+      if (mode === "initial") {
+        setState("error");
+        setMessage(failure.code === "NETWORK_ERROR" ? fallback : failure.message);
+      } else {
+        setPageMessage(failure.code === "NETWORK_ERROR" ? fallback : failure.message);
       }
+    } finally {
+      if (request.isCurrent()) {
+        setLoadingPage(null);
+      }
+      request.finish();
     }
   }, []);
 
   useEffect(() => {
+    const scope = requests.current;
     void loadPage(1, "initial");
     return () => {
-      requestSequence.current += 1;
-      requestController.current?.abort();
+      scope.invalidate();
     };
   }, [loadPage]);
 
