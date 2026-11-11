@@ -5258,7 +5258,7 @@ html[data-theme="black-yellow"] {
   }
   .admin-workspace__title {
     margin: 0;
-    font-size: var(--t-xl);
+    font-size: var(--t-lg);
     font-weight: 800;
     line-height: 1.14;
     color: var(--ink);
@@ -8481,11 +8481,11 @@ html[data-theme="black-yellow"] {
      46px / 16px 字号、表头表尾大留白）在官网是对的 —— 那里要的是呼吸感与触控面积；
      搬到后台就变成：一屏放不下 8 行记录、每个控件都盯着你看。参考邮箱类客户端把密度提上来。
 
-     **只在 ≥760px 生效**：窄屏仍然是手指操作，`.field__input` 的 16px 也兼着
+     **只在 ≥760px 且使用细指针时生效**：窄屏仍然是手指操作，`.field__input` 的 16px 也兼着
      「iOS Safari 聚焦时不放大整页」这个作用，不能一起压小。
      作用域收在 `.admin-workspace` 与 `.admin-*` 里，官网与成员端不受影响；
      详情窗口 Portal 到 body，因此单独列 `.admin-modal`。 */
-  @media (min-width: 760px) {
+  @media (min-width: 760px) and (pointer: fine) {
     /* 页头：标题从 `--t-xl`（最大 2.75rem）降到 `--t-lg`，说明文字降一档 */
     .admin-workspace__title {
       font-size: var(--t-lg);
@@ -9778,5 +9778,97 @@ body:has(.admin-toast) .page-alert {
   .activity-board__panes--admin .activity-board__serve-btn.btn svg,
   .activity-board__panes--admin .activity-board__withdraw-btn.btn svg {
     display: none;
+  }
+}
+
+/* 登录后工作区：窄屏页头与触控目标；公开展示页沿用原有尺寸。 */
+@media (max-width: 1099px) {
+  .admin-shell .admin-workspace.page-head,
+  .member-shell .member-workspace.page-head:not(.member-activity-board-workspace) {
+    padding-block-start: clamp(1.5rem, 3vw, 2.5rem);
+  }
+  .member-shell .member-workspace .sec-title,
+  .member-shell .member-workspace .dash-hero__name,
+  .admin-shell .admin-workspace .dash-hero__name {
+    font-size: var(--t-lg);
+  }
+}
+@media (pointer: coarse) {
+  .admin-workspace .btn,
+  .member-workspace .btn,
+  .admin-nav__link,
+  .member-nav__link,
+  body:has(.admin-shell, .member-shell) .admin-modal .btn {
+    min-block-size: 46px;
+  }
+  .admin-workspace .field__input,
+  .member-workspace .field__input,
+  body:has(.admin-shell, .member-shell) .admin-modal .field__input {
+    min-block-size: 46px;
+    font-size: var(--t-base);
+  }
+  .admin-workspace .admin-rownum__n {
+    visibility: hidden;
+  }
+  .admin-workspace .admin-rownum__box {
+    opacity: 1;
+  }
+  .admin-workspace .admin-peek {
+    position: static;
+    translate: none;
+    opacity: 1;
+    min-block-size: 44px;
+    min-inline-size: 44px;
+    margin-inline-start: var(--s-2);
+    flex-shrink: 0;
+  }
+  .admin-workspace .admin-table--resizable tbody:hover tr:not(:hover) .admin-peek {
+    opacity: 1;
+  }
+  .admin-workspace .admin-colgrid,
+  .admin-workspace .admin-rowgrip,
+  .admin-workspace td.admin-table__grip {
+    display: none;
+  }
+}
+/* Portal 到 body 的公开确认窗保留原宽度密度，不随登录后触控校准改变。 */
+@media (min-width: 760px) {
+  body:not(:has(.admin-shell, .member-shell)) .admin-modal .btn {
+    gap: var(--s-2);
+    min-height: 1.5rem;
+    padding: 0.15rem 0.55rem;
+    font-size: var(--t-sm);
+    letter-spacing: 0.02em;
+  }
+  body:not(:has(.admin-shell, .member-shell)) .admin-modal .btn svg {
+    inline-size: 0.875rem;
+    block-size: 0.875rem;
+  }
+  body:not(:has(.admin-shell, .member-shell)) .admin-modal .btn--ghost::after {
+    left: 0.55rem;
+    right: 0.55rem;
+    bottom: 0.15rem;
+  }
+  body:not(:has(.admin-shell, .member-shell)) .admin-modal .field__input {
+    min-height: 1.75rem;
+    padding: 0.2rem 0.5rem;
+    font-size: var(--t-sm);
+  }
+  body:not(:has(.admin-shell, .member-shell)) .admin-modal .field__label {
+    font-size: var(--t-xs);
+    font-weight: 650;
+  }
+  body:not(:has(.admin-shell, .member-shell)) .admin-modal .field__hint {
+    font-size: var(--t-micro);
+    line-height: 1.5;
+  }
+  body:not(:has(.admin-shell, .member-shell)) .admin-modal .field {
+    gap: 0.2rem;
+  }
+  body:not(:has(.admin-shell, .member-shell)) .admin-modal__facts {
+    gap: var(--s-2);
+  }
+  body:not(:has(.admin-shell, .member-shell)) .admin-modal__body {
+    gap: var(--s-3);
   }
 }
