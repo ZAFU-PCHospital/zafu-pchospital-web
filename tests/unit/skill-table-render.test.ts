@@ -168,12 +168,12 @@ test("单元格类名：手柄格 admin-table__grip、名称格 admin-table__gro
     html.includes(`<td data-label="${table.name}" class="admin-table__grow">`),
     "名称格应当是 admin-table__grow",
   );
-  // 「选用成员」是数字，但迁移前没有右对齐：内核按 `number` 默认会给 `admin-table__num`，
+  // 「选用成员」是数字，但迁移前没有用等宽数字：内核按 `number` 默认会给 `admin-table__num`，
   // spec 里已显式 `numeric: false`，冒出来就是像素变了。
   assert.equal(
     html.includes("admin-table__num"),
     false,
-    "内核按字段类型默认加了右对齐类，但这会改变迁移后的像素",
+    "内核按字段类型默认加了等宽数字类，但这会改变迁移后的像素",
   );
 });
 

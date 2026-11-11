@@ -204,7 +204,7 @@ test("单元格：data-label 与类名逐列照抄（内容列只有名称列）
       nameCell.includes('class="admin-table__grow"'),
     "名称列应当是带 admin-table__grow 的「名称」格",
   );
-  // 「引用记录」列迁移前没有右对齐：内核按 `number` 类型默认会给 `admin-table__num`，
+  // 「引用记录」列迁移前没有用等宽数字：内核按 `number` 类型默认会给 `admin-table__num`，
   // spec 里显式写 `numeric: false` 把它关掉了。
   assert.equal(
     html.includes("admin-table__num"),

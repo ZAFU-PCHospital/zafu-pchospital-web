@@ -27,7 +27,7 @@ M6 的六个后台列表（成员 / 技能 / 分类 / 评论 / 邀请码 / 招�
 | ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `src/types/table.ts`                  | 公共类型：`FieldKind` / `FieldSpec` / `TableViewSpec` / `ListQuery` / `SortRule` / `MAX_SORT_RULES`。**只有类型与常量，没有实现**（`AGENTS.md` §5） |
 | `src/lib/api/list-query.ts`           | 查询参数解析与拼装：白名单校验、三态排序循环、`sort` 参数格式。与既有 `pagination.ts` 同级 —— 所有列表共用的请求参数处理                            |
-| `src/lib/table/field-spec.ts`         | 字段类型的默认行为：右对齐、默认可排序、列显隐初值、按 key 取字段                                                                                   |
+| `src/lib/table/field-spec.ts`         | 字段类型的默认行为：等宽数字、默认可排序、列显隐初值、按 key 取字段                                                                                 |
 | `src/components/admin/AdminTable.tsx` | 渲染层：把一份 spec 渲染成现有这套 `.admin-table` 标记                                                                                              |
 | `tests/unit/table-kernel.test.ts`     | 16 项单元测试（纯函数，无 DOM、无 IO）                                                                                                              |
 
@@ -88,7 +88,7 @@ API 与社区示例都还没跟上。它只提供列模型与行模型，不引�
 
 1. 为这张表写一份 spec（`render` 逐列照抄现有 `<td>` 内容，类名照抄现有 `<th>` / `<td>`）。
    三条要逐字照抄、不要顺手「优化」的东西写在 `member-table-spec.tsx` 顶部：
-   列 id 不能改（列宽偏好按 id 存 `localStorage`）、该右对齐但当前没右对齐的列要显式
+   列 id 不能改（列宽偏好按 id 存 `localStorage`）、该用等宽数字但当前没用的列要显式
    `numeric: false`、聚合列与关联列显式 `sortable: false`；
    行首那种**没有可见表头**的列（拖动 / 选择）：`label: ""`，需要列名时写
    `headLabel`（渲染成 `sr-only`，不参与布局，因此像素不动）；没有字段名的列

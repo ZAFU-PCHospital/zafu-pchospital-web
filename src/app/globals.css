@@ -3408,6 +3408,9 @@ html[data-theme="black-yellow"] {
     line-height: 1.45;
     color: var(--ink-2);
   }
+  .admin-table__num {
+    font-variant-numeric: tabular-nums;
+  }
   .repair-table tbody tr:last-child td,
   .admin-table tbody tr:last-child td {
     border-bottom: 0;
@@ -3473,7 +3476,7 @@ html[data-theme="black-yellow"] {
     display: block;
     margin-top: 0.2rem;
     font-size: var(--t-xs);
-    color: var(--accent-deep);
+    color: var(--ink-3);
   }
   .repair-table__muted {
     color: var(--ink-4);
@@ -6150,6 +6153,11 @@ html[data-theme="black-yellow"] {
     background: var(--accent-wash);
     color: var(--accent-deep);
   }
+  .admin-tag--danger {
+    border-color: var(--status-danger-line);
+    background: var(--status-danger-wash);
+    color: var(--status-danger-deep);
+  }
   .admin-tag--muted {
     border-color: var(--line);
     color: var(--ink-3);
@@ -8619,10 +8627,6 @@ html[data-theme="black-yellow"] {
     .admin-workspace .admin-tag {
       min-height: 1.35rem;
       padding: 0.1rem 0.4rem;
-      font-size: var(--t-micro);
-    }
-    .admin-workspace .repair-table__flags {
-      margin-block-start: 0;
       font-size: var(--t-micro);
     }
     /* 宽屏下联系方式并排显示。 */

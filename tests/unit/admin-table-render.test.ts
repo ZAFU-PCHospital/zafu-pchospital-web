@@ -185,13 +185,13 @@ test("行与单元格：行键、首列类名、截断列的 title、读屏标�
   );
 });
 
-test("不引入 admin-table__num：加入时间与维修记录迁移前并未右对齐", async () => {
+test("不引入 admin-table__num：加入时间与维修记录迁移前并未使用等宽数字", async () => {
   const modules = await load();
   const html = render(modules, [member()]);
   assert.equal(
     html.includes("admin-table__num"),
     false,
-    "内核按字段类型默认给日期/数字加了右对齐类，但这会改变迁移后的像素 —— spec 里已显式 numeric: false",
+    "内核按字段类型默认给日期/数字加了等宽数字类，但这会改变迁移后的像素 —— spec 里已显式 numeric: false",
   );
 });
 
@@ -226,7 +226,12 @@ test("单元格内容：行号、昵称、技能收尾、角色、状态、统�
   assert.ok(skills.includes(`title="${item.skills.map((skill) => skill.name).join("、")}"`));
 
   assert.ok(html.includes(memberRoleLabels.MEMBER) && html.includes(memberRoleLabels.ADMIN));
-  assert.ok(html.includes(memberStatusLabels.ACTIVE));
+  assert.ok(
+    html.includes(
+      `<span class="admin-tags"><span class="admin-tag">${memberStatusLabels.ACTIVE}</span></span>`,
+    ),
+    "在册状态应使用中性徽章",
+  );
   assert.ok(
     html.includes(table.repairsCount.replace("{count}", "3")) &&
       html.includes(formatDurationMinutes(99)),
@@ -234,6 +239,19 @@ test("单元格内容：行号、昵称、技能收尾、角色、状态、统�
   assert.ok(html.includes(item.qqMasked as string) && html.includes(item.phoneMasked as string));
   assert.ok(html.includes(item.emailMasked as string) && html.includes("已验证"));
   assert.equal(html.includes(adminShared.none), false, "有值时不该出现空值占位");
+});
+
+test("状态徽章：禁用使用危险色并保留文案，不只靠颜色区分", async () => {
+  const modules = await load();
+  const { memberStatusLabels } = modules.admin;
+  const html = render(modules, [member({ status: "REVOKED" })]);
+
+  assert.ok(
+    html.includes(
+      `<span class="admin-tags"><span class="admin-tag admin-tag--danger">${memberStatusLabels.REVOKED}</span></span>`,
+    ),
+    "已禁用状态应使用危险色徽章并保留文案",
+  );
 });
 
 test("缺省值与边界：空技能、零维修、空班级、无昵称都走原有占位", async () => {

@@ -42,6 +42,11 @@ export type MemberTableContext = {
 /** 技能标签最多显示几枚（多出来的收成 `+N`，完整列表在这一格的 `title` 上）。 */
 const SKILL_TAGS_SHOWN = 2;
 
+/** 禁用是列表里需要优先看见的异常，用危险色描边；在册保持中性。 */
+export function memberStatusClass(status: MemberStatus): string {
+  return status === "REVOKED" ? "admin-tag admin-tag--danger" : "admin-tag";
+}
+
 export const memberTableSpec: TableViewSpec<MemberListEntry, MemberTableContext> = {
   id: "members",
   title: adminCopy.members.title,
@@ -236,7 +241,13 @@ export const memberTableSpec: TableViewSpec<MemberListEntry, MemberTableContext>
           })),
         },
       },
-      render: (member) => memberStatusLabels[member.status],
+      render: (member) => (
+        <span className="admin-tags">
+          <span className={memberStatusClass(member.status)}>
+            {memberStatusLabels[member.status]}
+          </span>
+        </span>
+      ),
     },
     {
       key: "joinedAt",

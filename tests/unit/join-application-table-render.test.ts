@@ -195,22 +195,30 @@ test("状态标签三档：已通过 / 未通过与撤回（中性灰）/ 其余
   assert.equal(statusClass("SUBMITTED"), "repair-tag repair-tag--pending");
   assert.equal(statusClass("INTERVIEW_PENDING"), "repair-tag repair-tag--pending");
 
-  // 三种样式都出现在标记里，且各自带着对应的状态文案。
+  // 三种样式都出现在标记里，且各自带着对应的状态文案；外层 admin-tags 让卡片布局不拉伸徽章。
   assert.ok(
     html.includes(
-      `<span class="repair-tag repair-tag--approved">${labels.INTERVIEW_PASSED}</span>`,
+      `<span class="admin-tags"><span class="repair-tag repair-tag--approved">${labels.INTERVIEW_PASSED}</span></span>`,
     ),
   );
   assert.ok(
-    html.includes(`<span class="admin-tag admin-tag--muted">${labels.INTERVIEW_REJECTED}</span>`),
+    html.includes(
+      `<span class="admin-tags"><span class="admin-tag admin-tag--muted">${labels.INTERVIEW_REJECTED}</span></span>`,
+    ),
   );
-  assert.ok(html.includes(`<span class="admin-tag admin-tag--muted">${labels.WITHDRAWN}</span>`));
   assert.ok(
-    html.includes(`<span class="repair-tag repair-tag--pending">${labels.SUBMITTED}</span>`),
+    html.includes(
+      `<span class="admin-tags"><span class="admin-tag admin-tag--muted">${labels.WITHDRAWN}</span></span>`,
+    ),
+  );
+  assert.ok(
+    html.includes(
+      `<span class="admin-tags"><span class="repair-tag repair-tag--pending">${labels.SUBMITTED}</span></span>`,
+    ),
   );
 });
 
-test("账号发放的四种状态都按既有文案显示", async () => {
+test("账号发放的四种状态都按既有文案显示，失败用危险色", async () => {
   const { admin } = await load();
   const labels = admin.provisionStatusLabels;
   const html = await render([
@@ -220,8 +228,18 @@ test("账号发放的四种状态都按既有文案显示", async () => {
     application("4", "INTERVIEW_PASSED", { provisionStatus: "NOT_REQUIRED" }),
   ]);
 
-  for (const label of [labels.PENDING, labels.SUCCEEDED, labels.FAILED, labels.NOT_REQUIRED]) {
-    // 文案可能重复（例如两项都是「—」），因此只要求出现。
-    assert.ok(html.includes(label), `账号发放列缺少文案「${label}」`);
+  const expected = [
+    ["PENDING", "admin-tag"],
+    ["SUCCEEDED", "admin-tag admin-tag--accent"],
+    ["FAILED", "admin-tag admin-tag--danger"],
+    ["NOT_REQUIRED", "admin-tag admin-tag--muted"],
+  ] as const;
+  for (const [status, className] of expected) {
+    assert.ok(
+      html.includes(
+        `<span class="admin-tags"><span class="${className}">${labels[status]}</span></span>`,
+      ),
+      `账号发放「${labels[status]}」的徽章样式不对`,
+    );
   }
 });

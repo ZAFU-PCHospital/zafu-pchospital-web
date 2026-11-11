@@ -5,21 +5,21 @@ import type { FieldFilterSpec, FieldKind, FieldSpec, TableViewSpec } from "@/typ
  * 字段类型的默认行为（P0）。
  *
  * 这些默认值存在的意义是**不要每张表都重复声明同一件事**：成员表的「加入时间」、
- * 维修表的「维修日期」都该右对齐 + 等宽数字，这是字段类型的性质，不是某张表的选择。
+ * 维修表的「维修日期」都该用等宽数字，这是字段类型的性质，不是某张表的选择。
  * 但默认值**一律可以被 spec 显式覆盖** —— 内核不替产品做决定。
  *
  * 只放纯函数：没有 React、没有 IO，因此可以直接被单元测试覆盖。
  */
 
 /**
- * 右对齐 + 等宽数字的字段类型。
+ * 使用等宽数字的字段类型。
  *
- * 只有能纵向比大小的类型才右对齐：数字、日期、日期时间。**文本类一律左对齐**，
+ * 只有能纵向比大小的类型才需要等宽：数字、日期、日期时间。文本类不需要，
  * 包括看起来像数字的学号 —— 学号是对比用的标识符，不是量。
  */
 const NUMERIC_KINDS: readonly FieldKind[] = ["number", "date", "datetime"];
 
-/** 该字段是否默认右对齐（`admin-table__num`）。 */
+/** 该字段是否默认使用等宽数字（`admin-table__num`）。 */
 export function defaultNumeric(kind: FieldKind): boolean {
   return NUMERIC_KINDS.includes(kind);
 }
