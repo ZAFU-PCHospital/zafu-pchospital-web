@@ -2,10 +2,13 @@
 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { PageAlert } from "@/components/ui/PageAlert";
+import { createLatestRequest } from "@/lib/client/latest-request";
+import { requestError, requestJson } from "@/lib/client/request";
 import { formatRepairParticipants, repairCopy } from "@/config/repairs";
 import { parseRepairListStatus } from "@/features/repairs/repair-http";
 import type {
@@ -53,6 +56,9 @@ export function RepairList({ statusLabels, resultLabels }: Props) {
   const [typical, setTypical] = useState(false);
   const [showMore, setShowMore] = useState(false);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
+  const [message, setMessage] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
+  const requests = useRef(createLatestRequest());
 
   // 浏览器前进/后退或外链深链变化时，把 URL 白名单状态同步回本地筛选。
   useEffect(() => {
@@ -63,7 +69,10 @@ export function RepairList({ statusLabels, resultLabels }: Props) {
   const hasFilters = Boolean(query || status || categoryId || memberId || advancedFilterCount);
 
   const load = useCallback(async () => {
-    setState("loading");
+    const request = requests.current.begin();
+    setState((current) => (current === "ready" ? current : "loading"));
+    setMessage("");
+    setRefreshing(true);
     try {
       const params = new URLSearchParams({ page: String(page), pageSize: "20" });
       if (query) params.set("query", query);
@@ -76,50 +85,66 @@ export function RepairList({ statusLabels, resultLabels }: Props) {
       if (difficult) params.set("isDifficult", "true");
       if (typical) params.set("isTypical", "true");
 
-      const response = await fetch(`/api/v1/repairs?${params}`, { cache: "no-store" });
-      const json = await response.json();
-      if (!json.success) throw new Error();
+      const json = await requestJson<RepairView[]>(`/api/v1/repairs?${params}`, {
+        cache: "no-store",
+        signal: request.signal,
+      });
+      if (!request.isCurrent()) return;
       setItems(json.data);
-      setPagination(json.meta.pagination);
+      setPagination(json.meta?.pagination);
       setState("ready");
-    } catch {
-      setState("error");
+    } catch (error) {
+      if (!request.isCurrent()) return;
+      setState((current) => (current === "ready" ? current : "error"));
+      setMessage(requestError(error).message);
+    } finally {
+      if (request.isCurrent()) setRefreshing(false);
+      request.finish();
     }
   }, [page, query, status, categoryId, memberId, result, from, to, difficult, typical]);
 
   useEffect(() => {
+    const scope = requests.current;
     void load();
+    return () => scope.invalidate();
   }, [load]);
 
   useEffect(() => {
+    const controller = new AbortController();
     async function loadReferenceData() {
       try {
         const summaryRequests = (["ALL", "PENDING", "DRAFT", "REJECTED"] as const).map(
           async (key) => {
             const params = new URLSearchParams({ page: "1", pageSize: "1" });
             if (key !== "ALL") params.set("status", key);
-            const response = await fetch(`/api/v1/repairs?${params}`, { cache: "no-store" });
-            const json = await response.json();
-            if (!json.success) throw new Error();
-            return [key, json.meta.pagination.total] as const;
+            const json = await requestJson<RepairView[]>(`/api/v1/repairs?${params}`, {
+              cache: "no-store",
+              signal: controller.signal,
+            });
+            return [key, json.meta?.pagination?.total ?? 0] as const;
           },
         );
-        const [categoryResponse, memberResponse, ...summaryEntries] = await Promise.all([
-          fetch("/api/v1/repair-categories", { cache: "no-store" }),
-          fetch("/api/v1/repair-members", { cache: "no-store" }),
+        const [categoryJson, memberJson, ...summaryEntries] = await Promise.all([
+          requestJson<RepairCategoryView[]>("/api/v1/repair-categories", {
+            cache: "no-store",
+            signal: controller.signal,
+          }),
+          requestJson<RepairMemberOption[]>("/api/v1/repair-members", {
+            cache: "no-store",
+            signal: controller.signal,
+          }),
           ...summaryRequests,
         ]);
-        const categoryJson = await categoryResponse.json();
-        const memberJson = await memberResponse.json();
-        if (!categoryJson.success || !memberJson.success) throw new Error();
+        if (controller.signal.aborted) return;
         setCategories(categoryJson.data);
         setMembers(memberJson.data);
         setSummary(Object.fromEntries(summaryEntries) as Record<SummaryKey, number>);
       } catch {
-        setSummary(initialSummary);
+        if (!controller.signal.aborted) setSummary(initialSummary);
       }
     }
     void loadReferenceData();
+    return () => controller.abort();
   }, []);
 
   const quickFilters = useMemo(
@@ -166,6 +191,7 @@ export function RepairList({ statusLabels, resultLabels }: Props) {
 
   return (
     <div className="repair-workspace__content">
+      {state === "ready" && message ? <PageAlert message={message} /> : null}
       <header className="repair-workspace__header">
         <div>
           <p className="eyebrow">{copy.label}</p>
@@ -360,7 +386,7 @@ export function RepairList({ statusLabels, resultLabels }: Props) {
         {state === "loading" ? <p role="status">{copy.loading}</p> : null}
         {state === "error" ? (
           <Card variant="notice">
-            <p>{copy.loadError}</p>
+            <p>{message || copy.loadError}</p>
             <Button onClick={() => void load()}>{copy.reload}</Button>
           </Card>
         ) : null}
@@ -368,7 +394,7 @@ export function RepairList({ statusLabels, resultLabels }: Props) {
 
       {state === "ready" ? (
         <div className="repair-table-wrap">
-          <table className="repair-table">
+          <table className="repair-table" aria-busy={refreshing}>
             <thead>
               <tr>
                 <th>{copy.columns.date}</th>
@@ -408,7 +434,7 @@ export function RepairList({ statusLabels, resultLabels }: Props) {
             {copy.previousPage}
           </Button>
           <span>
-            {page} / {pagination.totalPages}
+            {pagination.page} / {pagination.totalPages}
           </span>
           <Button
             trailingIcon="chevronRight"

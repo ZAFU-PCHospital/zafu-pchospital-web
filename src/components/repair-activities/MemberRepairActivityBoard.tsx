@@ -31,6 +31,9 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Icon } from "@/components/ui/Icon";
 import { PageAlert } from "@/components/ui/PageAlert";
 import { cn } from "@/lib/utils";
+import { createLatestRequest } from "@/lib/client/latest-request";
+import { requestError, requestJson } from "@/lib/client/request";
+import { clientRequestCopy } from "@/config/client-request";
 import { createBoardSearch } from "./board-search";
 import { repairStatusLabels } from "@/config/repairs";
 import {
@@ -94,6 +97,12 @@ export function MemberRepairActivityBoard({ activityId }: Props) {
   const [toast, setToast] = useState<AdminToastMessage | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState<string | null>(null);
+  const writePending = useRef(false);
+  const writes = useRef(createLatestRequest());
+  useLayoutEffect(() => {
+    const scope = writes.current;
+    return () => scope.invalidate();
+  }, [activityTarget]);
   const [withdrawTarget, setWithdrawTarget] = useState<StaffRegistrationView | null>(null);
   /** 撤销接待：确认弹层目标与在途标记。 */
   const [revertTarget, setRevertTarget] = useState<StaffServedRow | null>(null);
@@ -218,6 +227,7 @@ export function MemberRepairActivityBoard({ activityId }: Props) {
     setIssueTypeDrafts({});
     setCheckInError("");
     checkInPending.current = false;
+    writePending.current = false;
   }, [activityId]);
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -251,6 +261,14 @@ export function MemberRepairActivityBoard({ activityId }: Props) {
     if (!desktop) window.scrollTo({ top: 0, behavior: "instant" });
   }
 
+  function beginWrite(key: string): boolean {
+    if (writePending.current) return false;
+    writePending.current = true;
+    setBusy(key);
+    setToast(null);
+    return true;
+  }
+
   async function postJson<T>(
     path: string,
     body: Record<string, unknown>,
@@ -259,36 +277,46 @@ export function MemberRepairActivityBoard({ activityId }: Props) {
     live.invalidate();
     served.invalidate();
     attendance.invalidate();
+    const request = writes.current.begin();
     try {
-      const response = await fetch(path, {
+      const json = await requestJson<T>(path, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
+        signal: request.signal,
       });
-      const json = (await response.json()) as {
-        success: boolean;
-        data?: T;
-        error?: { message?: string; code?: string };
-      };
       if (currentActivity.current !== activityTarget)
         return { ok: false, message: "", code: "STALE_ACTIVITY" };
-      if (!json.success || json.data === undefined) {
-        if (json.error?.code === "ACTIVITY_ENDED") {
-          setServerEnded(true);
-          setClock(Date.now());
-        }
-        return {
-          ok: false,
-          message:
-            json.error?.code === "ACTIVITY_ENDED"
-              ? copy.activityEnded
-              : (json.error?.message ?? copy.loadFailed),
-          code: json.error?.code,
-        };
-      }
       return { ok: true, data: json.data };
-    } catch {
-      return { ok: false, message: copy.loadFailed };
+    } catch (error) {
+      if (!request.isCurrent() || currentActivity.current !== activityTarget)
+        return { ok: false, message: "", code: "STALE_ACTIVITY" };
+      const failure = requestError(error);
+      if (failure.code === "ACTIVITY_ENDED") {
+        setServerEnded(true);
+        setClock(Date.now());
+      }
+      const unconfirmed = ["REQUEST_TIMEOUT", "NETWORK_ERROR", "INVALID_RESPONSE"].includes(
+        failure.code,
+      );
+      if (unconfirmed) void refreshAfterWrite();
+      return {
+        ok: false,
+        code: failure.code,
+        message: unconfirmed
+          ? clientRequestCopy.writeUnconfirmed
+          : failure.code === "ACTIVITY_ENDED"
+            ? copy.activityEnded
+            : failure.message,
+      };
+    } finally {
+      if (request.isCurrent() && currentActivity.current === activityTarget) {
+        writePending.current = false;
+        checkInPending.current = false;
+        setBusy(null);
+        setRevertBusy(false);
+      }
+      request.finish();
     }
   }
 
@@ -320,15 +348,12 @@ export function MemberRepairActivityBoard({ activityId }: Props) {
   }
 
   async function attend() {
-    if (busy !== null || !allowStaffAction()) return;
-    setBusy("attend");
-    setToast(null);
+    if (busy !== null || !allowStaffAction() || !beginWrite("attend")) return;
     const result = await postJson<{ attended: boolean }>(
       `/api/v1/member/repair-activities/${activityId}/attendance`,
       {},
     );
     if (currentActivity.current !== activityTarget) return;
-    setBusy(null);
     if (!result.ok) {
       setMessage(result.message);
       return;
@@ -372,9 +397,8 @@ export function MemberRepairActivityBoard({ activityId }: Props) {
       setCheckInError(blocked);
       return;
     }
+    if (!beginWrite("check-in")) return;
     checkInPending.current = true;
-    setBusy("check-in");
-    setToast(null);
     setMessage("");
     setCheckInError("");
     const issueTypeUpdates = checkInRows
@@ -390,8 +414,6 @@ export function MemberRepairActivityBoard({ activityId }: Props) {
     if (currentActivity.current !== activityTarget) return;
     if (!result.ok) {
       setCheckInError(result.message);
-      checkInPending.current = false;
-      setBusy(null);
       return;
     }
     setCheckInConfirmOpen(false);
@@ -418,22 +440,17 @@ export function MemberRepairActivityBoard({ activityId }: Props) {
     const fresh = await load();
     if (currentActivity.current !== activityTarget) return;
     if (!fresh) setMessage(copy.checkInRefreshFailed);
-    checkInPending.current = false;
-    setBusy(null);
   }
 
   async function confirmWithdraw() {
-    if (!withdrawTarget) return;
+    if (!withdrawTarget || !beginWrite(`withdraw:${withdrawTarget.id}`)) return;
     const registrationId = withdrawTarget.id;
-    setBusy(`withdraw:${registrationId}`);
-    setToast(null);
     setMessage("");
     const result = await postJson<StaffRegistrationView>(
       `/api/v1/member/repair-activities/${activityId}/withdraw`,
       { registrationId },
     );
     if (currentActivity.current !== activityTarget) return;
-    setBusy(null);
     if (!result.ok) {
       setMessage(result.message);
       return;
@@ -444,16 +461,13 @@ export function MemberRepairActivityBoard({ activityId }: Props) {
   }
 
   async function serve(registrationId: string) {
-    if (busy !== null || !allowStaffAction()) return;
-    setBusy(`serve:${registrationId}`);
-    setToast(null);
+    if (busy !== null || !allowStaffAction() || !beginWrite(`serve:${registrationId}`)) return;
     setMessage("");
     const result = await postJson<ServeResultView>(
       `/api/v1/member/repair-activities/${activityId}/serve`,
       { registrationId },
     );
     if (currentActivity.current !== activityTarget) return;
-    setBusy(null);
     if (!result.ok) {
       if (result.code === "ACTIVITY_SERVE_PENDING") {
         // 服务端兜底（多标签 / 并发）：先刷新看板，再按最新的未建单接待弹层；
@@ -473,15 +487,13 @@ export function MemberRepairActivityBoard({ activityId }: Props) {
 
   /** 撤销接待：仅接待者本人 / 活动管理员可见按钮，服务端再校一遍。 */
   async function confirmRevertServe() {
-    if (!revertTarget || revertBusy) return;
+    if (!revertTarget || revertBusy || !beginWrite(`revert:${revertTarget.id}`)) return;
     setRevertBusy(true);
-    setToast(null);
     const result = await postJson<RevertServeResultView>(
       `/api/v1/member/repair-activities/${activityId}/revert-serve`,
       { registrationId: revertTarget.id },
     );
     if (currentActivity.current !== activityTarget) return;
-    setRevertBusy(false);
     setRevertTarget(null);
     if (!result.ok) {
       setMessage(result.message);
@@ -996,7 +1008,9 @@ export function MemberRepairActivityBoard({ activityId }: Props) {
                   // 待补建：接待已占位、维修单还没创建。
                   const pendingRecord = recordId === null;
                   // 已通过打勾、待审核用「眼睛」：暗色下品牌黄与警示橙色相接近，靠图标再区分一层。
-                  const recordIcon = row.recordStatus ? recordStatusTagIcon(row.recordStatus) : null;
+                  const recordIcon = row.recordStatus
+                    ? recordStatusTagIcon(row.recordStatus)
+                    : null;
                   return (
                     <li key={row.id} className="activity-board__row">
                       <div className="activity-board__served-main">

@@ -9,8 +9,11 @@ import { memberRepairActivitiesCopy } from "../../src/config/repair-activities";
 import React, { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-function setup(t: TestContext, interval = 5_000) {
-  t.mock.timers.enable({ apis: ["Date"], now: 1_000_000 });
+function setup(t: TestContext, interval = 5_000, mockTimeout = false) {
+  t.mock.timers.enable({
+    apis: ["Date", ...(mockTimeout ? ["setTimeout" as const] : [])],
+    now: 1_000_000,
+  });
   const original = Object.getOwnPropertyDescriptor(globalThis, "document");
   const doc = { visibilityState: "visible" };
   Object.defineProperty(globalThis, "document", { configurable: true, value: doc });
@@ -25,6 +28,7 @@ function setup(t: TestContext, interval = 5_000) {
     paused: () => paused,
     changed() {},
   });
+  t.after(() => reader.dispose());
   return {
     reader,
     doc,
@@ -33,6 +37,33 @@ function setup(t: TestContext, interval = 5_000) {
     },
   };
 }
+
+test("对账读取超时保留快照并释放 pending，迟到结果不能覆盖手动重试", async (t) => {
+  const { reader } = setup(t, 5_000, true);
+  let finish!: (response: Response) => void;
+  let calls = 0;
+  t.mock.method(globalThis, "fetch", () => {
+    calls++;
+    return calls === 2
+      ? new Promise<Response>((resolve) => {
+          finish = resolve;
+        })
+      : Promise.resolve(
+          Response.json({ success: true, data: { value: calls === 1 ? "snapshot" : "fresh" } }),
+        );
+  });
+  await reader.read();
+  const pending = reader.read({ manual: true });
+  t.mock.timers.tick(15_000);
+  await pending;
+  assert.equal(reader.state.pending, false);
+  assert.equal(reader.state.data?.value, "snapshot");
+  assert.equal(reader.state.failures, 1);
+  await reader.read({ manual: true });
+  finish(Response.json({ success: true, data: { value: "late" } }));
+  await Promise.resolve();
+  assert.equal(reader.state.data?.value, "fresh");
+});
 
 test("有界退避：进行中 10/20/40/60 秒，结束与历史最多 120 秒", () => {
   assert.deepEqual(

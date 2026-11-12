@@ -4,6 +4,7 @@ import { setImmediate } from "node:timers/promises";
 import test, { type TestContext } from "node:test";
 import type { ReactElement, ReactNode } from "react";
 import { memberRepairActivitiesCopy } from "../../src/config/repair-activities";
+import { clientRequestCopy } from "../../src/config/client-request";
 import type {
   StaffBoardView,
   StaffRegistrationView,
@@ -107,8 +108,12 @@ async function mount(
   now: Date,
   rejectEnded = false,
   desktop = true,
+  mockTimeout = false,
 ) {
-  t.mock.timers.enable({ apis: ["Date", "setInterval"], now });
+  t.mock.timers.enable({
+    apis: ["Date", "setInterval", ...(mockTimeout ? ["setTimeout" as const] : [])],
+    now,
+  });
   const originals = ["window", "document"].map(
     (key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)] as const,
   );
@@ -216,11 +221,13 @@ async function mount(
   let postResponse: (() => Promise<Response>) | null = null;
   const posts: string[] = [];
   const postBodies: string[] = [];
+  const postSignals: (AbortSignal | null | undefined)[] = [];
   let gets = 0;
   t.mock.method(globalThis, "fetch", async (input: unknown, init?: RequestInit) => {
     if (init?.method === "POST") {
       posts.push(String(input));
       postBodies.push(typeof init.body === "string" ? init.body : "");
+      postSignals.push(init.signal);
       if (postResponse) return postResponse();
       assert.ok(rejectEnded, "截止后不能发出写请求");
       return Response.json(
@@ -320,6 +327,7 @@ async function mount(
     dialog,
     posts,
     postBodies,
+    postSignals,
     gets: () => gets,
     elements: () => elements(view()),
   };
@@ -353,6 +361,102 @@ test("结束的看板保留历史、出勤状态和纠错，三项控件禁用�
     true,
   );
   assert.deepEqual(ui.posts, []);
+});
+
+for (const operation of ["attend", "check-in", "serve", "withdraw", "revert-serve"] as const) {
+  test(`${operation}：15 秒超时释放锁、只读对账、同帧重复提交只发一次`, async (t) => {
+    const ui = await mount(
+      t,
+      board(operation !== "attend"),
+      new Date(end.getTime() - 600_000),
+      false,
+      true,
+      true,
+    );
+    let finish!: (response: Response) => void;
+    ui.replyToPost(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    let submit: () => void;
+    if (operation === "check-in") {
+      ui.elements().find((element) => element.props.type === "checkbox")!.props.onChange!();
+      ui.button(copy.checkIn).onClick!();
+      submit = ui.dialog()!.onConfirm!;
+    } else if (operation === "withdraw" || operation === "revert-serve") {
+      ui.button(operation === "withdraw" ? copy.withdraw : copy.revertServe).onClick!();
+      submit = ui
+        .elements()
+        .find(
+          (element) =>
+            element.props.title ===
+            (operation === "withdraw" ? copy.withdrawConfirmTitle : copy.revertServeConfirmTitle),
+        )!.props.onConfirm!;
+    } else {
+      submit = ui.button(operation === "attend" ? copy.attendCta : copy.serve).onClick!;
+    }
+    submit();
+    submit();
+    ui.view();
+    assert.equal(ui.posts.length, 1);
+    const liveReads = ui.reads.filter((read) => read.view === "live").length;
+    t.mock.timers.tick(14_999);
+    await setImmediate();
+    assert.equal(ui.postSignals[0]?.aborted, false);
+    t.mock.timers.tick(1);
+    await setImmediate();
+    assert.equal(ui.postSignals[0]?.aborted, true);
+    assert.equal(ui.reads.filter((read) => read.view === "live").length, liveReads + 1);
+    const page = ui.view();
+    assert.ok(
+      ui
+        .elements()
+        .some((element) => element.props.className === "activity-board activity-board--ready"),
+    );
+    if (operation === "check-in") assert.equal(ui.dialog()?.busy, false);
+    assert.ok(
+      text(page).includes(clientRequestCopy.writeUnconfirmed) ||
+        ui
+          .elements()
+          .some((element) => element.props.message === clientRequestCopy.writeUnconfirmed),
+    );
+    if (operation === "check-in") ui.dialog()!.onClose!();
+    if (operation === "withdraw")
+      ui.elements().find((element) => element.props.title === copy.withdrawConfirmTitle)!.props
+        .onClose!();
+    ui.view();
+    await setImmediate();
+    assert.equal(ui.button(copy.refresh).disabled, false);
+    assert.equal(
+      ui.reads.filter((read) => read.view === "live").length,
+      liveReads + 1,
+      "恢复轮询复用对账快照",
+    );
+    finish(
+      Response.json(
+        { success: false, error: { code: "ACTIVITY_ENDED", message: "late" } },
+        { status: 404 },
+      ),
+    );
+    await setImmediate();
+    assert.equal(text(ui.view()).includes(copy.activityEnded), false);
+    assert.equal(ui.posts.length, 1);
+  });
+}
+
+test("网络失败同样释放写锁并重新读取，不自动重放写请求", async (t) => {
+  const ui = await mount(t, board(false), new Date(end.getTime() - 600_000));
+  ui.replyToPost(async () => {
+    throw new TypeError("offline");
+  });
+  const before = ui.gets();
+  ui.button(copy.attendCta).onClick!();
+  await setImmediate();
+  assert.ok(ui.gets() > before);
+  assert.equal(ui.button(copy.attendCta).disabled, false);
+  assert.equal(ui.posts.length, 1);
 });
 
 test("报名已截止但窗口已开放时，状态显示「报名已截止」而不是「可出勤」（issue #367）", async (t) => {

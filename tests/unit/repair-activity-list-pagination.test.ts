@@ -138,6 +138,7 @@ async function mount(t: TestContext) {
     return node;
   };
   t.after(() => {
+    effectCleanup?.();
     for (const [key, original] of originals) {
       if (original) Object.defineProperty(globalThis, key, original);
       else Reflect.deleteProperty(globalThis, key);
@@ -282,4 +283,23 @@ test("首次加载失败显示错误状态，不渲染分页", async (t) => {
   const page = ui.view();
   assert.ok(text(page).includes("服务暂时不可用"));
   assert.equal(findButton(page, repairActivitiesPage.nextPage), undefined);
+});
+
+test("活动翻页超时保留旧页、恢复按钮，迟到响应不覆盖重试", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const ui = await mount(t);
+  ui.view();
+  await ui.finish(0, payload(["a"], 1, 10, 3));
+  findButton(ui.view(), repairActivitiesPage.nextPage)?.props.onClick?.();
+  t.mock.timers.tick(15_000);
+  await setImmediate();
+  assert.equal(ui.requests[1].init.signal?.aborted, true);
+  assert.ok(text(ui.view()).includes("请求超时"));
+  assert.ok(text(ui.view()).includes("活动 a"));
+  assert.equal(findButton(ui.view(), repairActivitiesPage.nextPage)?.props.disabled, false);
+  findButton(ui.view(), repairActivitiesPage.nextPage)?.props.onClick?.();
+  await ui.finish(2, payload(["new"], 2, 10, 3));
+  await ui.finish(1, payload(["late"], 2, 10, 3));
+  assert.ok(text(ui.view()).includes("活动 new"));
+  assert.equal(text(ui.view()).includes("活动 late"), false);
 });

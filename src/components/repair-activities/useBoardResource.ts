@@ -10,6 +10,7 @@ export function useBoardResource<T>(
 ) {
   const [, render] = useState(0);
   const settings = useRef(options);
+  const previousInterval = useRef(options.interval);
   useLayoutEffect(() => {
     settings.current = options;
   });
@@ -38,7 +39,10 @@ export function useBoardResource<T>(
       if (document.visibilityState !== "visible") reader.invalidate(true);
       else void reader.read({ resume: true });
     };
-    refresh();
+    // 写后手动对账已经读取新快照时，恢复轮询沿用它的到期时间。
+    const intervalChanged = previousInterval.current !== options.interval;
+    previousInterval.current = options.interval;
+    void reader.read({ resume: intervalChanged });
     const timer = window.setInterval(() => void reader.read(), 1_000);
     window.addEventListener("focus", refresh);
     document.addEventListener("visibilitychange", refresh);
