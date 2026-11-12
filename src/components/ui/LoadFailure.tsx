@@ -23,12 +23,13 @@ export function LoadFailure({
 }) {
   const [pending, setPending] = useState(false);
   const alive = useRef(true);
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    // StrictMode 会先清理再重新执行 effect；重新挂载时必须恢复 alive，否则重试会永久卡在 pending。
+    alive.current = true;
+    return () => {
       alive.current = false;
-    },
-    [],
-  );
+    };
+  }, []);
 
   async function retry() {
     if (pending) return;
