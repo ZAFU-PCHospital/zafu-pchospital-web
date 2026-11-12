@@ -219,11 +219,11 @@ const SPEC: TableViewSpec<Row> = {
   ],
 };
 
-test("数值与日期默认右对齐，文本与只读标识符不右对齐", () => {
+test("数值与日期默认使用等宽数字，文本与只读标识符不用", () => {
   assert.equal(defaultNumeric("number"), true);
   assert.equal(defaultNumeric("date"), true);
   assert.equal(defaultNumeric("datetime"), true);
-  // 学号、记录 ID 这类「看起来像数字的标识符」是对比用的，不是量，左对齐。
+  // 学号、记录 ID 这类「看起来像数字的标识符」是对比用的，不是量。
   assert.equal(defaultNumeric("text"), false);
   assert.equal(defaultNumeric("readonly"), false);
   assert.equal(defaultNumeric("multiSelect"), false);

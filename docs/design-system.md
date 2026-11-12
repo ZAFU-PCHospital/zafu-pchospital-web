@@ -201,6 +201,8 @@ Warning 色相刻意偏琥珀（远离 accent 的信号黄 / 钴蓝），避免�
 
 琥珀色（`--pending`）只用于真正等人处理的状态（维修待审、社员待面试）。新增表格要复用这些类时，先确认取值语义与上表的「通过 / 处理中 / 失败」一致；不一致就用 `neutral`（`--draft` / `--result`）或 `admin-tag--muted`，不要为此另发明颜色。
 
+成员状态与账号发放状态使用 `admin-tag` 系列：`REVOKED`（已禁用）与 `FAILED`（发放失败）用 `admin-tag--danger`（复用 `--status-danger-*`），`SUCCEEDED`（已发放）用 `admin-tag--accent`，`NOT_REQUIRED`（无需发放）用 `admin-tag--muted`，其余保持中性 `admin-tag`。状态文案始终保留，颜色只作辅助通道。
+
 #### 对比度矩阵（WCAG AA，正文门槛 4.5:1）
 
 按相对亮度公式实测；`*-wash` 按叠在 `--bg` 上合成后再算（与 §9.6 口径一致）。
@@ -504,7 +506,8 @@ M6 管理后台（`/admin/**`）稳定视觉模式。后台是**密集型数据�
 | `.admin-filters` / `__row`                                             | 导出面板与维修批量动作使用的辅助筛选/操作面板；列表主筛选已迁移到 `.admin-query`                                                       |
 | `.admin-batchbar`                                                      | 批量操作条（选中计数 + 动作），用 `--accent-wash` 表明处于批量态                                                                       |
 | `.admin-actions`                                                       | 行内动作组                                                                                                                             |
-| `.admin-tags` / `.admin-tag` / `--accent` / `--muted`                  | 角色等**短标签**；文字 + 描边双通道，不只用颜色区分                                                                                    |
+| `.admin-tags` / `.admin-tag` / `--accent` / `--muted` / `--danger`     | 角色、状态等**短标签**；文字 + 描边双通道，不只用颜色区分                                                                              |
+| `.admin-table__num`                                                    | 数值/日期单元格使用等宽数字；单元格仍左对齐                                                                                            |
 | `.admin-check`                                                         | 原生复选框（`accent-color: var(--accent-deep)`）；仓库没有额外的复选框样式体系                                                         |
 | `.admin-form` / `__grid` / `.admin-status` / `--error` / `.admin-note` | 后台表单栅格、状态行与说明文字                                                                                                         |
 | `.admin-stats`                                                         | 统计区块纵向栅格（内部复用 `MemberMetrics` / `MemberCategoryDistribution`，后台不重新解释口径）                                        |

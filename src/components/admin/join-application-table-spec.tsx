@@ -6,7 +6,7 @@ import {
   joinApplicationStatusLabels,
   provisionStatusLabels,
 } from "@/config/admin";
-import type { JoinApplicationSummary } from "@/types/contracts";
+import type { JoinApplicationSummary, ProvisionStatus } from "@/types/contracts";
 import type { TableViewSpec } from "@/types/table";
 
 /** 招募报名表列定义。 */
@@ -78,7 +78,11 @@ export const joinApplicationTableSpec: TableViewSpec<
       label: copy.table.status,
       kind: "select",
       render: (item) => (
-        <span className={statusClass(item.status)}>{joinApplicationStatusLabels[item.status]}</span>
+        <span className="admin-tags">
+          <span className={statusClass(item.status)}>
+            {joinApplicationStatusLabels[item.status]}
+          </span>
+        </span>
       ),
     },
     {
@@ -86,7 +90,13 @@ export const joinApplicationTableSpec: TableViewSpec<
       sortKey: "provisionStatus",
       label: copy.table.provision,
       kind: "select",
-      render: (item) => provisionStatusLabels[item.provisionStatus],
+      render: (item) => (
+        <span className="admin-tags">
+          <span className={provisionStatusClass(item.provisionStatus)}>
+            {provisionStatusLabels[item.provisionStatus]}
+          </span>
+        </span>
+      ),
     },
     {
       key: "submittedAt",
@@ -148,6 +158,14 @@ export function statusClass(status: string): string {
     return "admin-tag admin-tag--muted";
   }
   return "repair-tag repair-tag--pending";
+}
+
+/** 发放失败需要优先看见；已发放用强调色，无需发放弱化。 */
+export function provisionStatusClass(status: ProvisionStatus): string {
+  if (status === "FAILED") return "admin-tag admin-tag--danger";
+  if (status === "SUCCEEDED") return "admin-tag admin-tag--accent";
+  if (status === "NOT_REQUIRED") return "admin-tag admin-tag--muted";
+  return "admin-tag";
 }
 
 /**

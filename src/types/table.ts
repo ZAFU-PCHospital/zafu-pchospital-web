@@ -44,7 +44,7 @@ export const MAX_SORT_RULES = 3;
 
 /**
  * 字段类型。命名对齐飞书多维表格的字段类型，供内核推导默认行为
- * （是否可排序、数值与日期右对齐、将来用哪种就地编辑器）。
+ * （是否可排序、数值与日期用等宽数字、将来用哪种就地编辑器）。
  *
  * `readonly` 覆盖飞书的公式 / 查找引用 / 创建时间 / 创建人一类**不可编辑**字段 ——
  * 它们能显示、能被排序，但永远不参与就地编辑。
@@ -125,7 +125,7 @@ export type FieldSpec<T, C = unknown> = {
   sortKey?: string;
   /** 复合列的排序口径说明，作为列头排序按钮的提示与无障碍名称。 */
   sortDescription?: string;
-  /** 右对齐 + 等宽数字（`admin-table__num`）。默认由 `kind` 推导，可显式覆盖。 */
+  /** 等宽数字（`admin-table__num`），单元格仍左对齐。默认由 `kind` 推导，可显式覆盖。 */
   numeric?: boolean;
   /** 是否可作为排序字段。默认由 `kind` 推导；`false` 表示这列不参与排序。 */
   sortable?: boolean;
