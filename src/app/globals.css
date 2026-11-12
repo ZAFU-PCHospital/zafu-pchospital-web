@@ -9787,7 +9787,7 @@ body:has(.admin-toast) .page-alert {
   .member-shell .member-workspace.page-head:not(.member-activity-board-workspace) {
     padding-block-start: clamp(1.5rem, 3vw, 2.5rem);
   }
-  .member-shell .member-workspace .sec-title,
+  .member-shell .member-workspace:not(.member-activity-board-workspace) .sec-title,
   .member-shell .member-workspace .dash-hero__name,
   .admin-shell .admin-workspace .dash-hero__name {
     font-size: var(--t-lg);
