@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { AdminListToolbar } from "@/components/admin/AdminListToolbar";
 
+import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
+import { AdminListSkeleton } from "@/components/admin/AdminListSkeleton";
 import { AdminTable } from "@/components/admin/AdminTable";
 import { AdminToast } from "@/components/admin/AdminToast";
 import type { AdminToastMessage } from "@/components/admin/AdminToast";
@@ -224,11 +226,7 @@ export function CategoryAdminPanel() {
         </form>
       </Card>
 
-      {state === "loading" ? (
-        <p className="admin-status" role="status">
-          {adminShared.loading}
-        </p>
-      ) : null}
+      {state === "loading" ? <AdminListSkeleton /> : null}
 
       {state === "error" ? (
         <Card variant="notice">
@@ -248,7 +246,7 @@ export function CategoryAdminPanel() {
             spec={categoryTableSpec}
             items={items}
             renderContext={categoryContext}
-            emptyText={adminShared.empty}
+            empty={<AdminEmptyState filtered={false} busy={false} onReload={() => void load()} />}
             // 拖动排序挂在 `<tr>` 上（手柄本身在 spec 里）。编辑中的那一行是表单：
             // 既没有拖动语义，也不该被标成落点行，所以接管这一行时不给任何行属性。
             rowProps={(category) =>

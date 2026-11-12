@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { LoadFailure } from "@/components/ui/LoadFailure";
 import { MemberAvatar } from "@/components/member/MemberAvatar";
 import {
   MemberIdentityFields,
@@ -14,7 +15,7 @@ import {
 import { MemberMetrics } from "@/components/member/MemberMetrics";
 import { MemberRecentRepairs } from "@/components/member/MemberRecentRepairs";
 import { MemberSection } from "@/components/member/MemberSection";
-import { MemberSkeleton } from "@/components/member/MemberSkeleton";
+import { MemberProfileSkeleton } from "@/components/member/MemberProfileSkeleton";
 import { memberCopy } from "@/config/member";
 import type { MemberInternalProfileView } from "@/types/contracts";
 
@@ -73,15 +74,18 @@ export function MemberInternalProfile({ memberProfileId }: MemberInternalProfile
 
   if (state === "error") {
     return (
-      <Card variant="notice">
-        <p>{memberCopy.common.loadError}</p>
-        <Button onClick={() => void load()}>{memberCopy.common.reload}</Button>
-      </Card>
+      <LoadFailure
+        message={memberCopy.common.loadError}
+        retryLabel={memberCopy.common.reload}
+        onRetry={() => load()}
+        backHref="/member"
+        backLabel={memberCopy.common.backToDashboard}
+      />
     );
   }
 
   if (state === "loading" || !view) {
-    return <MemberSkeleton />;
+    return <MemberProfileSkeleton />;
   }
 
   const { profile, repairSummary, recentRepairs } = view;

@@ -8,8 +8,11 @@ import { AdminTableQuery } from "@/components/admin/AdminTableQuery";
 
 import { AdminModal } from "@/components/admin/AdminModal";
 import { AdminListToolbar } from "@/components/admin/AdminListToolbar";
+import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
+import { AdminListSkeleton } from "@/components/admin/AdminListSkeleton";
 import { AdminTable } from "@/components/admin/AdminTable";
 import { auditTableSpec, type AuditTableContext } from "@/components/admin/audit-table-spec";
+import { hasActiveTableFilters } from "@/lib/table/query-state";
 import { AdminListEnd, useAdminList } from "@/components/admin/useAdminList";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -119,11 +122,7 @@ export function AuditLogPanel() {
         problem={list.problem}
       />
 
-      {state === "loading" ? (
-        <p className="admin-status" role="status">
-          {adminShared.loading}
-        </p>
-      ) : null}
+      {state === "loading" ? <AdminListSkeleton /> : null}
 
       {state === "error" ? (
         <Card variant="notice">
@@ -146,7 +145,14 @@ export function AuditLogPanel() {
             onSortChange={setSortRules}
             items={items}
             renderContext={auditContext}
-            emptyText={adminShared.empty}
+            empty={
+              <AdminEmptyState
+                filtered={hasActiveTableFilters(query.value)}
+                busy={list.refreshing}
+                onClearFilters={query.reset}
+                onReload={() => void list.reload()}
+              />
+            }
           />
           <AdminListEnd
             pagination={pagination}

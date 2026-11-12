@@ -12,7 +12,10 @@ import { AdminBatchTools } from "@/components/admin/AdminBatchTools";
 import { AdminListEnd, useAdminList } from "@/components/admin/useAdminList";
 import { AdminListToolbar } from "@/components/admin/AdminListToolbar";
 import { AdminModal } from "@/components/admin/AdminModal";
+import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
+import { AdminListSkeleton } from "@/components/admin/AdminListSkeleton";
 import { AdminTable } from "@/components/admin/AdminTable";
+import { hasActiveTableFilters } from "@/lib/table/query-state";
 import {
   memberTableSpec,
   type MemberEditableFields,
@@ -282,11 +285,7 @@ export function MemberAdminPanel() {
 
       <p className="admin-note">{copy.export.note}</p>
 
-      {state === "loading" ? (
-        <p className="admin-status" role="status">
-          {adminShared.loading}
-        </p>
-      ) : null}
+      {state === "loading" ? <AdminListSkeleton /> : null}
 
       {state === "error" ? (
         <Card variant="notice">
@@ -388,7 +387,14 @@ export function MemberAdminPanel() {
             renderContext={renderContext}
             sort={sortRules}
             onSortChange={setSortRules}
-            emptyText={adminShared.empty}
+            empty={
+              <AdminEmptyState
+                filtered={hasActiveTableFilters(query.value)}
+                busy={list.refreshing}
+                onClearFilters={query.reset}
+                onReload={() => void list.reload()}
+              />
+            }
             widths={resize.widths}
             colRefs={resize.colRefs}
             tableRef={resize.tableRef}

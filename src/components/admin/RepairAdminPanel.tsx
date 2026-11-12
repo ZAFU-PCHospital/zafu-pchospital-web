@@ -7,8 +7,11 @@ import { useCallback, useEffect, useState } from "react";
 import { AdminTableExport } from "@/components/admin/AdminTableExport";
 import { AdminTableQuery } from "@/components/admin/AdminTableQuery";
 
+import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
+import { AdminListSkeleton } from "@/components/admin/AdminListSkeleton";
 import { AdminTable } from "@/components/admin/AdminTable";
 import { repairTableSpec, type RepairTableContext } from "@/components/admin/repair-table-spec";
+import { hasActiveTableFilters } from "@/lib/table/query-state";
 import { useColumnResize, type ColumnSpec } from "@/components/admin/useColumnResize";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -246,11 +249,7 @@ export function RepairAdminPanel({ canReview = false }: { canReview?: boolean } 
         onResetColumns={resize.reset}
       />
 
-      {state === "loading" ? (
-        <p className="admin-status" role="status">
-          {adminShared.loading}
-        </p>
-      ) : null}
+      {state === "loading" ? <AdminListSkeleton /> : null}
 
       {state === "error" ? (
         <Card variant="notice">
@@ -326,7 +325,14 @@ export function RepairAdminPanel({ canReview = false }: { canReview?: boolean } 
             renderContext={repairContext}
             sort={sortRules}
             onSortChange={setSortRules}
-            emptyText={adminShared.empty}
+            empty={
+              <AdminEmptyState
+                filtered={hasActiveTableFilters(query.value)}
+                busy={list.refreshing}
+                onClearFilters={query.reset}
+                onReload={() => void list.reload()}
+              />
+            }
             widths={resize.widths}
             colRefs={resize.colRefs}
             tableRef={resize.tableRef}

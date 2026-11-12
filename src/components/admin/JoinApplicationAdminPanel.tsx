@@ -11,8 +11,11 @@ import { flushSync } from "react-dom";
 
 import { AdminListToolbar } from "@/components/admin/AdminListToolbar";
 import { AdminModal } from "@/components/admin/AdminModal";
+import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
+import { AdminListSkeleton } from "@/components/admin/AdminListSkeleton";
 import { AdminTable } from "@/components/admin/AdminTable";
 import { AdminToast } from "@/components/admin/AdminToast";
+import { hasActiveTableFilters } from "@/lib/table/query-state";
 import type { AdminToastMessage } from "@/components/admin/AdminToast";
 import { AdminListEnd, useAdminList } from "@/components/admin/useAdminList";
 import { AccountNotificationStatusPanel } from "@/components/admin/AccountNotificationStatusPanel";
@@ -29,7 +32,6 @@ import {
 } from "@/config/admin";
 import {
   formatDateTime,
-  joinApplicationEmptyText,
   joinApplicationTableSpec,
 } from "@/components/admin/join-application-table-spec";
 import { adminFetch } from "@/features/admin/admin-client";
@@ -189,11 +191,7 @@ export function JoinApplicationAdminPanel() {
         problem={list.problem}
       />
 
-      {state === "loading" ? (
-        <p className="admin-status" role="status">
-          {adminShared.loading}
-        </p>
-      ) : null}
+      {state === "loading" ? <AdminListSkeleton /> : null}
 
       {state === "error" ? (
         <Card variant="notice">
@@ -228,7 +226,14 @@ export function JoinApplicationAdminPanel() {
             sort={sortRules}
             onSortChange={setSortRules}
             items={items}
-            emptyText={joinApplicationEmptyText}
+            empty={
+              <AdminEmptyState
+                filtered={hasActiveTableFilters(query.value)}
+                busy={list.refreshing}
+                onClearFilters={query.reset}
+                onReload={() => void list.reload()}
+              />
+            }
             renderContext={{
               onDetail: setDetailId,
               onApprove: (application) => {

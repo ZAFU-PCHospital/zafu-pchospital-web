@@ -17,6 +17,8 @@ export const repairActivitiesPage = {
   lead: "电脑医院不定期举办现场维修活动。选择一场活动报名，到场后由成员接待",
   empty: "暂时没有可展示的维修活动",
   loadFailed: "活动列表加载失败，请稍后重试",
+  loading: "正在加载活动…",
+  reload: "重新加载",
   loadingPage: "正在加载第 {page} 页…",
   pageLoadFailed: "第 {page} 页加载失败，请稍后重试",
   remaining: "剩余名额 {count}",
@@ -36,6 +38,7 @@ export const repairActivitiesPage = {
   detail: {
     backToList: "维修活动",
     breadcrumb: "活动详情",
+    reload: "重新加载",
     dismissError: "关闭",
     signupFailed: "报名失败",
     signupFailedTitle: "暂时无法报名",

@@ -105,7 +105,7 @@ function render(
       spec: modules.skillTableSpec,
       items,
       renderContext: contextOf({ total: items.length }),
-      emptyText: modules.skillEmptyText,
+      empty: modules.skillEmptyText,
       rowProps: (item: SkillAdminView) => rowPropsOf(item.id),
       ...extra,
     }),
