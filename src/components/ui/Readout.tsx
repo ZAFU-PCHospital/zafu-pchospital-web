@@ -29,11 +29,24 @@ export type ReadoutProps = {
   footnote?: string;
   index?: number;
   className?: string;
+  /**
+   * 是否走进场揭示（默认走）。折叠线以上的读数面板应传 `false`：
+   * `.reveal` 的 820ms + stagger 会让首屏内容「先等再出现」（issue #379）。
+   */
+  reveal?: boolean;
 };
 
-export function Readout({ title, tag, rows, footnote, index = 0, className }: ReadoutProps) {
+export function Readout({
+  title,
+  tag,
+  rows,
+  footnote,
+  index = 0,
+  className,
+  reveal = true,
+}: ReadoutProps) {
   return (
-    <div className={cn("readout reveal", className)} style={revealIndex(index)}>
+    <div className={cn("readout", reveal && "reveal", className)} style={revealIndex(index)}>
       <p className="readout__title">
         <span>{title}</span>
         <span>{tag}</span>

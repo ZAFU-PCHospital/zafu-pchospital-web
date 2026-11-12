@@ -4,7 +4,16 @@ import { formatRepairDurationHours, homeYearLabel } from "@/lib/home-analytics";
 import type { PublicHomeAnalytics } from "@/types/contracts";
 
 /** 首屏读数：文档统计退场，改为公开维修数据；详细统计关闭时只显示累计设备数。 */
-export function RepairReadout({ data, index = 0 }: { data: PublicHomeAnalytics; index?: number }) {
+export function RepairReadout({
+  data,
+  index = 0,
+  reveal = true,
+}: {
+  data: PublicHomeAnalytics;
+  index?: number;
+  /** 首屏内传 false：不走进场揭示，避免「先等再出现」（issue #379）。 */
+  reveal?: boolean;
+}) {
   const stats = data.repairStats;
   if (!stats) return null;
 
@@ -38,6 +47,7 @@ export function RepairReadout({ data, index = 0 }: { data: PublicHomeAnalytics; 
       rows={rows}
       footnote={homeYearLabel(copy.note, data)}
       index={index}
+      reveal={reveal}
     />
   );
 }

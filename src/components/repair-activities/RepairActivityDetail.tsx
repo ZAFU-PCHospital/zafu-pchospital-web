@@ -6,8 +6,8 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 import {
   formatShanghaiDateTime,
   formatShanghaiTimeRange,
-  signupCountdownParts,
 } from "@/components/repair-activities/activity-format";
+import { ActivityCountdown } from "@/components/repair-activities/ActivityCountdown";
 import { AdminToast, type AdminToastMessage } from "@/components/admin/AdminToast";
 import { repairActivityStatusBadgeClass } from "@/components/repair-activities/activity-status-badge";
 import { RepairActivityPrecautions } from "@/components/repair-activities/RepairActivityPrecautions";
@@ -314,14 +314,11 @@ export function RepairActivityDetail({ activityId }: Props) {
     return () => window.clearInterval(timer);
   }, [activity, serverOffsetMs]);
 
-  /** 报名未开始时每秒走一格倒计时；状态一旦离开 UPCOMING 就停表。 */
-  useEffect(() => {
-    if (activity?.status !== "UPCOMING") return;
-    setNowMs(Date.now());
-    const timer = window.setInterval(() => setNowMs(Date.now()), 1000);
-    return () => window.clearInterval(timer);
-  }, [activity?.status]);
-
+  /**
+   * `nowMs` 只作**边界时钟**：挂载、换活动、以及报名开始 / 活动开始 / 当日 24:00
+   * 这几个可能翻转状态的时刻才更新（见下方 schedule）。每秒走字由
+   * `ActivityCountdown` 叶子自持，父级不再每秒 setState。
+   */
   const signupOpensAtMs = activity ? Date.parse(activity.signupOpensAt) : Number.NaN;
   const countdownMs = Number.isFinite(signupOpensAtMs)
     ? signupOpensAtMs - (nowMs + serverOffsetMs)
@@ -356,7 +353,12 @@ export function RepairActivityDetail({ activityId }: Props) {
     };
   }, [waitingForOpen, load]);
 
-  /** 排队区块只在活动开始到活动结束之间出现；在边界时刻刷新可见性。 */
+  /**
+   * 边界时钟：只在可能翻转状态的时刻刷新 `nowMs`——报名开始、活动开始、当日 24:00。
+   *
+   * 不再用每秒 tick 维护「现在」：倒计时归零（报名开始）那一刻同样落在这里，
+   * 触发下面的 30 秒复查拿到服务端的 OPEN / FULL / CLOSED。
+   */
   useEffect(() => {
     if (!activity) return;
     const startMs = Date.parse(activity.activityAt);
@@ -376,6 +378,7 @@ export function RepairActivityDetail({ activityId }: Props) {
         }, wait),
       );
     };
+    schedule(Date.parse(activity.signupOpensAt));
     schedule(startMs);
     schedule(endMs);
     return () => {
@@ -859,7 +862,6 @@ export function RepairActivityDetail({ activityId }: Props) {
   }
 
   const open = canAcceptNewRegistration(activity.status);
-  const countdown = signupCountdownParts(countdownMs);
   const countdownOpens = copy.countdownOpensHint.replace(
     "{open}",
     formatShanghaiDateTime(activity.signupOpensAt),
@@ -1068,57 +1070,11 @@ export function RepairActivityDetail({ activityId }: Props) {
             ) : null}
             {/* 开始时间解析不出（契约保证不会）时整块不渲染，避免数字块出现 Infinity。 */}
             {activity.status === "UPCOMING" && Number.isFinite(countdownMs) ? (
-              <div className="activity-countdown" role="timer">
-                <p className="activity-countdown__label">{copy.countdownPrefix}</p>
-                {waitingForOpen ? (
-                  <p className="activity-countdown__opening">{copy.countdownOpeningSoon}</p>
-                ) : (
-                  <>
-                    <div className="activity-countdown__blocks">
-                      {countdown.days > 0 ? (
-                        <>
-                          <span className="activity-countdown__block">
-                            <span className="activity-countdown__num">
-                              {String(countdown.days).padStart(2, "0")}
-                            </span>
-                            <span className="activity-countdown__unit">
-                              {copy.countdownUnits.days}
-                            </span>
-                          </span>
-                          <span className="activity-countdown__colon" aria-hidden="true">
-                            :
-                          </span>
-                        </>
-                      ) : null}
-                      <span className="activity-countdown__block">
-                        <span className="activity-countdown__num">{countdown.hours}</span>
-                        <span className="activity-countdown__unit">
-                          {copy.countdownUnits.hours}
-                        </span>
-                      </span>
-                      <span className="activity-countdown__colon" aria-hidden="true">
-                        :
-                      </span>
-                      <span className="activity-countdown__block">
-                        <span className="activity-countdown__num">{countdown.minutes}</span>
-                        <span className="activity-countdown__unit">
-                          {copy.countdownUnits.minutes}
-                        </span>
-                      </span>
-                      <span className="activity-countdown__colon" aria-hidden="true">
-                        :
-                      </span>
-                      <span className="activity-countdown__block">
-                        <span className="activity-countdown__num">{countdown.seconds}</span>
-                        <span className="activity-countdown__unit">
-                          {copy.countdownUnits.seconds}
-                        </span>
-                      </span>
-                    </div>
-                    <p className="activity-countdown__hint">{countdownOpens}</p>
-                  </>
-                )}
-              </div>
+              <ActivityCountdown
+                signupOpensAt={activity.signupOpensAt}
+                serverOffsetMs={serverOffsetMs}
+                opensHint={countdownOpens}
+              />
             ) : null}
             {openedNotice ? (
               <p className="sr-only" role="status">

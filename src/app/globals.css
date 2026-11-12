@@ -1571,9 +1571,10 @@ html[data-theme="black-yellow"] {
   }
   .hero__title .hl__in {
     display: block;
-    transform: translateY(105%);
-    animation: line-in 1000ms var(--ease-expo) forwards;
-    animation-delay: calc(180ms + var(--i, 0) * 130ms);
+    /* 首帧可见：只做轻微归位，不从 105%（完全不可见）开始，也不排队等 delay。
+       主标题是首屏最大的文本块，LCP 不应该等入场动画播完（issue #379）。 */
+    transform: translateY(0.14em);
+    animation: line-in 520ms var(--ease-expo) forwards;
   }
   @keyframes line-in {
     to {

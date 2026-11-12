@@ -1,9 +1,7 @@
 import { Container } from "@/components/layout/Container";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
-import { Reveal } from "@/components/ui/Reveal";
 import { heroActions, heroContent } from "@/config/home";
-import { revealIndex } from "@/lib/utils";
 import type { PublicHomeAnalytics } from "@/types/contracts";
 
 import { RepairReadout } from "./RepairReadout";
@@ -42,10 +40,10 @@ export function Hero({
           </p>
 
           <h1 className="hero__title" id="hero-title">
-            <span className="hl hl--sub" style={revealIndex(0)}>
+            <span className="hl hl--sub">
               <span className="hl__in">{heroContent.titleSub}</span>
             </span>
-            <span className="hl" style={revealIndex(1)}>
+            <span className="hl">
               <span className="hl__in">{heroContent.titleMain}</span>
             </span>
           </h1>
@@ -58,11 +56,11 @@ export function Hero({
 
         <div className={hasRepairReadout ? "hero__body" : "hero__body hero__body--single"}>
           <div>
-            <Reveal as="p" className="hero__lead" index={1}>
-              {heroContent.lead}
-            </Reveal>
+            {/* 折叠线以上的文案与按钮不走进场揭示：`.reveal` 的 820ms + stagger
+                会让首屏内容「先等再出现」，拖慢 LCP 观感（issue #379）。 */}
+            <p className="hero__lead">{heroContent.lead}</p>
 
-            <Reveal className="hero__actions" index={2}>
+            <div className="hero__actions">
               {repair.href ? (
                 <Button variant="solid" href={repair.href}>
                   {repair.label}
@@ -74,7 +72,7 @@ export function Hero({
               <Button variant="ghost" href={docs.href} trailingIcon="chevronRight">
                 {docs.label}
               </Button>
-            </Reveal>
+            </div>
 
             <a className="hero__scroll" href={scrollTarget}>
               <Icon name="arrowDown" />
@@ -82,7 +80,7 @@ export function Hero({
             </a>
           </div>
 
-          {hasRepairReadout ? <RepairReadout data={analytics} index={3} /> : null}
+          {hasRepairReadout ? <RepairReadout data={analytics} index={3} reveal={false} /> : null}
         </div>
       </Container>
     </section>
