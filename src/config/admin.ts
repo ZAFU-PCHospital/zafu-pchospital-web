@@ -194,6 +194,7 @@ export const rankingDisplayNameLabels: Record<RankingDisplayNameMode, string> = 
 
 /** 共享措辞：所有后台页面用同一套加载/失败/空态文案，避免每个页面各写一遍。 */
 export const adminShared = {
+  operationFailed: "操作失败，请重试。",
   loading: "正在加载…",
   reload: "重新加载",
   loadFailed: "加载失败，请稍后重试",

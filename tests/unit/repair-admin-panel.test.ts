@@ -9,12 +9,14 @@ import { AdminListToolbar } from "../../src/components/admin/AdminListToolbar";
 import { AdminListEnd } from "../../src/components/admin/useAdminList";
 import { AdminToast } from "../../src/components/admin/AdminToast";
 import { RepairReviewDialog } from "../../src/components/admin/RepairReviewDialog";
+import { AdminModal } from "../../src/components/admin/AdminModal";
+import { adminCopy } from "../../src/config/admin";
 import type { RepairTableContext } from "../../src/components/admin/repair-table-spec";
 import { clearAdminCache } from "../../src/features/admin/admin-client";
 import { getClientSession, invalidateClientSession } from "../../src/lib/auth/client-session";
 import type { RepairView } from "../../src/types/contracts";
 
-async function panel(t: TestContext, canReview = true) {
+async function panel(t: TestContext, canReview = true, batchFailure = false) {
   const dom = clientDom();
   const detail = new dom.Node();
   const focused: { id: string; options?: FocusOptions }[] = [];
@@ -53,6 +55,11 @@ async function panel(t: TestContext, canReview = true) {
   const reads: number[] = [];
   t.mock.method(globalThis, "fetch", async (input: RequestInfo | URL) => {
     const url = new URL(String(input), "http://localhost");
+    if (url.pathname === "/api/v1/admin/repairs/batch-reviews" && batchFailure)
+      return Response.json(
+        { success: false, error: { code: "VALIDATION_FAILED", message: "批量退回失败测试" } },
+        { status: 400 },
+      );
     if (url.pathname === "/api/v1/me")
       return Response.json({
         success: true,
@@ -137,6 +144,33 @@ async function panel(t: TestContext, canReview = true) {
     },
   };
 }
+
+test("批量退回失败在窗口内显示错误并恢复按钮", async (t) => {
+  const ui = await panel(t, true, true);
+  ui.select(["one"]);
+  const tools = ui.toolbar().selection!.renderTools(() => {});
+  const batch = element(tools, (el) => !!el.props.actions);
+  const button = element(
+    batch.props.actions as React.ReactNode,
+    (el) => text(el.props.children as React.ReactNode) === adminCopy.repairs.batch.reject,
+  );
+  (button.props.onClick as () => void)();
+  const modal = () => element(ui.view(), (el) => el.type === AdminModal);
+  const input = element(modal().props.children as React.ReactNode, (el) => el.type === "input");
+  (input.props.onChange as (event: unknown) => void)({ currentTarget: { value: "退回原因" } });
+  const submit = element(
+    modal().props.children as React.ReactNode,
+    (el) => text(el.props.children as React.ReactNode) === adminCopy.repairs.batch.rejectSubmit,
+  );
+  (submit.props.onClick as () => void)();
+  await setImmediate();
+  assert.equal(modal().props.error, "批量退回失败测试");
+  const retry = element(
+    modal().props.children as React.ReactNode,
+    (el) => text(el.props.children as React.ReactNode) === adminCopy.repairs.batch.rejectSubmit,
+  );
+  assert.equal(retry.props.disabled, false);
+});
 
 test("维修列表：行内审核打开弹层，应用服务端快照并保留已加载页与其它选择，焦点回到详情", async (t) => {
   const m = await panel(t);

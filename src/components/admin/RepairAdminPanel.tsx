@@ -90,6 +90,7 @@ export function RepairAdminPanel({ canReview = false }: { canReview?: boolean } 
   /** 批量退回的原因填在弹层里（顶栏只放动作按钮）。 */
   const [rejecting, setRejecting] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [rejectProblem, setRejectProblem] = useState("");
   /** 页面自己的错误（批量失败等）；取数错误来自 `list.problem`。 */
   const [actionProblem, setProblem] = useState("");
 
@@ -143,51 +144,61 @@ export function RepairAdminPanel({ canReview = false }: { canReview?: boolean } 
   }, [list]);
 
   async function runBatch(decision: "APPROVED" | "REJECTED") {
+    if (busy) return;
     if (decision === "REJECTED" && !rejectNote.trim()) {
-      setProblem(copy.review.rejectHint);
+      setRejectProblem(copy.review.rejectHint);
       return;
     }
     setBusy(true);
-    setMessage("");
-    setToast(null);
-    setProblem("");
-    const result = await adminFetch<RepairBatchReviewResult>(
-      "/api/v1/admin/repairs/batch-reviews",
-      {
-        method: "POST",
-        body: {
-          recordIds: selected,
-          decision,
-          note: rejectNote.trim() || undefined,
-          // 每次提交一个新批次键；服务端按 `${key}:${recordId}` 派生成各记录的幂等键。
-          idempotencyKey: createIdempotencyKey(),
+    setRejectProblem("");
+    try {
+      setMessage("");
+      setToast(null);
+      setProblem("");
+      const result = await adminFetch<RepairBatchReviewResult>(
+        "/api/v1/admin/repairs/batch-reviews",
+        {
+          method: "POST",
+          body: {
+            recordIds: selected,
+            decision,
+            note: rejectNote.trim() || undefined,
+            // 每次提交一个新批次键；服务端按 `${key}:${recordId}` 派生成各记录的幂等键。
+            idempotencyKey: createIdempotencyKey(),
+          },
         },
-      },
-    );
-    setBusy(false);
-    if (!result.ok) {
-      setProblem(result.message);
-      return;
-    }
-    if (result.data.failed.length === 0) {
-      setToast({
-        text: `已处理 ${result.data.succeeded.length} 条记录。`,
-        // 批量退回是对记录说「不」，用叉。
-        tone: decision === "APPROVED" ? "success" : "neutral",
-      });
-    } else {
-      setMessage(
-        `${adminShared.batchPartial}成功 ${result.data.succeeded.length} 条，失败 ${result.data.failed.length} 条：${result.data.failed
-          .map((item) => `${item.recordId.slice(0, 8)}… ${item.message}`)
-          .join("；")}`,
       );
+      if (!result.ok) {
+        if (decision === "REJECTED") setRejectProblem(result.message);
+        else setProblem(result.message);
+        return;
+      }
+      if (result.data.failed.length === 0) {
+        setToast({
+          text: `已处理 ${result.data.succeeded.length} 条记录。`,
+          // 批量退回是对记录说「不」，用叉。
+          tone: decision === "APPROVED" ? "success" : "neutral",
+        });
+      } else {
+        setMessage(
+          `${adminShared.batchPartial}成功 ${result.data.succeeded.length} 条，失败 ${result.data.failed.length} 条：${result.data.failed
+            .map((item) => `${item.recordId.slice(0, 8)}… ${item.message}`)
+            .join("；")}`,
+        );
+      }
+      setRejectNote("");
+      setRejecting(false);
+      const failedIds = new Set(result.data.failed.map((item) => item.recordId));
+      setSelected((current) => current.filter((id) => failedIds.has(id)));
+      await list.refreshLoaded();
+      if (result.data.failed.length === 0) setCompletedBatch((value) => value + 1);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : adminShared.operationFailed;
+      if (decision === "REJECTED") setRejectProblem(message);
+      else setProblem(message);
+    } finally {
+      setBusy(false);
     }
-    setRejectNote("");
-    setRejecting(false);
-    const failedIds = new Set(result.data.failed.map((item) => item.recordId));
-    setSelected((current) => current.filter((id) => failedIds.has(id)));
-    await list.refreshLoaded();
-    if (result.data.failed.length === 0) setCompletedBatch((value) => value + 1);
   }
 
   const allSelected = items.length > 0 && items.every((item) => selected.includes(item.id));
@@ -295,7 +306,10 @@ export function RepairAdminPanel({ canReview = false }: { canReview?: boolean } 
                       </Button>
                       <Button
                         disabled={busy || list.refreshing || selected.length === 0}
-                        onClick={() => setRejecting(true)}
+                        onClick={() => {
+                          setRejectProblem("");
+                          setRejecting(true);
+                        }}
                       >
                         {copy.batch.reject}
                       </Button>
@@ -403,6 +417,7 @@ export function RepairAdminPanel({ canReview = false }: { canReview?: boolean } 
       {rejecting ? (
         <AdminModal
           title={copy.review.rejectTitle}
+          error={rejectProblem}
           subtitle={copy.batch.selected.replace("{count}", String(selected.length))}
           onClose={() => {
             if (!busy) setRejecting(false);

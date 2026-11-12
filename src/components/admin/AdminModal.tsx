@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useId, useRef, type ReactNode, type RefObject } from "react";
+import { useId, useRef, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 
 import { Button } from "@/components/ui/Button";
 import { adminShared } from "@/config/admin";
+import { useFocusTrap } from "@/components/ui/useFocusTrap";
 import { cn } from "@/lib/utils";
 
 /**
@@ -38,7 +39,9 @@ export function AdminModal({
   children,
   size = "default",
   dialogRef,
+  error,
 }: {
+  error?: string;
   title: string;
   subtitle?: string;
   onClose: () => void;
@@ -50,30 +53,7 @@ export function AdminModal({
   const titleId = useId();
   const ownWindowRef = useRef<HTMLDivElement>(null);
   const windowRef = dialogRef ?? ownWindowRef;
-  /** 打开前的焦点位置：关闭后要还回去，否则键盘用户的焦点会掉到 `<body>` 上。 */
-  const returnFocusRef = useRef<HTMLElement | null>(null);
-
-  useEffect(() => {
-    returnFocusRef.current =
-      document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    document.body.style.overflow = "hidden";
-    windowRef.current?.focus();
-
-    return () => {
-      document.body.style.overflow = "";
-      // 只有真正可聚焦的元素才还焦点：触发按钮之外的场景（例如程序化 click）
-      // 焦点原本就在 `<body>` 上，`body.focus()` 是空操作，不需要特殊分支。
-      returnFocusRef.current?.focus();
-    };
-  }, [windowRef]);
-
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [onClose]);
+  useFocusTrap(windowRef, onClose);
 
   if (typeof document === "undefined") return null;
 
@@ -103,7 +83,14 @@ export function AdminModal({
           </Button>
         </header>
 
-        <div className="admin-modal__body">{children}</div>
+        <div className="admin-modal__body">
+          {children}
+          {error ? (
+            <p className="admin-status admin-modal__error" role="alert">
+              {error}
+            </p>
+          ) : null}
+        </div>
       </div>
     </div>,
     document.body,

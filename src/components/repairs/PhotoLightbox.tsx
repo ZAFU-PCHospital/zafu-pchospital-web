@@ -1,11 +1,20 @@
 "use client";
 
 import Image from "next/image";
-import { useCallback, useEffect, useId, useRef, useState, type TouchEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type TouchEvent,
+} from "react";
 import { createPortal } from "react-dom";
 
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
+import { useFocusTrap } from "@/components/ui/useFocusTrap";
 import { repairPhotoCopy } from "@/config/repairs";
 import { cn } from "@/lib/utils";
 import type { RepairPhotoView } from "@/types/contracts";
@@ -28,14 +37,12 @@ type Props = {
  * - `+/-` 或底部按钮在「适应窗口 / 原始尺寸」之间切换，放大后交给滚动容器平移；
  * - 关闭后焦点回到打开灯箱的那张缩略图。
  *
- * 键盘监听刻意放在 document 捕获阶段：审核端灯箱叠在 `AdminModal` 上，
- * 两侧都会监听 Esc；这里先消费掉，避免一次 Esc 把两层窗口一起关掉。
+ * 焦点与 Esc / Tab 由共享弹层栈管理，照片按键只在当前窗口内处理。
  */
 export function PhotoLightboxView({ photos, index, onIndexChange, onClose }: Props) {
   const titleId = useId();
   const windowRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
-  const returnFocusRef = useRef<HTMLElement | null>(null);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const [zoomed, setZoomed] = useState(false);
   /** 用「照片 id + 重试代次」而不是布尔值，切图时不会短暂沿用上一张的加载结果。 */
@@ -50,6 +57,8 @@ export function PhotoLightboxView({ photos, index, onIndexChange, onClose }: Pro
   const failed = failedToken === loadToken;
   const alt = fillPhotoCopy(repairPhotoCopy.alt, { index: index + 1, count });
 
+  useFocusTrap(windowRef, onClose, !!photo);
+
   const go = useCallback(
     (delta: number) => {
       if (count <= 1) return;
@@ -61,19 +70,6 @@ export function PhotoLightboxView({ photos, index, onIndexChange, onClose }: Pro
   useEffect(() => {
     setZoomed(false);
   }, [index]);
-
-  useEffect(() => {
-    const active = document.activeElement;
-    returnFocusRef.current = active instanceof HTMLElement ? active : null;
-    // 保留打开前的值而不是还原成空串：从审核弹窗里打开时，底层窗口仍要求锁滚动。
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    windowRef.current?.focus();
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      returnFocusRef.current?.focus();
-    };
-  }, []);
 
   useEffect(() => {
     const stage = stageRef.current;
@@ -89,57 +85,17 @@ export function PhotoLightboxView({ photos, index, onIndexChange, onClose }: Pro
     }
   }, [zoomed, loaded]);
 
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        onClose();
-        return;
-      }
-      if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        go(event.key === "ArrowLeft" ? -1 : 1);
-        return;
-      }
-      if (event.key === "+" || event.key === "=") {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        setZoomed(true);
-        return;
-      }
-      if (event.key === "-" || event.key === "_") {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        setZoomed(false);
-        return;
-      }
-      if (event.key !== "Tab" || !windowRef.current) return;
-      const controls = [
-        ...windowRef.current.querySelectorAll<HTMLElement>(
-          'button:not(:disabled), a[href], [tabindex="0"]',
-        ),
-      ].filter((element) => element.getClientRects().length > 0);
-      const first = controls[0];
-      const last = controls.at(-1);
-      if (!first || !last) {
-        event.preventDefault();
-        windowRef.current.focus();
-        return;
-      }
-      if (
-        !controls.includes(document.activeElement as HTMLElement) ||
-        (event.shiftKey && document.activeElement === first) ||
-        (!event.shiftKey && document.activeElement === last)
-      ) {
-        event.preventDefault();
-        (event.shiftKey ? last : first).focus();
-      }
-    };
-    document.addEventListener("keydown", onKeyDown, true);
-    return () => document.removeEventListener("keydown", onKeyDown, true);
-  }, [go, onClose]);
+  function onPhotoKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+      event.preventDefault();
+      event.stopPropagation();
+      go(event.key === "ArrowLeft" ? -1 : 1);
+    } else if (["+", "=", "-", "_"].includes(event.key)) {
+      event.preventDefault();
+      event.stopPropagation();
+      setZoomed(event.key === "+" || event.key === "=");
+    }
+  }
 
   if (!photo) return null;
 
@@ -180,6 +136,7 @@ export function PhotoLightboxView({ photos, index, onIndexChange, onClose }: Pro
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
+        onKeyDown={onPhotoKeyDown}
       >
         <header className="photo-lightbox__head">
           <h2 className="photo-lightbox__title" id={titleId}>

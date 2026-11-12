@@ -34,6 +34,7 @@ export function RepairActivityAdminPanel() {
   const copy = adminCopy.repairActivities;
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [problem, setProblem] = useState("");
+  const [modalProblem, setModalProblem] = useState("");
   const [toast, setToast] = useState<AdminToastMessage | null>(null);
   const [items, setItems] = useState<RepairActivityAdminView[]>([]);
   const [editing, setEditing] = useState<RepairActivityAdminView | null>(null);
@@ -124,44 +125,52 @@ export function RepairActivityAdminPanel() {
    */
   function openEdit(item: RepairActivityAdminView) {
     editEndsAtTouchedRef.current = false;
+    setModalProblem("");
     setEditing(item);
   }
 
   function closeEdit() {
+    if (busy) return;
     editEndsAtTouchedRef.current = false;
     setEditing(null);
   }
 
   async function saveEdit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!editing) return;
+    if (!editing || busy) return;
     setBusy(true);
-    setProblem("");
-    setToast(null);
-    const data = Object.fromEntries(new FormData(event.currentTarget)) as Record<string, string>;
-    const result = await adminFetch<RepairActivityAdminView>(
-      `/api/v1/admin/repair-activities/${editing.id}`,
-      {
-        method: "PATCH",
-        body: {
-          title: data.title ?? "",
-          location: data.location ?? "",
-          capacity: Number(data.capacity),
-          activityAt: toIso(data.activityAt ?? ""),
-          endsAt: toIso(data.endsAt ?? ""),
-          signupOpensAt: toIso(data.signupOpensAt ?? ""),
-          signupClosesAt: toIso(data.signupClosesAt ?? ""),
+    try {
+      setModalProblem("");
+      setToast(null);
+      const data = Object.fromEntries(new FormData(event.currentTarget)) as Record<string, string>;
+      const result = await adminFetch<RepairActivityAdminView>(
+        `/api/v1/admin/repair-activities/${editing.id}`,
+        {
+          method: "PATCH",
+          body: {
+            title: data.title ?? "",
+            location: data.location ?? "",
+            capacity: Number(data.capacity),
+            activityAt: toIso(data.activityAt ?? ""),
+            endsAt: toIso(data.endsAt ?? ""),
+            signupOpensAt: toIso(data.signupOpensAt ?? ""),
+            signupClosesAt: toIso(data.signupClosesAt ?? ""),
+          },
         },
-      },
-    );
-    setBusy(false);
-    if (!result.ok) {
-      setProblem(result.message);
-      return;
+      );
+      if (!result.ok) {
+        setModalProblem(result.message);
+        return;
+      }
+      editEndsAtTouchedRef.current = false;
+      setEditing(null);
+      setToast({ text: copy.edit.saved, tone: "success" });
+      await load();
+    } catch (error) {
+      setModalProblem(error instanceof Error ? error.message : adminShared.operationFailed);
+    } finally {
+      setBusy(false);
     }
-    closeEdit();
-    setToast({ text: copy.edit.saved, tone: "success" });
-    await load();
   }
 
   const registrationRequestRef = useRef(0);
@@ -296,22 +305,27 @@ export function RepairActivityAdminPanel() {
   }
 
   async function confirmRemove() {
-    if (!removing) return;
+    if (!removing || busy) return;
     setBusy(true);
-    setProblem("");
-    setToast(null);
-    const result = await adminFetch<{ deleted: boolean }>(
-      `/api/v1/admin/repair-activities/${removing.id}`,
-      { method: "DELETE" },
-    );
-    setBusy(false);
-    if (!result.ok) {
-      setProblem(result.message);
-      return;
+    try {
+      setModalProblem("");
+      setToast(null);
+      const result = await adminFetch<{ deleted: boolean }>(
+        `/api/v1/admin/repair-activities/${removing.id}`,
+        { method: "DELETE" },
+      );
+      if (!result.ok) {
+        setModalProblem(result.message);
+        return;
+      }
+      setRemoving(null);
+      setToast({ text: copy.removePanel.done, tone: "neutral" });
+      await load();
+    } catch (error) {
+      setModalProblem(error instanceof Error ? error.message : adminShared.operationFailed);
+    } finally {
+      setBusy(false);
     }
-    setRemoving(null);
-    setToast({ text: copy.removePanel.done, tone: "neutral" });
-    await load();
   }
 
   /**
@@ -585,7 +599,14 @@ export function RepairActivityAdminPanel() {
                         >
                           {copy.action.registrations}
                         </Button>
-                        <Button variant="ghost" disabled={busy} onClick={() => setRemoving(item)}>
+                        <Button
+                          variant="ghost"
+                          disabled={busy}
+                          onClick={() => {
+                            setModalProblem("");
+                            setRemoving(item);
+                          }}
+                        >
                           {copy.action.remove}
                         </Button>
                       </div>
@@ -601,7 +622,7 @@ export function RepairActivityAdminPanel() {
       {showCustomerBlacklist ? <RepairActivityCustomerBlacklistPanel /> : null}
 
       {editing ? (
-        <AdminModal title={copy.edit.title} onClose={closeEdit}>
+        <AdminModal title={copy.edit.title} onClose={closeEdit} error={modalProblem}>
           <form className="admin-form" onSubmit={saveEdit}>
             <div className="admin-form__grid">
               <label className="field">
@@ -859,6 +880,11 @@ export function RepairActivityAdminPanel() {
           onConfirm={() => void confirmRemove()}
         >
           <p>{copy.removePanel.hint}</p>
+          {modalProblem ? (
+            <p className="admin-status admin-modal__error" role="alert">
+              {modalProblem}
+            </p>
+          ) : null}
           <p>
             <strong>{removing.title}</strong>
           </p>

@@ -6394,6 +6394,17 @@ html[data-theme="black-yellow"] {
     overflow-y: auto;
     overscroll-behavior-y: contain;
   }
+  .admin-modal__error {
+    position: absolute;
+    inset-inline: var(--s-5);
+    inset-block-end: var(--s-5);
+    z-index: 2;
+    margin: 0;
+    padding: var(--s-3);
+    background: var(--surface-1);
+    border: 1px solid var(--line-strong);
+    pointer-events: none;
+  }
   /* 退出失败只承载一项操作，不沿用详情窗口的宽度、整屏高度与紧凑按钮。 */
   .admin-modal:has(.logout-warning) {
     padding: var(--s-4);
