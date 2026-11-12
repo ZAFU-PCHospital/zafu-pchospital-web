@@ -7809,7 +7809,7 @@ html[data-theme="black-yellow"] {
      这样载荷到达时表格不会把页面高度改掉一大截。 */
   .admin-skeleton__list {
     display: grid;
-    gap: 0;
+    gap: 1px;
     padding: 0;
   }
   .admin-skeleton__row {

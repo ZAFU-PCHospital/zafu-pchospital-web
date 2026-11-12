@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
+import { setImmediate } from "node:timers/promises";
 import test from "node:test";
 import { createElement } from "react";
 import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+
+import { clientDom, element, mountClient } from "../support/react-client";
 
 import { hasActiveTableFilters } from "../../src/lib/table/query-state";
 
@@ -97,6 +100,37 @@ test("后台空态区分筛选无结果与无数据", () => {
   );
   assert.ok(empty.includes("暂无数据"));
   assert.ok(empty.includes(">重新加载<"));
+});
+
+test("加载失败重试在途时禁用按钮", async (t) => {
+  const dom = clientDom();
+  let finish!: () => void;
+  const mounted = mountClient(t, () =>
+    LoadFailure({
+      message: "加载失败",
+      retryLabel: "重试",
+      onRetry: () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    }),
+  );
+  t.after(() => {
+    mounted.unmount();
+    dom.restore();
+  });
+  const view = () => mounted.view();
+  view();
+  const retry = element(view(), (item) => typeof item.props.onClick === "function");
+  (retry.props.onClick as () => void)();
+  view();
+  const pending = element(view(), (item) => typeof item.props.onClick === "function");
+  assert.equal(pending.props.disabled, true);
+  finish();
+  await setImmediate();
+  view();
+  const done = element(view(), (item) => typeof item.props.onClick === "function");
+  assert.equal(done.props.disabled, false);
 });
 
 test("后台列表骨架与真实表格行同高占位", () => {

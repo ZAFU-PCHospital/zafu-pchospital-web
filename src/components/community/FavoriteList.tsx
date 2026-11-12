@@ -20,27 +20,40 @@ export function FavoriteList() {
   const [pagination, setPagination] = useState<PaginationMeta>();
   const [page, setPage] = useState(1);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
+  const [refreshError, setRefreshError] = useState("");
 
-  const load = useCallback(async () => {
-    setState("loading");
-    try {
-      const params = new URLSearchParams({ page: String(page), pageSize: "20" });
-      const response = await fetch(`/api/v1/member/favorites?${params}`, { cache: "no-store" });
-      const json = await response.json();
-      if (!json.success) throw new Error();
-      setItems(json.data as FavoriteView[]);
-      setPagination(json.meta.pagination as PaginationMeta);
-      setState("ready");
-    } catch {
-      setState("error");
-    }
-  }, [page]);
+  const load = useCallback(
+    async (mode: "initial" | "refresh" = "initial") => {
+      if (mode === "initial") setState("loading");
+      setRefreshError("");
+      try {
+        const params = new URLSearchParams({ page: String(page), pageSize: "20" });
+        const response = await fetch(`/api/v1/member/favorites?${params}`, {
+          cache: "no-store",
+        });
+        const json = await response.json();
+        if (!json.success) throw new Error();
+        setItems(json.data as FavoriteView[]);
+        setPagination(json.meta.pagination as PaginationMeta);
+        setState("ready");
+      } catch {
+        if (mode === "initial") setState("error");
+        else setRefreshError(copy.loadError);
+      }
+    },
+    [copy.loadError, page],
+  );
 
   useEffect(() => {
-    void load();
+    void load("initial");
   }, [load]);
 
-  const write = useWriteAction({ onSuccess: load });
+  const write = useWriteAction({ onSuccess: () => load("refresh") });
+  const alertMessage = write.error || refreshError;
+  const clearAlert = () => {
+    write.clearError();
+    setRefreshError("");
+  };
 
   async function remove(repairRecordId: string) {
     await write.run(
@@ -57,18 +70,16 @@ export function FavoriteList() {
   }
 
   if (state === "error") {
-    return (
-      <LoadFailure message={copy.loadError} retryLabel={copy.reload} onRetry={() => void load()} />
-    );
+    return <LoadFailure message={copy.loadError} retryLabel={copy.reload} onRetry={() => load()} />;
   }
 
   return (
     <div className="community-page">
-      {write.error ? (
+      {alertMessage ? (
         <PageAlert
-          message={write.error}
+          message={alertMessage}
           closeLabel={communityCopy.common.dismiss}
-          onClose={write.clearError}
+          onClose={clearAlert}
         />
       ) : null}
       {state === "loading" ? <CommunityListSkeleton label={copy.loading} /> : null}
@@ -99,7 +110,11 @@ export function FavoriteList() {
       </ul>
       {pagination && pagination.totalPages > 1 ? (
         <nav className="repair-pagination">
-          <Button type="button" disabled={page <= 1} onClick={() => setPage((current) => current - 1)}>
+          <Button
+            type="button"
+            disabled={page <= 1}
+            onClick={() => setPage((current) => current - 1)}
+          >
             {communityCopy.pagination.previous}
           </Button>
           <span>
@@ -129,7 +144,9 @@ export function FavoriteRow({ item }: { item: FavoriteView }) {
         {item.categoryName ? ` · ${item.categoryName}` : ""}
       </p>
       <div className="community-flags-inline">
-        {item.isDifficult ? <span className="member-tag member-tag--accent">{repairCopy.list.difficult}</span> : null}
+        {item.isDifficult ? (
+          <span className="member-tag member-tag--accent">{repairCopy.list.difficult}</span>
+        ) : null}
         {item.isTypical ? <span className="member-tag">{repairCopy.list.typical}</span> : null}
       </div>
     </div>

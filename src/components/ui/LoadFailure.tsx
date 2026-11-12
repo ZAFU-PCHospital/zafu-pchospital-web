@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
+
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
 
@@ -14,11 +16,30 @@ export function LoadFailure({
 }: {
   message: string;
   retryLabel: string;
-  onRetry: () => void;
+  onRetry: () => void | Promise<void>;
   backHref?: string;
   backLabel?: string;
   className?: string;
 }) {
+  const [pending, setPending] = useState(false);
+  const alive = useRef(true);
+  useEffect(
+    () => () => {
+      alive.current = false;
+    },
+    [],
+  );
+
+  async function retry() {
+    if (pending) return;
+    setPending(true);
+    try {
+      await onRetry();
+    } finally {
+      if (alive.current) setPending(false);
+    }
+  }
+
   return (
     <div className={cn("load-failure", className)} role="alert">
       <p className="load-failure__message">{message}</p>
@@ -28,7 +49,9 @@ export function LoadFailure({
             {backLabel}
           </Button>
         ) : null}
-        <Button onClick={onRetry}>{retryLabel}</Button>
+        <Button onClick={() => void retry()} disabled={pending} aria-busy={pending}>
+          {retryLabel}
+        </Button>
       </div>
     </div>
   );

@@ -21,27 +21,35 @@ export function NotificationInbox() {
   const [filter, setFilter] = useState<"" | NotificationStatus>("");
   const [page, setPage] = useState(1);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
+  const [refreshError, setRefreshError] = useState("");
 
-  const load = useCallback(async () => {
-    setState("loading");
-    try {
-      const params = new URLSearchParams({ page: String(page), pageSize: "20" });
-      if (filter) params.set("status", filter);
-      const response = await fetch(`/api/v1/member/notifications?${params}`, { cache: "no-store" });
-      const json = await response.json();
-      if (!json.success) throw new Error();
-      const data = json.data as { items: NotificationView[]; unreadCount: number };
-      setItems(data.items);
-      setUnreadCount(data.unreadCount);
-      setPagination(json.meta.pagination as PaginationMeta);
-      setState("ready");
-    } catch {
-      setState("error");
-    }
-  }, [filter, page]);
+  const load = useCallback(
+    async (mode: "initial" | "refresh" = "initial") => {
+      if (mode === "initial") setState("loading");
+      setRefreshError("");
+      try {
+        const params = new URLSearchParams({ page: String(page), pageSize: "20" });
+        if (filter) params.set("status", filter);
+        const response = await fetch(`/api/v1/member/notifications?${params}`, {
+          cache: "no-store",
+        });
+        const json = await response.json();
+        if (!json.success) throw new Error();
+        const data = json.data as { items: NotificationView[]; unreadCount: number };
+        setItems(data.items);
+        setUnreadCount(data.unreadCount);
+        setPagination(json.meta.pagination as PaginationMeta);
+        setState("ready");
+      } catch {
+        if (mode === "initial") setState("error");
+        else setRefreshError(copy.loadError);
+      }
+    },
+    [copy.loadError, filter, page],
+  );
 
   useEffect(() => {
-    void load();
+    void load("initial");
   }, [load]);
 
   function notifyNavUnreadChanged() {
@@ -50,10 +58,15 @@ export function NotificationInbox() {
 
   const write = useWriteAction({
     onSuccess: async () => {
-      await load();
+      await load("refresh");
       notifyNavUnreadChanged();
     },
   });
+  const alertMessage = write.error || refreshError;
+  const clearAlert = () => {
+    write.clearError();
+    setRefreshError("");
+  };
 
   async function markRead(id: string) {
     await write.run(
@@ -96,18 +109,16 @@ export function NotificationInbox() {
   }
 
   if (state === "error") {
-    return (
-      <LoadFailure message={copy.loadError} retryLabel={copy.reload} onRetry={() => void load()} />
-    );
+    return <LoadFailure message={copy.loadError} retryLabel={copy.reload} onRetry={() => load()} />;
   }
 
   return (
     <div className="community-page">
-      {write.error ? (
+      {alertMessage ? (
         <PageAlert
-          message={write.error}
+          message={alertMessage}
           closeLabel={communityCopy.common.dismiss}
-          onClose={write.clearError}
+          onClose={clearAlert}
         />
       ) : null}
       <div className="community-toolbar">

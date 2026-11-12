@@ -146,7 +146,7 @@ export function RepairActivityList() {
       <LoadFailure
         message={message}
         retryLabel={repairActivitiesPage.reload}
-        onRetry={() => void loadPage(1, "initial")}
+        onRetry={() => loadPage(1, "initial")}
       />
     );
   }

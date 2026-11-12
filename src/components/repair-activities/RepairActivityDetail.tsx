@@ -855,7 +855,7 @@ export function RepairActivityDetail({ activityId }: Props) {
         <LoadFailure
           message={problem}
           retryLabel={copy.reload}
-          onRetry={() => void load()}
+          onRetry={() => load()}
           backHref="/repair-activities"
           backLabel={copy.backToList}
         />

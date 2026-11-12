@@ -77,7 +77,7 @@ export function MemberInternalProfile({ memberProfileId }: MemberInternalProfile
       <LoadFailure
         message={memberCopy.common.loadError}
         retryLabel={memberCopy.common.reload}
-        onRetry={() => void load()}
+        onRetry={() => load()}
         backHref="/member"
         backLabel={memberCopy.common.backToDashboard}
       />
