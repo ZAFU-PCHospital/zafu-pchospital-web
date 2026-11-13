@@ -134,8 +134,6 @@ export function RepairActivityList() {
         message={message}
         retryLabel={repairActivitiesPage.reload}
         onRetry={() => loadPage(1, "initial")}
-        backHref={repairActivitiesPage.joinHref}
-        backLabel={repairActivitiesPage.joinCta}
       />
     );
   }

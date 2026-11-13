@@ -19,9 +19,6 @@ export const repairActivitiesPage = {
   loadFailed: "活动列表加载失败，请稍后重试",
   loading: "正在加载活动…",
   reload: "重新加载",
-  /** 空态 / 错误态的下一步入口（issue #382）：报名招新，避免访客进入死胡同。 */
-  joinCta: "报名招新",
-  joinHref: "/join",
   loadingPage: "正在加载第 {page} 页…",
   pageLoadFailed: "第 {page} 页加载失败，请稍后重试",
   remaining: "剩余名额 {count}",
