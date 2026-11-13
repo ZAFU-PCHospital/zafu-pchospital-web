@@ -1,4 +1,5 @@
 import { loginDestination } from "@/lib/auth/login-destination";
+import { isActivityObjectPath } from "@/lib/auth/activity-workspace-access";
 import { EMAIL_STEP_PATH, PASSWORD_STEP_PATH } from "@/lib/auth/account-steps";
 import { getDb } from "@/lib/db/client";
 import { getEmailGateMode, type EmailGateMode } from "@/lib/env";
@@ -49,7 +50,10 @@ export function safeAccountReturnPath(
 ): string | null {
   const candidate = accountReturnCandidate(value);
   if (!candidate) return null;
-  if (candidate.startsWith("/admin") && !roles.includes("ADMIN")) return null;
+  if (candidate.startsWith("/admin") && !roles.includes("ADMIN")) {
+    // 成员的 activity:staff 权限只允许活动对象页；其他后台目标仍由 ADMIN 把关。
+    if (!roles.includes("MEMBER") || !isActivityObjectPath(candidate)) return null;
+  }
   if (candidate.startsWith("/member") && !roles.includes("MEMBER")) return null;
   return candidate;
 }

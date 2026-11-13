@@ -1,5 +1,25 @@
 # Phase 2 API v1 契约
 
+## 活动对象工作区（Issue #378）
+
+`/admin/repair-activities/:id` 由账号门禁与活动权限守卫保护：`activity:admin` 或
+`activity:staff` 可进入；无权限重定向成员首页。无成员档案管理员可进入管理视图。
+成员使用成员导航，只能查看概览与现场工作台；报名名单、出勤姓名和全站客户黑名单
+仍要求 `activity:admin`。页签深链为 `?tab=overview|registrations|board|attendance|blacklist`，
+已访问页签保留筛选及滚动，隐藏的看板暂停自动读取。
+
+- 新增 `GET /api/v1/admin/repair-activities/:id`：`activity:admin` / `activity:staff`，
+  返回 `RepairActivityPublicView` 摘要（含已结束活动），私有且不缓存。
+  先授权再查询；不存在或软删除返回 `ACTIVITY_NOT_FOUND`（404）。
+- 报名页签复用既有报名列表与 PATCH / DELETE；列表中的“报名管理”直接跳到同一页签。
+- 现场工作台复用原看板及增量 API；`full` / `live` 新增 `canAttend: boolean`，
+  表示当前账号有有效成员档案，可产生个人出勤和接待归属。
+- 无成员档案的活动管理员可以读看板、出勤及客户电话，签到/撤回以账号写审计，
+  `memberProfileId` 为 null；该管理视图不产生个人出勤与维修接待。
+  有成员档案的管理员仍需本场出勤才能签到/撤回；个人出勤、接待和撤销接待沿用成员条件。
+- 出勤页签使用 `board?view=attendance`；黑名单页签使用既有全站黑名单 API，
+  页面明确标注其全站作用域。Schema、权限枚举和公开活动页不变。
+
 管理群的独立机器接口见 [管理机器人契约](management-bot.md)。只有该文档列出的
 `/api/v1/bot/` 路由接受独立Bearer凭证；既有浏览器管理接口继续使用Session，不接受机器凭证。
 
@@ -945,7 +965,8 @@ DELETE     /api/v1/admin/comments/:id
 `POST .../check-in` 与 `POST .../withdraw` 的权限从 `activity:staff` **收紧为 `activity:admin`**：
 
 - 普通成员（仅 `activity:staff`）调用返回 403 `FORBIDDEN`，且先于出勤与报名状态校验；
-- 有效账号 / 成员档案、本场出勤与报名截止闸门不变；`serve` 与电话按需读取保持 `activity:staff`。
+- 有成员档案的账号沿用本场出勤；签到窗口为活动前 30 分钟。无档案管理员的管理视图见 Issue #378；
+  `serve` 保持成员接待归属，电话读取允许 `activity:admin` 或有效的 `activity:staff` 成员。
 
 成员看板布局（纯前端，无接口变化）：成员为「排队中 ｜ 已接待」两栏，管理员为
 「待签到 ｜ 排队中 ｜ 已接待」三栏（≥1100px 并排，窄屏按此顺序纵向堆叠）；

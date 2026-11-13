@@ -39,7 +39,7 @@ const failure = (code: string, status = 0): client.AdminApiResult<never> => ({
 });
 const ok = <T>(data: T): client.AdminApiResult<T> => ({ ok: true, data });
 
-async function mount(t: TestContext) {
+async function mount(t: TestContext, activityMode = false) {
   const previousReact = (globalThis as { React?: unknown }).React;
   (globalThis as { React?: unknown }).React = React;
   t.after(() => {
@@ -151,6 +151,8 @@ async function mount(t: TestContext) {
   });
   const { RepairActivityAdminPanel } =
     await import("../../src/components/admin/RepairActivityAdminPanel");
+  const { RepairActivityRegistrationsPanel } =
+    await import("../../src/components/admin/RepairActivityRegistrationsPanel");
   const previousDocument = Object.getOwnPropertyDescriptor(globalThis, "document");
   const outsideControl = {};
   const insideControl = {};
@@ -170,7 +172,9 @@ async function mount(t: TestContext) {
   });
   const view = () => {
     cursor = 0;
-    const node = RepairActivityAdminPanel();
+    const node = activityMode
+      ? RepairActivityAdminPanel()
+      : RepairActivityRegistrationsPanel({ activityId: "a" });
     const parent = find(node, (element) => element.props.title === copy.title);
     const ref = parent?.props.dialogRef as { current: unknown } | undefined;
     if (ref) ref.current = parentDialog;
@@ -194,8 +198,7 @@ async function mount(t: TestContext) {
     );
   view();
   await setImmediate();
-  (button(adminCopy.repairActivities.action.registrations).props.onClick as () => void)();
-  await setImmediate();
+
   return {
     view,
     button,
@@ -233,7 +236,7 @@ async function mount(t: TestContext) {
       return release;
     },
     reopen() {
-      (button(copy.title).props.onClick as () => void)();
+      (button(adminCopy.activityWorkspace.refresh).props.onClick as () => void)();
     },
     remove() {
       (button(copy.delete).props.onClick as () => void)();
@@ -282,7 +285,7 @@ async function mount(t: TestContext) {
 }
 
 test("活动编辑异常在窗口内报错，finally 解除提交禁用并允许重试", async (t) => {
-  const ui = await mount(t);
+  const ui = await mount(t, true);
   (ui.button(adminCopy.repairActivities.action.edit).props.onClick as () => void)();
   t.mock.method(globalThis, "FormData", function () {
     throw new Error("保存失败测试");
@@ -300,7 +303,7 @@ test("活动编辑异常在窗口内报错，finally 解除提交禁用并允许
 });
 
 test("活动删除失败留在确认窗内且恢复提交按钮", async (t) => {
-  const ui = await mount(t);
+  const ui = await mount(t, true);
   ui.setMutation(async () => failure("FORBIDDEN", 403));
   (ui.button(adminCopy.repairActivities.action.remove).props.onClick as () => void)();
   const modal = ui.dialog(adminCopy.repairActivities.removePanel.title)!;
@@ -313,7 +316,7 @@ test("活动删除失败留在确认窗内且恢复提交按钮", async (t) => {
 });
 
 test("活动编辑窗：改开始时间自动填结束时间 +2h，手动改过后不再覆盖", async (t) => {
-  const app = await mount(t);
+  const app = await mount(t, true);
   app.openActivityEdit();
   const endsAt = app.activityEditInput("endsAt");
   const activityAt = app.activityEditInput("activityAt");
@@ -334,7 +337,7 @@ test("活动编辑窗：改开始时间自动填结束时间 +2h，手动改过�
 });
 
 test("活动编辑窗：关闭再打开后联动重新生效，不跨活动泄漏", async (t) => {
-  const app = await mount(t);
+  const app = await mount(t, true);
   const first = app.openActivityEdit();
   const firstEndsAt = app.activityEditInput("endsAt");
   const ref = firstEndsAt.props.ref as { current: { value: string } | null };
@@ -361,58 +364,17 @@ test("正常删除成功后关闭确认窗并刷新名单", async (t) => {
   assert.equal(app.counts().reads, 2);
 });
 
-test("删除最后一行且名单为空时，父弹窗仍接回焦点与滚动锁", async (t) => {
+test("对象页删除最后一条报名后展示空态，刷新失败保留已加载内容", async (t) => {
   const app = await mount(t);
   app.remove();
   app.emptyReads();
-  app.focus.outside();
   await app.confirm();
   assert.equal(app.dialog(copy.delete), undefined);
-  assert.match(text(app.dialog(copy.title)), new RegExp(copy.empty));
-  assert.equal(app.focus.isParent(), true);
-  assert.equal(app.focus.scrollLock(), "hidden");
-  assert.deepEqual(app.focus.calls.at(-1), { preventScroll: true });
-});
-
-test("名单从 loading 到 ready 后恢复弹窗外的焦点，空名单同样适用", async (t) => {
-  const app = await mount(t);
-  app.emptyReads();
-  const release = app.holdReads();
-  app.reopen();
-  app.view();
-  app.focus.outside();
-  release();
-  await setImmediate();
-  app.view();
-  assert.equal(app.focus.isParent(), true);
-  assert.equal(app.focus.scrollLock(), "hidden");
-});
-
-test("名单加载失败时仍由父弹窗接回焦点", async (t) => {
-  const app = await mount(t);
-  const release = app.holdReads();
+  assert.match(text(app.view()), new RegExp(copy.empty));
   app.failReads(failure("NETWORK_ERROR"));
   app.reopen();
-  app.view();
-  app.focus.outside();
-  release();
   await setImmediate();
-  assert.match(text(app.dialog(copy.title)), /失败：NETWORK_ERROR/);
-  assert.equal(app.focus.isParent(), true);
-});
-
-test("名单加载完成不抢走弹窗内控件的焦点", async (t) => {
-  const app = await mount(t);
-  const release = app.holdReads();
-  app.reopen();
-  app.view();
-  app.focus.inside();
-  const before = app.focus.calls.length;
-  release();
-  await setImmediate();
-  app.view();
-  assert.equal(app.focus.isInsideControl(), true);
-  assert.equal(app.focus.calls.length, before);
+  assert.match(text(app.view()), /失败：NETWORK_ERROR/);
 });
 
 test("删除返回 deleted false 时显示错误，保留确认窗并解除忙碌状态", async (t) => {
@@ -511,8 +473,8 @@ test("删除已收到成功响应，后续名单刷新失败仍关闭确认窗",
   app.failReads(failure("NETWORK_ERROR"));
   await app.confirm();
   assert.equal(app.dialog(copy.delete), undefined);
-  assert.ok(app.dialog(copy.title));
-  assert.match(text(app.dialog(copy.title)), /失败：NETWORK_ERROR/);
+  assert.ok(app.view());
+  assert.match(text(app.view()), /失败：NETWORK_ERROR/);
 });
 
 test("权限拒绝不核查、不关闭确认窗，直接显示错误", async (t) => {
@@ -563,8 +525,8 @@ test("手机号保存已收到成功响应，后续刷新失败仍关闭编辑�
   app.failReads(failure("NETWORK_ERROR"));
   await app.save();
   assert.equal(app.dialog(copy.edit), undefined);
-  assert.ok(app.dialog(copy.title));
-  assert.match(text(app.dialog(copy.title)), /失败：NETWORK_ERROR/);
+  assert.ok(app.view());
+  assert.match(text(app.view()), /失败：NETWORK_ERROR/);
 });
 
 test("手机号重复错误显示在编辑窗里", async (t) => {
@@ -590,10 +552,7 @@ test("同一帧连点只发送一次删除，提交期间保留报名上下文",
   (dialog.props.onConfirm as () => void)();
   await setImmediate();
   assert.equal(app.counts().mutations, 1);
-  const parent = app.dialog(copy.title);
-  assert.ok(parent);
-  (parent.props.onClose as () => void)();
-  assert.ok(app.dialog(copy.title));
+  assert.match(text(app.view()), new RegExp(app.registration.name));
   assert.ok(app.signals[0]);
   finish(ok({ deleted: true }));
   await setImmediate();

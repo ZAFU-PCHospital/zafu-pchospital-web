@@ -83,6 +83,7 @@ function board(attended = true): StaffBoardView {
     attended,
     attendanceCheckedInAt: attended ? "2026-10-23T05:00:00Z" : null,
     canAdmin: true,
+    canAttend: true,
     attendanceMembers: [],
     eligible: [row],
     queue: [{ ...row, id: "queue", status: "CHECKED_IN", checkedInAt: "2026-10-23T05:00:00Z" }],
@@ -216,6 +217,7 @@ async function mount(
     return { push() {}, refresh() {} };
   });
   let currentActivityId = "activity";
+  let active = true;
   let networkFailure = false;
   const reads: { view: string; at: number }[] = [];
   let postResponse: (() => Promise<Response>) | null = null;
@@ -264,7 +266,7 @@ async function mount(
     cursor = 0;
     effectCursor = 0;
     callbackCursor = 0;
-    const result = MemberRepairActivityBoard({ activityId: currentActivityId });
+    const result = MemberRepairActivityBoard({ activityId: currentActivityId, active });
     const ref = elements(result).find(
       (element) => element.props.className === "activity-board activity-board--ready",
     )?.props.ref;
@@ -314,6 +316,10 @@ async function mount(
     replyToPost: (reply: () => Promise<Response>) => {
       postResponse = reply;
     },
+    setActive: (value: boolean) => {
+      active = value;
+      return view();
+    },
     switchActivity: (id: string) => {
       currentActivityId = id;
       return view();
@@ -333,6 +339,31 @@ async function mount(
   };
 }
 
+test("无成员档案管理员可管理签到和撤回，个人出勤与接待保持禁用", async (t) => {
+  const data = board(false);
+  data.canAttend = false;
+  const ui = await mount(t, data, new Date(end.getTime() - 60_000));
+  assert.equal(
+    ui.elements().find((element) => element.props.type === "checkbox")?.props.disabled,
+    false,
+  );
+  assert.equal(ui.button(copy.withdraw).disabled, false);
+  assert.equal(ui.button(copy.serve).disabled, true);
+  assert.equal(
+    ui.elements().some((element) => element.props.children === copy.attendCta),
+    false,
+  );
+});
+
+test("无成员管理员打开历史活动仍显示活动已结束", async (t) => {
+  const data = board(false);
+  data.canAttend = false;
+  const ui = await mount(t, data, end);
+  assert.ok(text(ui.view()).includes(copy.activityEnded));
+  assert.equal(ui.button(copy.checkIn).disabled, true);
+  assert.equal(ui.button(copy.serve).disabled, true);
+});
+
 test("结束的看板保留历史、出勤状态和纠错，三项控件禁用且不误报尚未截止", async (t) => {
   const data = board(false);
   const ui = await mount(t, data, end);
@@ -350,7 +381,7 @@ test("结束的看板保留历史、出勤状态和纠错，三项控件禁用�
   await setImmediate();
   assert.ok(text(ui.view()).includes(copy.attendedBadge));
   assert.equal(ui.button(copy.withdraw).disabled, false);
-  assert.equal(ui.button(copy.revertServe).disabled, undefined);
+  assert.equal(ui.button(copy.revertServe).disabled, false);
   assert.equal(
     ui
       .elements()
@@ -969,4 +1000,27 @@ test("签到成功但刷新失败的提示在恢复后解除，不残留失败�
     false,
   );
   assert.equal(ui.posts.length, 1, "恢复只重读，不能自动重放写请求");
+});
+
+test("隐藏对象页看板暂停自动读取，重新显示恢复轮询并保留搜索", async (t) => {
+  const ui = await mount(t, board(), new Date(end.getTime() - 600_000));
+  const search = () => ui.elements().find((element) => element.props.type === "search")!.props;
+  search().onChange!({ target: { value: "隔离夹具" } });
+  ui.view();
+  ui.setActive(false);
+  const pausedReads = ui.reads.length;
+  t.mock.timers.tick(60_000);
+  ui.fireWindowEvent("focus");
+  await setImmediate();
+  assert.equal(ui.reads.length, pausedReads);
+  assert.equal(search().value, "隔离夹具");
+  ui.setActive(true);
+  await setImmediate();
+  ui.view();
+  assert.ok(ui.reads.length > pausedReads);
+  assert.equal(search().value, "隔离夹具");
+  const resumedReads = ui.reads.filter((read) => read.view === "live").length;
+  t.mock.timers.tick(5_000);
+  await setImmediate();
+  assert.ok(ui.reads.filter((read) => read.view === "live").length > resumedReads);
 });

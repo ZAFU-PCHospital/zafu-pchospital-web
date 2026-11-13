@@ -436,6 +436,21 @@ export async function updateRepairActivityInTransaction(
 }
 
 export const repairActivityService = {
+  /** 登录后对象页摘要：允许历史活动，授权后再查询，避免借 404 探测活动。 */
+  async getWorkspace(
+    activityId: string,
+    actor: AuthorizedActor,
+  ): Promise<RepairActivityPublicView> {
+    requirePermission(
+      actor,
+      actor.permissions.includes("activity:admin") ? "activity:admin" : "activity:staff",
+    );
+    const row = await getDb().repairActivity.findFirst({
+      where: { id: activityId, deletedAt: null },
+    });
+    if (!row) throw new AppError("ACTIVITY_NOT_FOUND", "活动不存在");
+    return toPublicView(row, await countEffectiveRegistrations(activityId), new Date());
+  },
   // ---------- Admin ----------
   async listAdmin(actor: AuthorizedActor): Promise<RepairActivityAdminView[]> {
     requirePermission(actor, "activity:admin");

@@ -33,6 +33,7 @@ import { PageAlert } from "@/components/ui/PageAlert";
 import { cn } from "@/lib/utils";
 import { createLatestRequest } from "@/lib/client/latest-request";
 import { requestError, requestJson } from "@/lib/client/request";
+import { adminCopy } from "@/config/admin";
 import { clientRequestCopy } from "@/config/client-request";
 import { createBoardSearch } from "./board-search";
 import { repairStatusLabels } from "@/config/repairs";
@@ -60,7 +61,7 @@ import type {
   RevertServeResultView,
 } from "@/features/repair-activities/repair-activity-staff-service";
 
-type Props = { activityId: string };
+type Props = { activityId: string; active?: boolean; embedded?: boolean };
 
 /** 手机端一次只展示一个分区（<1100px；宽屏由 CSS 显示全部并排列）。 */
 type MobilePane = "eligible" | "queue" | "served";
@@ -76,7 +77,7 @@ function checkInClosedText(activityAt: string): string {
   );
 }
 
-export function MemberRepairActivityBoard({ activityId }: Props) {
+export function MemberRepairActivityBoard({ activityId, active = true, embedded = false }: Props) {
   const router = useRouter();
   const activityTarget = useMemo(() => ({ id: activityId }), [activityId]);
   const currentActivity = useRef<typeof activityTarget | null>(null);
@@ -126,6 +127,7 @@ export function MemberRepairActivityBoard({ activityId }: Props) {
    */
   const [mobilePane, setMobilePane] = useState<MobilePane | null>(null);
   const paused =
+    !active ||
     busy !== null ||
     checkInConfirmOpen ||
     withdrawTarget !== null ||
@@ -533,6 +535,7 @@ export function MemberRepairActivityBoard({ activityId }: Props) {
     status?: RepairActivityStatus,
     checkInOpen = false,
   ) {
+    if (embedded) return null;
     return (
       <header className="member-page-head activity-board__head">
         <p className="member-section__tag">{copy.label}</p>
@@ -571,9 +574,11 @@ export function MemberRepairActivityBoard({ activityId }: Props) {
         <Button onClick={() => void load()} disabled={live.state.pending}>
           {copy.retry}
         </Button>
-        <Button href="/member/repair-activities" variant="ghost">
-          {copy.back}
-        </Button>
+        {!embedded ? (
+          <Button href="/member/repair-activities" variant="ghost">
+            {copy.back}
+          </Button>
+        ) : null}
       </div>
     );
   }
@@ -587,9 +592,11 @@ export function MemberRepairActivityBoard({ activityId }: Props) {
   const checkInClosedMessage = checkInClosedText(board.activity.activityAt);
   // 结束时只更新原提示；已出勤且无提示卡的看板用浮层，不能把整板向下挤。
   // issue #367：未开放提示改为跟随签到窗口（活动开始前 30 分钟），不再跟随报名截止。
-  const showAttendBanner = (!staffOpen && !ended) || !board.attended;
+  const managementOnly = board.canAdmin && board.canAttend === false;
+  const canManage = board.attended || managementOnly;
+  const showAttendBanner = managementOnly || (!staffOpen && !ended) || !board.attended;
   const floatingMessage = message || (ended && !showAttendBanner ? copy.activityEnded : "");
-  const opsDisabled = !staffOpen || !board.attended || busy !== null;
+  const opsDisabled = !staffOpen || !canManage || busy !== null;
   const withdrawBusy = withdrawTarget ? busy === `withdraw:${withdrawTarget.id}` : false;
   const checkInBusy = busy === "check-in";
   const matches = createBoardSearch(search);
@@ -641,10 +648,12 @@ export function MemberRepairActivityBoard({ activityId }: Props) {
         staffOpen,
       )}
       <div className="activity-board__toolbar">
-        <Button href="/member/repair-activities" variant="ghost">
-          {copy.back}
-        </Button>
-        {board.attended ? (
+        {!embedded ? (
+          <Button href="/member/repair-activities" variant="ghost">
+            {copy.back}
+          </Button>
+        ) : null}
+        {managementOnly ? null : board.attended ? (
           <span className={ATTENDED_TAG_CLASS}>{copy.attendedBadge}</span>
         ) : (
           <Button
@@ -688,11 +697,13 @@ export function MemberRepairActivityBoard({ activityId }: Props) {
           <p role="status">
             {ended
               ? copy.activityEnded
-              : staffOpen
-                ? board.canAdmin
-                  ? copy.attendPrompt
-                  : copy.attendPromptMember
-                : checkInClosedMessage}
+              : !staffOpen
+                ? checkInClosedMessage
+                : managementOnly
+                  ? adminCopy.activityWorkspace.managementOnly
+                  : board.canAdmin
+                    ? copy.attendPrompt
+                    : copy.attendPromptMember}
           </p>
         </Card>
       ) : null}
@@ -933,7 +944,7 @@ export function MemberRepairActivityBoard({ activityId }: Props) {
                         className="activity-board__serve-btn"
                         trailingIcon="arrowRight"
                         onClick={() => requestServe(row.id)}
-                        disabled={opsDisabled}
+                        disabled={opsDisabled || managementOnly}
                       >
                         {busy === `serve:${row.id}` ? copy.serving : copy.serve}
                       </Button>
@@ -946,7 +957,7 @@ export function MemberRepairActivityBoard({ activityId }: Props) {
                           className="activity-board__withdraw-btn"
                           icon="undo"
                           onClick={() => setWithdrawTarget(row)}
-                          disabled={!board.attended || busy !== null}
+                          disabled={!canManage || busy !== null}
                         >
                           {busy === `withdraw:${row.id}` ? copy.withdrawing : copy.withdraw}
                         </Button>
@@ -1055,12 +1066,16 @@ export function MemberRepairActivityBoard({ activityId }: Props) {
                       </div>
                       <div className="activity-board__row-actions items-center">
                         {row.canRevert ? (
-                          <Button variant="ghost" onClick={() => setRevertTarget(row)}>
+                          <Button
+                            variant="ghost"
+                            onClick={() => setRevertTarget(row)}
+                            disabled={managementOnly}
+                          >
                             {copy.revertServe}
                           </Button>
                         ) : null}
                         {pendingRecord ? (
-                          row.canFill ? (
+                          row.canFill && !managementOnly ? (
                             <Button
                               href={`/member/repairs/new?activityId=${encodeURIComponent(activityId)}&registrationId=${encodeURIComponent(row.id)}`}
                             >

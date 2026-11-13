@@ -118,6 +118,8 @@ export type StaffBoardView = {
    * 决定「待签到」区与「撤回」按钮的可见性；签到 / 撤回接口同样只对管理员开放。
    */
   canAdmin: boolean;
+  /** 无成员档案的管理员只管理现场，不产生个人出勤与维修归属。 */
+  canAttend: boolean;
   /**
    * 本场出勤成员（按签到时间升序）。仅对管理员下发，
    * 成员恒为空数组（数据最小化）。
@@ -162,7 +164,7 @@ type ServedRegistration = Prisma.RepairActivityRegistrationGetPayload<{
 
 function servedRows(
   rows: ServedRegistration[],
-  memberId: string,
+  memberId: string | null,
   canAdmin: boolean,
 ): StaffServedRow[] {
   return rows
@@ -183,8 +185,10 @@ function servedRows(
         recordStatus,
         ...(canAdmin ? { servedByName: row.servedBy?.realName.trim() || null } : {}),
         canRevert:
-          (pendingRecord || legacyDraft) && (canAdmin || row.servedByMemberProfileId === memberId),
-        canFill: pendingRecord && row.servedByMemberProfileId === memberId,
+          memberId !== null &&
+          (pendingRecord || legacyDraft) &&
+          (canAdmin || row.servedByMemberProfileId === memberId),
+        canFill: memberId !== null && pendingRecord && row.servedByMemberProfileId === memberId,
       };
     });
 }
@@ -253,10 +257,24 @@ async function requireStaffMember(actor: AuthorizedActor) {
   return repairRepository.activeMemberForUser(actor.userId);
 }
 
-/** 签到 / 撤回收紧为活动管理员：权限之外仍要求有效成员档案。 */
-async function requireAdminMember(actor: AuthorizedActor) {
+/** 管理读取允许无档案管理员；成员读取仍要求有效成员身份。 */
+async function requireBoardMember(actor: AuthorizedActor) {
+  requirePermission(
+    actor,
+    actor.permissions.includes("activity:admin") ? "activity:admin" : "activity:staff",
+  );
+  return actor.permissions.includes("activity:admin")
+    ? repairRepository.findActiveMemberForUser(actor.userId)
+    : repairRepository.activeMemberForUser(actor.userId);
+}
+
+/** 已有成员的管理员沿用本场出勤条件；纯管理账号以用户身份留审计。 */
+async function requireCheckInOperator(activityId: string, actor: AuthorizedActor) {
   requirePermission(actor, "activity:admin");
-  return repairRepository.activeMemberForUser(actor.userId);
+  await loadActivityOrThrow(activityId);
+  const member = await repairRepository.findActiveMemberForUser(actor.userId);
+  if (member) await requireAttendance(activityId, member.id);
+  return member;
 }
 
 async function loadActivityOrThrow(activityId: string) {
@@ -410,7 +428,7 @@ export const repairActivityStaffService = {
     registrationId: string,
     actor: AuthorizedActor,
   ): Promise<{ phone: string }> {
-    await requireStaffMember(actor);
+    await requireBoardMember(actor);
     return inSerializableTransaction(async (tx) => {
       const activity = await tx.repairActivity.findFirst({
         where: { id: activityId, deletedAt: null },
@@ -506,7 +524,7 @@ export const repairActivityStaffService = {
   },
 
   async getLiveBoard(activityId: string, actor: AuthorizedActor): Promise<StaffLiveBoardView> {
-    const member = await requireStaffMember(actor);
+    const member = await requireBoardMember(actor);
     const canAdmin = actor.permissions.includes("activity:admin");
     const activity = await loadActivityOrThrow(activityId);
     const [counts, attendance, registrations, pendingServe, attendanceCount, ownServedCount] =
@@ -516,10 +534,12 @@ export const repairActivityStaffService = {
           where: { activityId, ...effectiveStatusFilter },
           _count: { _all: true },
         }),
-        getDb().repairActivityAttendance.findUnique({
-          where: { activityId_memberProfileId: { activityId, memberProfileId: member.id } },
-          select: { checkedInAt: true },
-        }),
+        member
+          ? getDb().repairActivityAttendance.findUnique({
+              where: { activityId_memberProfileId: { activityId, memberProfileId: member!.id } },
+              select: { checkedInAt: true },
+            })
+          : Promise.resolve(null),
         getDb().repairActivityRegistration.findMany({
           where: {
             activityId,
@@ -528,7 +548,7 @@ export const repairActivityStaffService = {
           },
           select: registrationSelect,
         }),
-        findPendingServe(member.id),
+        member ? findPendingServe(member.id) : Promise.resolve(null),
         canAdmin
           ? getDb().repairActivityAttendance.count({ where: { activityId } })
           : Promise.resolve(null),
@@ -539,7 +559,7 @@ export const repairActivityStaffService = {
                 activityId,
                 deletedAt: null,
                 status: "SERVED",
-                servedByMemberProfileId: member.id,
+                servedByMemberProfileId: member!.id,
               },
             }),
       ]);
@@ -549,6 +569,7 @@ export const repairActivityStaffService = {
       attended: Boolean(attendance),
       attendanceCheckedInAt: attendance?.checkedInAt.toISOString() ?? null,
       canAdmin,
+      canAttend: Boolean(member),
       attendanceCount,
       servedCount: canAdmin
         ? (counts.find((row) => row.status === "SERVED")?._count._all ?? 0)
@@ -567,7 +588,7 @@ export const repairActivityStaffService = {
   },
 
   async getServedBoard(activityId: string, actor: AuthorizedActor): Promise<StaffServedBoardView> {
-    const member = await requireStaffMember(actor);
+    const member = await requireBoardMember(actor);
     const canAdmin = actor.permissions.includes("activity:admin");
     await loadActivityOrThrow(activityId);
     const rows = await getDb().repairActivityRegistration.findMany({
@@ -575,21 +596,21 @@ export const repairActivityStaffService = {
         activityId,
         deletedAt: null,
         status: "SERVED",
-        ...(canAdmin ? {} : { servedByMemberProfileId: member.id }),
+        ...(canAdmin ? {} : { servedByMemberProfileId: member!.id }),
       },
       include: {
         repairRecord: { select: servedRecordSelect },
         servedBy: canAdmin ? { select: { realName: true } } : false,
       },
     });
-    return { served: servedRows(rows, member.id, canAdmin) };
+    return { served: servedRows(rows, member?.id ?? null, canAdmin) };
   },
 
   async getAttendanceBoard(
     activityId: string,
     actor: AuthorizedActor,
   ): Promise<StaffAttendanceBoardView> {
-    await requireAdminMember(actor);
+    requirePermission(actor, "activity:admin");
     await loadActivityOrThrow(activityId);
     const rows = await getDb().repairActivityAttendance.findMany({
       where: { activityId },
@@ -616,7 +637,7 @@ export const repairActivityStaffService = {
   },
 
   async getBoard(activityId: string, actor: AuthorizedActor): Promise<StaffBoardView> {
-    const member = await requireStaffMember(actor);
+    const member = await requireBoardMember(actor);
     const canAdmin = actor.permissions.includes("activity:admin");
     const activity = await loadActivityOrThrow(activityId);
     const now = new Date();
@@ -628,7 +649,7 @@ export const repairActivityStaffService = {
           ? Promise.resolve(null)
           : getDb().repairActivityAttendance.findUnique({
               where: {
-                activityId_memberProfileId: { activityId, memberProfileId: member.id },
+                activityId_memberProfileId: { activityId, memberProfileId: member!.id },
               },
             }),
         getDb().repairActivityRegistration.findMany({
@@ -642,7 +663,7 @@ export const repairActivityStaffService = {
               : {
                   OR: [
                     { status: "CHECKED_IN" },
-                    { status: "SERVED", servedByMemberProfileId: member.id },
+                    { status: "SERVED", servedByMemberProfileId: member!.id },
                   ],
                 }),
           },
@@ -653,7 +674,7 @@ export const repairActivityStaffService = {
             servedBy: canAdmin ? { select: { realName: true } } : false,
           },
         }),
-        findPendingServe(member.id),
+        member ? findPendingServe(member.id) : Promise.resolve(null),
         // 出勤名单仅管理员视图需要；成员在库层就不取。
         canAdmin
           ? getDb().repairActivityAttendance.findMany({
@@ -676,7 +697,7 @@ export const repairActivityStaffService = {
 
     const registeredCount = canAdmin ? registrations.length : memberCount!;
     const ownAttendance = canAdmin
-      ? attendanceRows.find((row) => row.memberProfileId === member.id)
+      ? attendanceRows.find((row) => row.memberProfileId === member?.id)
       : attendance;
 
     const eligible = canAdmin
@@ -690,7 +711,7 @@ export const repairActivityStaffService = {
       registrations.filter((r) => r.status === "CHECKED_IN"),
     ).map(toStaffReg);
 
-    const served = servedRows(registrations, member.id, canAdmin);
+    const served = servedRows(registrations, member?.id ?? null, canAdmin);
 
     const attendanceMembers: StaffAttendanceMemberView[] = attendanceRows.map((row) => ({
       memberProfileId: row.memberProfileId,
@@ -707,6 +728,7 @@ export const repairActivityStaffService = {
       attended: Boolean(ownAttendance),
       attendanceCheckedInAt: ownAttendance?.checkedInAt.toISOString() ?? null,
       canAdmin,
+      canAttend: Boolean(member),
       attendanceMembers,
       eligible,
       queue,
@@ -721,9 +743,8 @@ export const repairActivityStaffService = {
     actor: AuthorizedActor,
     issueTypeUpdates: StaffCheckInIssueTypeUpdate[] = [],
   ): Promise<{ checkedIn: StaffRegistrationView[] }> {
-    const member = await requireAdminMember(actor);
+    const member = await requireCheckInOperator(activityId, actor);
     await loadActivityOrThrow(activityId);
-    await requireAttendance(activityId, member.id);
 
     const uniqueIds = [...new Set(registrationIds.map((id) => id.trim()).filter(Boolean))];
     if (uniqueIds.length === 0) {
@@ -808,7 +829,7 @@ export const repairActivityStaffService = {
         result: "SUCCESS",
         after: {
           registrationIds: checkedIn.map((r) => r.id),
-          memberProfileId: member.id,
+          memberProfileId: member?.id ?? null,
         },
       });
       return { checkedIn };
@@ -820,9 +841,8 @@ export const repairActivityStaffService = {
     registrationId: string,
     actor: AuthorizedActor,
   ): Promise<StaffRegistrationView> {
-    const member = await requireAdminMember(actor);
+    const member = await requireCheckInOperator(activityId, actor);
     await loadActivityOrThrow(activityId);
-    await requireAttendance(activityId, member.id);
     if (!registrationId.trim()) {
       throw new AppError("VALIDATION_FAILED", "报名 ID 无效");
     }
@@ -854,7 +874,7 @@ export const repairActivityStaffService = {
         targetId: registrationId,
         result: "SUCCESS",
         before: { status: "CHECKED_IN" },
-        after: { status: "REGISTERED", memberProfileId: member.id },
+        after: { status: "REGISTERED", memberProfileId: member?.id ?? null },
       });
       return toStaffReg(updated);
     });
