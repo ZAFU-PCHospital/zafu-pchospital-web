@@ -144,12 +144,7 @@ export function RepairActivityList() {
       <EmptyState
         title={repairActivitiesPage.empty}
         action={
-          <div className="flex flex-wrap items-center gap-s-3">
-            <Button href={repairActivitiesPage.joinHref}>{repairActivitiesPage.joinCta}</Button>
-            <Button variant="ghost" onClick={() => void loadPage(1, "initial")}>
-              {repairActivitiesPage.reload}
-            </Button>
-          </div>
+          <Button onClick={() => void loadPage(1, "initial")}>{repairActivitiesPage.reload}</Button>
         }
       />
     );

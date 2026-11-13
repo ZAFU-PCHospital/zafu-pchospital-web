@@ -9,7 +9,7 @@ const allCopy = [
   ...joinNotice.paragraphs,
 ].join("\n");
 
-test("招新须知覆盖四项已确认信息与账号发放说明", () => {
+test("招新须知覆盖六项已确认信息与账号发放说明", () => {
   assert.equal(joinNoticeItems.length, 6);
   for (const title of [
     "招新时间窗口",
@@ -31,15 +31,16 @@ test("须知文案包含验收必需的事实", () => {
     "当面公布",
     "集体培训",
     "最低值班时长",
-    "QQ 号后 6 位",
+    "邮箱发送账号与初始密码",
+    "联系管理员",
     "修改密码",
   ]) {
     assert.ok(allCopy.includes(fact), `缺少事实：${fact}`);
   }
 });
 
-test("公开页不再出现待确认占位", () => {
-  for (const placeholder of ["待社团确认", "待补充"]) {
+test("公开页不再出现待确认占位，也不公开初始密码规则", () => {
+  for (const placeholder of ["待社团确认", "待补充", "QQ 号后 6 位"]) {
     assert.equal(allCopy.includes(placeholder), false, `仍含占位：${placeholder}`);
   }
 });
