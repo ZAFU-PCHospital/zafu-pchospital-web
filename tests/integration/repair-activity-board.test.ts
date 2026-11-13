@@ -296,7 +296,7 @@ async function signUpRegistration(name: string, phone: string): Promise<string> 
   assert.equal(created.status, 201, `报名应成功：${JSON.stringify(created.json)}`);
   await getDb().repairActivity.update({
     where: { id: ACTIVITY_ID },
-    data: { signupClosesAt: new Date(Date.now() - 1_000) },
+    data: { activityAt: new Date(), signupClosesAt: new Date(Date.now() - 1_000) },
   });
   return (created.json.data as { id: string }).id;
 }
@@ -309,7 +309,7 @@ before(async () => {
   await prepareFixtures();
   await getDb().repairActivity.update({
     where: { id: ACTIVITY_ID },
-    data: { signupClosesAt: new Date(Date.now() - 1_000) },
+    data: { activityAt: new Date(), signupClosesAt: new Date(Date.now() - 1_000) },
   });
   // 主接待员先标记出勤（幂等）；「未出勤 403」用例用另两位未出勤账号（成员 / 管理员）。
   await repairActivityStaffService.markAttendance(ACTIVITY_ID, staffActor);
@@ -709,20 +709,19 @@ dbTest("真实签到路由拒绝错误 updates，权限 / 出勤 / 截止闸门�
   );
   await db.memberProfile.update({ where: { id: STAFF_PROFILE_ID }, data: { status: "REVOKED" } });
   try {
-    await assert.rejects(
-      () =>
-        repairActivityStaffService.checkIn(ACTIVITY_ID, [row.id], staffActor, [
-          { registrationId: row.id, issueType: "OTHER" },
-        ]),
-      { code: "MEMBER_REQUIRED" },
-    );
+    await assert.rejects(() => repairActivityStaffService.markAttendance(ACTIVITY_ID, staffActor), {
+      code: "MEMBER_REQUIRED",
+    });
   } finally {
     await db.memberProfile.update({ where: { id: STAFF_PROFILE_ID }, data: { status: "ACTIVE" } });
   }
   const activity = await db.repairActivity.findUniqueOrThrow({ where: { id: ACTIVITY_ID } });
   await db.repairActivity.update({
     where: { id: ACTIVITY_ID },
-    data: { signupClosesAt: new Date(Date.now() + 60_000) },
+    data: {
+      activityAt: new Date(Date.now() + 86_400_000),
+      signupClosesAt: new Date(Date.now() + 60_000),
+    },
   });
   try {
     assert.equal(
@@ -732,7 +731,7 @@ dbTest("真实签到路由拒绝错误 updates，权限 / 出勤 / 截止闸门�
   } finally {
     await db.repairActivity.update({
       where: { id: ACTIVITY_ID },
-      data: { signupClosesAt: activity.signupClosesAt },
+      data: { activityAt: activity.activityAt, signupClosesAt: activity.signupClosesAt },
     });
   }
   assert.deepEqual(
@@ -1122,7 +1121,7 @@ dbTest("非本活动报名：404 ACTIVITY_REGISTRATION_NOT_FOUND", async () => {
   assert.equal(row.status, "REGISTERED", "被拒绝的签到不应改动别处的报名");
 });
 
-dbTest("报名未截止：出勤、签到、接待均拒绝，已有出勤也不可绕过", async () => {
+dbTest("活动签到窗口未开放：出勤、签到、接待均拒绝，已有出勤也不可绕过", async () => {
   const db = getDb();
   const registrationId = await signUpRegistration("REG79 闸门", "13900000025");
   const checkedIn = await postCheckIn([registrationId]);
@@ -1142,6 +1141,7 @@ dbTest("报名未截止：出勤、签到、接待均拒绝，已有出勤也不
         data: {
           signupOpensAt: new Date(Date.now() + (phase === "UPCOMING" ? 60_000 : -60_000)),
           signupClosesAt: new Date(Date.now() + 120_000),
+          activityAt: new Date(Date.now() + 86_400_000),
           capacity: phase === "FULL" ? count : 100,
         },
       });
@@ -1189,6 +1189,7 @@ dbTest("报名未截止：出勤、签到、接待均拒绝，已有出勤也不
       data: {
         signupOpensAt: activity.signupOpensAt,
         signupClosesAt: activity.signupClosesAt,
+        activityAt: activity.activityAt,
         capacity: activity.capacity,
       },
     });

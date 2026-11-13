@@ -13,6 +13,18 @@ import { assertSameOrigin, authenticateRequest } from "@/lib/auth/request";
 
 export const runtime = "nodejs";
 
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const requestId = getRequestId(request.headers);
+  try {
+    const { actor } = await authenticateRequest(request, requestId);
+    return apiSuccess(await repairActivityService.getWorkspace((await params).id, actor), requestId, {
+      headers: { "Cache-Control": "private, no-store" },
+    });
+  } catch (error) {
+    return apiFailure(error, requestId);
+  }
+}
+
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const requestId = getRequestId(request.headers);
   try {

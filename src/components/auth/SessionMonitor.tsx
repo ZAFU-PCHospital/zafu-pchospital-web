@@ -1,5 +1,10 @@
 "use client";
 
+import {
+  canAccessActivityWorkspace,
+  isActivityObjectPath,
+} from "@/lib/auth/activity-workspace-access";
+
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 
@@ -150,7 +155,11 @@ export function SessionMonitor() {
         if (!access) return;
         if (
           (access.state !== "READY" && !isAccountStepPage(access.state, pathname)) ||
-          (pathname.startsWith("/admin") && !result.data.roles.includes("ADMIN"))
+          (pathname.startsWith("/admin") &&
+            !result.data.roles.includes("ADMIN") &&
+            !(
+              isActivityObjectPath(pathname) && canAccessActivityWorkspace(result.data.permissions)
+            ))
         )
           gotoStep(access.destination);
       } catch {

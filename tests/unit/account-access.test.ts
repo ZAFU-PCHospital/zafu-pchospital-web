@@ -149,6 +149,12 @@ test("回跳白名单：只收当前角色允许的规范业务 pathname，拒�
   assert.equal(safeAccountReturnPath("/member/", member), "/member/");
   // 角色不够：MEMBER 不能把落点定到后台，ADMIN 没有成员身份也不能定到 /member。
   assert.equal(safeAccountReturnPath("/admin/members", member), null);
+  assert.equal(
+    safeAccountReturnPath("/admin/repair-activities/activity-id", member),
+    "/admin/repair-activities/activity-id",
+  );
+  assert.equal(safeAccountReturnPath("/admin/repair-activities/activity-id/edit", member), null);
+  assert.equal(safeAccountReturnPath("/admin/repair-activities", member), null);
   assert.equal(safeAccountReturnPath("/admin/members", ["ADMIN"]), "/admin/members");
   assert.equal(safeAccountReturnPath("/member", ["ADMIN"]), null);
   assert.equal(safeAccountReturnPath("/member", ["ADMIN", "MEMBER"]), "/member");

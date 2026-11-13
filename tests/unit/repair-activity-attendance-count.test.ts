@@ -20,6 +20,10 @@ const serviceSource = readFileSync(
   "utf8",
 );
 const panelSource = readFileSync("src/components/admin/RepairActivityAdminPanel.tsx", "utf8");
+const registrationSource = readFileSync(
+  "src/components/admin/RepairActivityRegistrationsPanel.tsx",
+  "utf8",
+);
 
 test("出勤文案集中在 config 且带计数占位", () => {
   const table = adminCopy.repairActivities.table;
@@ -56,25 +60,28 @@ test("活动管理页表格有「出勤」列并绑定 attendedCount", () => {
 test("报名名单默认展示有效报名，删除历史折叠并使用中文状态", () => {
   assert.ok(serviceSource.includes("hasSameNameActive"));
   assert.match(
-    panelSource,
-    /const activeRegistrations = registrations\.filter\(\(registration\) => !registration\.deletedAt\)/,
+    registrationSource,
+    /const activeRegistrations = matching\.filter\(\(registration\) => !registration\.deletedAt\)/,
   );
   assert.match(
-    panelSource,
-    /const deletedRegistrations = registrations\.filter\(\(registration\) => registration\.deletedAt\)/,
+    registrationSource,
+    /const deletedRegistrations = matching\.filter\(\(registration\) => registration\.deletedAt\)/,
   );
-  assert.match(panelSource, /<details className="admin-registrations__history">/);
-  assert.doesNotMatch(panelSource, /<details[^>]*\sopen\b/, "删除历史默认折叠");
-  assert.match(panelSource, /repairActivityRegistrationStatusLabels\[registration\.status\]/);
-  assert.match(panelSource, /copy\.registrations\.deleted/);
-  assert.match(panelSource, /title=\{copy\.registrations\.sameNameHint\}/);
-  assert.match(panelSource, /copy\.registrations\.deletedHistory/);
-  assert.match(panelSource, /disabled=\{busy \|\| Boolean\(registration\.deletedAt\)\}/);
+  assert.match(registrationSource, /<details className="admin-registrations__history">/);
+  assert.doesNotMatch(registrationSource, /<details[^>]*\sopen\b/, "删除历史默认折叠");
+  assert.match(
+    registrationSource,
+    /repairActivityRegistrationStatusLabels\[registration\.status\]/,
+  );
+  assert.match(registrationSource, /copy\.registrations\.deleted/);
+  assert.match(registrationSource, /title=\{copy\.registrations\.sameNameHint\}/);
+  assert.match(registrationSource, /copy\.registrations\.deletedHistory/);
+  assert.match(registrationSource, /disabled=\{busy \|\| Boolean\(registration\.deletedAt\)\}/);
 });
 
 test("切换活动后旧的名单响应不能覆盖当前活动", () => {
-  assert.match(panelSource, /const loadRegistrations = useCallback/);
-  assert.match(panelSource, /request !== registrationRequestRef\.current/);
+  assert.match(registrationSource, /const loadRegistrations = useCallback/);
+  assert.match(registrationSource, /request !== registrationRequestRef\.current/);
 });
 
 test("出勤人数只回计数：管理端列表源码不下发成员身份字段", () => {

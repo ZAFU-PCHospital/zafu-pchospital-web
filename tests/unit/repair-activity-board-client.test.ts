@@ -83,6 +83,7 @@ function board(attended = true): StaffBoardView {
     attended,
     attendanceCheckedInAt: attended ? "2026-10-23T05:00:00Z" : null,
     canAdmin: true,
+    canAttend: true,
     attendanceMembers: [],
     eligible: [row],
     queue: [{ ...row, id: "queue", status: "CHECKED_IN", checkedInAt: "2026-10-23T05:00:00Z" }],
@@ -333,6 +334,31 @@ async function mount(
   };
 }
 
+test("无成员档案管理员可管理签到和撤回，个人出勤与接待保持禁用", async (t) => {
+  const data = board(false);
+  data.canAttend = false;
+  const ui = await mount(t, data, new Date(end.getTime() - 60_000));
+  assert.equal(
+    ui.elements().find((element) => element.props.type === "checkbox")?.props.disabled,
+    false,
+  );
+  assert.equal(ui.button(copy.withdraw).disabled, false);
+  assert.equal(ui.button(copy.serve).disabled, true);
+  assert.equal(
+    ui.elements().some((element) => element.props.children === copy.attendCta),
+    false,
+  );
+});
+
+test("无成员管理员打开历史活动仍显示活动已结束", async (t) => {
+  const data = board(false);
+  data.canAttend = false;
+  const ui = await mount(t, data, end);
+  assert.ok(text(ui.view()).includes(copy.activityEnded));
+  assert.equal(ui.button(copy.checkIn).disabled, true);
+  assert.equal(ui.button(copy.serve).disabled, true);
+});
+
 test("结束的看板保留历史、出勤状态和纠错，三项控件禁用且不误报尚未截止", async (t) => {
   const data = board(false);
   const ui = await mount(t, data, end);
@@ -350,7 +376,7 @@ test("结束的看板保留历史、出勤状态和纠错，三项控件禁用�
   await setImmediate();
   assert.ok(text(ui.view()).includes(copy.attendedBadge));
   assert.equal(ui.button(copy.withdraw).disabled, false);
-  assert.equal(ui.button(copy.revertServe).disabled, undefined);
+  assert.equal(ui.button(copy.revertServe).disabled, false);
   assert.equal(
     ui
       .elements()

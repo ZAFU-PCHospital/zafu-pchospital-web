@@ -450,3 +450,38 @@ test("首次检查已是普通成员时，旧后台壳也按服务端落点离�
   const ui = await monitor(t, { pathname: "/admin/members", replies: [{ payload: reply }] });
   assert.deepEqual(ui.redirects, ["/member"]);
 });
+
+for (const scenario of [
+  {
+    pathname: "/admin/repair-activities/activity-id",
+    permissions: ["activity:staff"],
+    allowed: true,
+  },
+  { pathname: "/admin/repair-activities/activity-id", permissions: [], allowed: false },
+  { pathname: "/admin/members", permissions: ["activity:staff"], allowed: false },
+  {
+    pathname: "/admin/repair-activities/activity-id/edit",
+    permissions: ["activity:staff"],
+    allowed: false,
+  },
+]) {
+  test(`活动权限会话监控：${scenario.pathname} ${scenario.allowed ? "停留且不重复导航" : "离开受限页面"}`, async (t) => {
+    const reply = mePayload(
+      {
+        state: "READY",
+        destination: scenario.allowed ? scenario.pathname : "/member",
+        exemptionExpiresAt: null,
+      },
+      iso(2 * HOUR),
+    );
+    reply.data.roles = ["MEMBER"];
+    reply.data.permissions = scenario.permissions;
+    const ui = await monitor(t, {
+      pathname: scenario.pathname,
+      replies: [{ payload: reply }, { payload: reply }],
+    });
+    ui.handlers.focus();
+    await ui.settle();
+    assert.deepEqual(ui.redirects, scenario.allowed ? [] : ["/member"]);
+  });
+}
