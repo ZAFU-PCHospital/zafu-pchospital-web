@@ -217,6 +217,7 @@ async function mount(
     return { push() {}, refresh() {} };
   });
   let currentActivityId = "activity";
+  let active = true;
   let networkFailure = false;
   const reads: { view: string; at: number }[] = [];
   let postResponse: (() => Promise<Response>) | null = null;
@@ -265,7 +266,7 @@ async function mount(
     cursor = 0;
     effectCursor = 0;
     callbackCursor = 0;
-    const result = MemberRepairActivityBoard({ activityId: currentActivityId });
+    const result = MemberRepairActivityBoard({ activityId: currentActivityId, active });
     const ref = elements(result).find(
       (element) => element.props.className === "activity-board activity-board--ready",
     )?.props.ref;
@@ -314,6 +315,10 @@ async function mount(
     },
     replyToPost: (reply: () => Promise<Response>) => {
       postResponse = reply;
+    },
+    setActive: (value: boolean) => {
+      active = value;
+      return view();
     },
     switchActivity: (id: string) => {
       currentActivityId = id;
@@ -995,4 +1000,27 @@ test("签到成功但刷新失败的提示在恢复后解除，不残留失败�
     false,
   );
   assert.equal(ui.posts.length, 1, "恢复只重读，不能自动重放写请求");
+});
+
+test("隐藏对象页看板暂停自动读取，重新显示恢复轮询并保留搜索", async (t) => {
+  const ui = await mount(t, board(), new Date(end.getTime() - 600_000));
+  const search = () => ui.elements().find((element) => element.props.type === "search")!.props;
+  search().onChange!({ target: { value: "隔离夹具" } });
+  ui.view();
+  ui.setActive(false);
+  const pausedReads = ui.reads.length;
+  t.mock.timers.tick(60_000);
+  ui.fireWindowEvent("focus");
+  await setImmediate();
+  assert.equal(ui.reads.length, pausedReads);
+  assert.equal(search().value, "隔离夹具");
+  ui.setActive(true);
+  await setImmediate();
+  ui.view();
+  assert.ok(ui.reads.length > pausedReads);
+  assert.equal(search().value, "隔离夹具");
+  const resumedReads = ui.reads.filter((read) => read.view === "live").length;
+  t.mock.timers.tick(5_000);
+  await setImmediate();
+  assert.ok(ui.reads.filter((read) => read.view === "live").length > resumedReads);
 });

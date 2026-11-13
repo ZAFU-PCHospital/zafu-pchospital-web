@@ -97,10 +97,15 @@ after(async () => {
 
 type Route = (request: Request, context: { params: Promise<{ id: string }> }) => Promise<Response>;
 function read(handler: Route, cookie: string, id = activityId, suffix = "") {
-  return callRoute(handler, `http://localhost/api/v1/admin/repair-activities/${id}${suffix}`, {
-    params: { id },
-    headers: { cookie },
-  });
+  const namespace = handler === BOARD ? "member" : "admin";
+  return callRoute(
+    handler,
+    `http://localhost/api/v1/${namespace}/repair-activities/${id}${suffix}`,
+    {
+      params: { id },
+      headers: { cookie },
+    },
+  );
 }
 
 dbTest("对象摘要：无档案管理员与活动成员可读，匿名401、无权限403、缺失/删除404", async () => {
@@ -168,13 +173,19 @@ dbTest("对象页页签数据：无档案管理员可读名单/出勤/黑名单�
 });
 
 dbTest("无档案管理员可签到/撤回，审计保留用户归属；本人接待仍要求有效成员", async () => {
-  const invoke = (handler: Route, cookie: string, body: unknown) =>
-    callRoute(handler, `http://localhost/api/v1/member/repair-activities/${activityId}`, {
-      method: "POST",
-      params: { id: activityId },
-      headers: { cookie },
-      body,
-    });
+  const invoke = (handler: Route, cookie: string, body: unknown) => {
+    const action = handler === CHECK_IN ? "check-in" : handler === WITHDRAW ? "withdraw" : "serve";
+    return callRoute(
+      handler,
+      `http://localhost/api/v1/member/repair-activities/${activityId}/${action}`,
+      {
+        method: "POST",
+        params: { id: activityId },
+        headers: { cookie },
+        body,
+      },
+    );
+  };
   assert.equal(
     (await invoke(CHECK_IN, memberCookie, { registrationIds: [registrationId] })).status,
     403,
