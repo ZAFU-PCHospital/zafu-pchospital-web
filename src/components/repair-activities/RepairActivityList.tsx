@@ -134,6 +134,8 @@ export function RepairActivityList() {
         message={message}
         retryLabel={repairActivitiesPage.reload}
         onRetry={() => loadPage(1, "initial")}
+        backHref={repairActivitiesPage.joinHref}
+        backLabel={repairActivitiesPage.joinCta}
       />
     );
   }
@@ -142,7 +144,12 @@ export function RepairActivityList() {
       <EmptyState
         title={repairActivitiesPage.empty}
         action={
-          <Button onClick={() => void loadPage(1, "initial")}>{repairActivitiesPage.reload}</Button>
+          <div className="flex flex-wrap items-center gap-s-3">
+            <Button href={repairActivitiesPage.joinHref}>{repairActivitiesPage.joinCta}</Button>
+            <Button variant="ghost" onClick={() => void loadPage(1, "initial")}>
+              {repairActivitiesPage.reload}
+            </Button>
+          </div>
         }
       />
     );

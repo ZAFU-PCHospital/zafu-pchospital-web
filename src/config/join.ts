@@ -238,15 +238,19 @@ export const joinNotice = {
   ],
 } as const;
 
-/** 招新须知：四项已由社团确认的内容（issue #382） */
+/** 招新须知：六项已确认内容（issue #382），账号说明取自实际发放流程 */
 export const joinNoticeItems: readonly JoinItem[] = [
   {
     title: "招新时间窗口",
     description: "每学期于「百团大战」前后开展招新，具体时间请加群获取。",
   },
   {
-    title: "报名与结果通知",
-    description: "提交登记信息后扫码加入招新群；后续会安排一次简单面试，结果当面公布。",
+    title: "报名与截止",
+    description: "填写登记信息即可报名，提交后扫码加入招新群；报名截止时间以招新群公告为准。",
+  },
+  {
+    title: "面试与结果",
+    description: "报名后会安排一次简单面试，面试结果当面公布。",
   },
   {
     title: "面试与培训安排",
@@ -256,5 +260,10 @@ export const joinNoticeItems: readonly JoinItem[] = [
   {
     title: "值班时长要求",
     description: "没有最低值班时长要求；新人只需确保参加集体培训，后续维修活动可自愿参加。",
+  },
+  {
+    title: "账号发放与首次登录",
+    description:
+      "面试通过后，系统会按报名时填写的 QQ 号开通账号，初始密码为 QQ 号后 6 位；首次登录后需按页面提示修改密码。",
   },
 ];
