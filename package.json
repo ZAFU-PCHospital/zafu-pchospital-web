@@ -36,7 +36,8 @@
     "repair:photos:orphans": "tsx --env-file=.env tools/repair-photo-orphans.ts",
     "test": "tsx --test tests/**/*.test.ts",
     "test:unit": "tsx --test tests/unit/**/*.test.ts",
-    "test:db": "tsx --env-file=.env --test --test-concurrency=1 tests/integration/**/*.test.ts"
+    "test:db": "tsx --env-file=.env --test --test-concurrency=1 tests/integration/**/*.test.ts",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@prisma/adapter-mariadb": "7.10.1",
@@ -51,7 +52,9 @@
     "sharp": "0.35.4"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.13.0",
     "@eslint/eslintrc": "^3.3.1",
+    "@playwright/test": "^1.65.0",
     "@tailwindcss/postcss": "^4.1.13",
     "@types/node": "^22.15.3",
     "@types/nodemailer": "8.0.2",

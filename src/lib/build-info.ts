@@ -3,7 +3,7 @@
  *
  * `NEXT_PUBLIC_BUILD_COMMIT` 由 `next.config.ts` 在构建期注入：优先取环境变量
  * `BUILD_COMMIT_SHA`，否则在仓库里执行 `git rev-parse HEAD`；两者都拿不到时为空串，
- * 页面显示「未知」，不猜版本。只在后台渲染，不进入公开页面。
+ * 页面显示「未知」，遥测也不伪造版本。
  */
 const COMMIT_PATTERN = /^[0-9a-f]{7,40}$/i;
 

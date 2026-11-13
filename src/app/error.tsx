@@ -5,6 +5,7 @@ import { useEffect } from "react";
 import { Container } from "@/components/layout/Container";
 import { Button } from "@/components/ui/Button";
 import { routeErrorPage } from "@/config/errors";
+import { reportClientError } from "@/lib/telemetry/client";
 
 /**
  * 路由级错误边界
@@ -25,6 +26,7 @@ export default function Error({
 }) {
   useEffect(() => {
     console.error(error);
+    reportClientError(error, "route");
   }, [error]);
 
   return (

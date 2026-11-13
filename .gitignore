@@ -63,6 +63,10 @@ public/_originals/
 # M2 本地维修照片存储（生产使用持久化共享卷）
 /storage/
 
+# E2E（Playwright）运行产物：截图、trace、HTML 报告与夹具清单
+/tests/e2e/.artifacts/
+/tests/e2e/.report/
+
 # 本机部署通知记录与私密凭证（凭证通过 WHALE_NOTIFY_CONFIG 指定）
 /.runtime/deploy-notifications/
 DEPLOY_NOTIFY.private.json

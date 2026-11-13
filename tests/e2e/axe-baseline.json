@@ -1,0 +1,15 @@
+{
+  "recordedAt": "2026-11-13",
+  "tool": "axe-core（wcag2a / wcag2aa / wcag21a / wcag21aa）",
+  "routes": {
+    "/": [
+      "color-contrast"
+    ],
+    "/login": [],
+    "/repair-activities": [
+      "color-contrast"
+    ],
+    "/repair-activities/[id]": [],
+    "/admin/members": []
+  }
+}
