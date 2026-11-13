@@ -238,10 +238,23 @@ export const joinNotice = {
   ],
 } as const;
 
-/** 需要社团确认后再补写的字段 */
-export const joinPendingFields: readonly string[] = [
-  "本学期招新时间窗口",
-  "登记信息的接收方式与截止时间",
-  "面试与跟岗的具体安排",
-  "成员最低值班时长要求",
+/** 招新须知：四项已由社团确认的内容（issue #382） */
+export const joinNoticeItems: readonly JoinItem[] = [
+  {
+    title: "招新时间窗口",
+    description: "每学期于「百团大战」前后开展招新，具体时间请加群获取。",
+  },
+  {
+    title: "报名与结果通知",
+    description: "提交登记信息后扫码加入招新群；后续会安排一次简单面试，结果当面公布。",
+  },
+  {
+    title: "面试与培训安排",
+    description:
+      "每学期招新面试结束后会安排 1–2 次集体培训，欢迎踊跃参加；参加后即可参与维修活动。",
+  },
+  {
+    title: "值班时长要求",
+    description: "没有最低值班时长要求；新人只需确保参加集体培训，后续维修活动可自愿参加。",
+  },
 ];

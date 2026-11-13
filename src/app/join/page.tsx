@@ -11,15 +11,15 @@ import {
   joinExpectations,
   joinFlow,
   joinNotice,
+  joinNoticeItems,
   joinPage,
-  joinPendingFields,
   joinSections,
 } from "@/config/join";
 
 export const metadata: Metadata = {
   title: "加入我们",
   description:
-    "浙江农林大学电脑医院招新：填写新社员登记信息并扫码加入招新群，以及我们希望新成员具备什么、加入流程与当前的内容边界。",
+    "浙江农林大学电脑医院招新：填写新社员登记信息并扫码加入招新群，以及我们希望新成员具备什么、加入流程与加入须知。",
 };
 
 /**
@@ -102,11 +102,11 @@ export default function JoinPage() {
         </Reveal>
 
         <Reveal as="ol" className="principles mt-s-8" index={3}>
-          {joinPendingFields.map((field) => (
-            <li key={field}>
+          {joinNoticeItems.map((item) => (
+            <li key={item.title}>
               <div>
-                <strong>{field}</strong>
-                <p>待社团确认后补入本页。</p>
+                <strong>{item.title}</strong>
+                <p>{item.description}</p>
               </div>
             </li>
           ))}
