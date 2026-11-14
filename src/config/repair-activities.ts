@@ -42,7 +42,11 @@ export const repairActivitiesPage = {
     dismissError: "关闭",
     signupFailed: "报名失败",
     signupFailedTitle: "暂时无法报名",
-    signupFailedConfirm: "知道了",
+    /** 报名结果不占步骤条：进入终态后整块替换向导（issue #393）。 */
+    resultTitle: "报名结果",
+    duplicateTitle: "该手机号已报名",
+    fullResultTitle: "名额已满",
+    fullResultHint: "本场名额刚刚被报满，可稍后刷新或关注后续活动",
     queue: {
       title: "现场排队情况",
       refresh: "刷新",
@@ -61,13 +65,38 @@ export const repairActivitiesPage = {
     },
     category: "校园志愿服务",
     signupTitle: "报名参加",
-    lookupTitle: "已经报名？",
+    /** 报名卡抬头，与活动标题、时间地点一起构成单列报名区。 */
+    flowKicker: "活动报名",
+    /** 三步报名向导（issue #393）：第 1 步确认活动，第 2 步阅读须知，第 3 步填写信息。 */
+    steps: ["确认活动", "阅读须知", "填写信息"] as const,
+    stepTitles: ["确认活动与时间", "阅读报名须知与免责声明", "填写报名信息"] as const,
+    stepLeads: [
+      "查看活动安排与报名时间，确认无误后开始报名",
+      "请完整阅读以下内容，勾选同意后才能继续",
+    ] as const,
+    stepLabel: "报名步骤",
+    stepIndex: "第 {index} 步",
+    stepDoneSuffix: "，已完成",
+    stepCurrentSuffix: "，当前步骤",
+    flowLocked: "报名尚未开始，报名流程暂未解锁",
+    flowLockedFull: "当前名额已满，报名流程未开放",
+    flowLockedClosed: "报名已截止，报名流程已关闭",
+    flowLockedEnded: "活动已结束，报名流程已关闭",
+    startSignup: "立即报名",
+    continueSignup: "继续报名",
+    previousStep: "上一步",
+    nextStep: "下一步",
+    reviewNotice: "回看",
+    consentSummary: "已同意《报名须知》和《免责声明》",
+    consentSummaryMissing: "尚未同意《报名须知》和《免责声明》",
+    submitting: "提交中…",
+    lookupEntry: "已报名？查询 / 修改报名",
+    lookupTitle: "查询 / 修改报名",
     lookupHint: "使用报名时的姓名与手机号查询、修改故障类型或取消报名",
+    lookupBack: "返回",
     lookupPhonePlaceholder: "报名时使用的手机号",
     lookupNamePlaceholder: "报名时填写的姓名",
     lookupNotFound: "未找到报名记录，请核对姓名与电话，或联系管理员",
-    /** 查不到时别再重新报名：引导走查询 / 联系管理员。 */
-    contactAdminHint: "信息填错了？请联系 QQ 群管理员更正，不要重新报名",
     name: "姓名",
     namePlaceholder: "用于现场核对",
     phone: "手机号",
@@ -79,13 +108,10 @@ export const repairActivitiesPage = {
     submitSignup: "提交报名",
     submitLookup: "查询报名",
     submitUpdate: "保存故障类型",
-    signupSuccess: "请按时到场，可使用报名手机号查询记录。到场前请做好以下准备",
-    /** 报名成功后的常驻提示：弹层关闭后仍能看到。 */
-    registeredHint: "如需修改故障类型，可使用下方「已经报名？」查询",
     /** 本设备已提交过本场报名（issue #304）：服务端按签名 cookie 拦截重复填写。 */
     deviceRegisteredTitle: "本设备已提交过本场报名",
     deviceRegisteredHint:
-      "如需修改故障类型，请用下方「已经报名？」查询；姓名或电话填错请联系 QQ 群管理员，不要重复报名。",
+      "如需修改故障类型，请点击「查询本人记录」；姓名或电话填错请联系 QQ 群管理员，不要重复报名。",
     /** 设备状态结论出来前不渲染表单，避免慢网下「先填后收起」。 */
     deviceStatusChecking: "正在确认本设备是否已报名…",
     deviceRecheck: "重新检查报名状态",
@@ -97,13 +123,12 @@ export const repairActivitiesPage = {
     /** 回执与已提交面板都带故障类型（issue #304 讨论口径）。 */
     receiptIssueType: "故障类型：{type}",
     /** 同一手机号已报名时不再显示为失败，而是引导查询已有记录。 */
-    duplicateHint: "该手机号已报名本场活动，可使用下方「已经报名？」查询或修改故障类型",
+    duplicateHint: "该手机号已报名本场活动，可点击「查询本人记录」查看或修改故障类型",
     lookupMine: "查询本人记录",
     lookupRegisteredTitle: "你已报名成功",
     lookupStatusLabel: "当前状态：{status}",
     registrationNumber: "报名编号 {id}",
     receiptStatus: "报名状态：{status}",
-    confirmActivity: "活动",
     confirmIdentityHint: "请确认活动、姓名与手机号无误；报名成功后可凭借手机号查询",
     confirmEdit: "返回修改",
     phoneFormatHint: "请输入 11 位中国大陆手机号",
@@ -118,6 +143,7 @@ export const repairActivitiesPage = {
     lookupFailedRetry: "查询失败，请稍后再次查询，不要重复提交",
     lookupConfirmed: "已确认报名成功",
     precautionsTitle: "到场前，记好这四件事",
+    preparationNote: "报名成功后按此准备，现场核对更快",
     signupSuccessTitle: "报名成功",
     /** 报名成功凭条（issue #363）：一屏内可截图，字段名与提示统一在这里维护。 */
     receipt: {
@@ -126,14 +152,10 @@ export const repairActivitiesPage = {
       registeredAt: "报名时间",
       deviceModel: "机型",
       screenshotHint: "请截图保存，到场后出示此凭条",
-      preparationLabel: "到场准备",
       close: "关闭",
     },
-    signupConsentHint: "提交前会展示完整须知，征得同意后才会报名",
-    fullPrecautions: "完整报名须知与免责声明 · {count} 条",
-    serviceTitle: "服务说明",
     serviceHint: "社团提供免费志愿服务。能否修复、维修时长以现场检查为准；特殊拆机需求请提前咨询",
-    cancelHint: "活动开始前可在上方查询报名功能中自助取消报名；活动开始后请联系 QQ 群管理员取消",
+    cancelHint: "活动开始前可在「查询 / 修改报名」中自助取消；活动开始后请联系 QQ 群管理员取消",
     preparation: [
       { icon: "hardDrive", title: "备份数据", description: "送修前自行备份重要文件" },
       { icon: "plug", title: "携带电源", description: "请带上设备的电源适配器" },
@@ -154,6 +176,19 @@ export const repairActivitiesPage = {
     countdownUnits: { days: "天", hours: "时", minutes: "分", seconds: "秒" },
     /** 块下只提示开始时间：截止时间由上方「报名时间」承载，避免整行重复。 */
     countdownOpensHint: "{open} 开始报名",
+    /** 报名中倒计时到截止时刻，归零后同样自动刷新状态。 */
+    countdownClosePrefix: "距离报名截止",
+    countdownCloseHint: "提交前请确认活动时间与设备信息",
+    /** 名额已满 / 已截止 / 已结束不再显示数字，用文字状态代替。 */
+    countdownFullLabel: "报名名额",
+    countdownFullValue: "已满",
+    countdownFullHint: "当前没有可用名额",
+    countdownClosedLabel: "报名状态",
+    countdownClosedValue: "已截止",
+    countdownClosedHint: "报名通道已关闭",
+    countdownEndedLabel: "活动状态",
+    countdownEndedValue: "已结束",
+    countdownEndedHint: "活动已结束",
     /** 倒计时归零、状态转为可报名时对读屏的一次性播报。 */
     countdownOpened: "报名已开放，现在可以提交报名",
     closedDisabled: "报名已截止",
@@ -168,10 +203,10 @@ export const repairActivitiesPage = {
     cancelling: "取消中…",
     cancelSuccess: "报名已取消，名额已释放",
     cancelStarted: "活动已开始，不能自助取消，请联系 QQ 群管理员",
-    /** 报名前的免责声明：必须点「我已阅读并同意」才能提交，服务端同样强制。 */
+    /** 报名前的免责声明：第二步必须勾选同意，服务端同样强制。 */
     consent: {
-      title: "报名须知与免责声明",
       subtitle: "提交报名前请阅读以下内容；不同意则无法提交",
+      noticeTitle: "报名须知与免责声明",
       clauses: [
         "报名需填写真实姓名与常用手机号：姓名用于现场核对，手机号用于查询报名与接收活动变更通知。",
         "本活动由社团成员提供免费志愿服务，不收取费用；设备能否修复、需要多长时间，以现场检查结果为准。",
@@ -183,7 +218,8 @@ export const repairActivitiesPage = {
         "如果想要取消报名请联系 QQ 群内管理员，把名额留给需要的人。",
         "报名信息只用于本场活动的组织与到场核对，不对外公开。",
       ],
-      agree: "我已阅读并同意",
+      agree: "我已阅读并同意《报名须知》和《免责声明》",
+      required: "请先阅读并勾选同意报名须知",
     },
   },
   issueTypes: [

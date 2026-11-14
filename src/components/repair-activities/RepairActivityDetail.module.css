@@ -1,9 +1,29 @@
 .detail {
   display: grid;
   min-width: 0;
-  gap: var(--s-6);
+  inline-size: 100%;
+  max-inline-size: 820px;
+  margin-inline: auto;
+  gap: var(--s-5);
   padding-top: var(--s-3);
   overflow-wrap: anywhere;
+}
+
+/* 报名卡与下方准备说明作为一组；宽屏在首屏剩余高度内垂直居中，
+   内容更长时 align-content: safe center 自然退回顶部，不裁切也不锁高。 */
+.stage {
+  display: grid;
+  align-content: start;
+  gap: var(--s-5);
+  min-width: 0;
+}
+
+@media (min-width: 1100px) {
+  .stage {
+    align-content: safe center;
+    min-block-size: calc(100vh - 9rem);
+    min-block-size: calc(100svh - 9rem);
+  }
 }
 
 .breadcrumb {
@@ -15,58 +35,58 @@
   color: var(--accent);
 }
 
-.overview {
-  padding-block: var(--s-3) var(--s-6);
-  border-bottom: 1px solid var(--line);
+/* 报名卡：活动抬头、步骤条与单步面板共用一张单列居中的卡。 */
+.flowCard {
+  min-width: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  background: var(--surface-1);
+  overflow: hidden;
 }
 
-.category {
-  margin: 0 0 var(--s-2);
+.cardHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s-4);
+  padding: var(--s-5) var(--s-6);
+  border-bottom: 1px dashed var(--line);
+}
+
+.cardIntro {
+  display: grid;
+  gap: var(--s-1);
+  min-width: 0;
+}
+
+.kicker {
+  margin: 0;
   color: var(--ink-3);
-  font-size: var(--t-sm);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: var(--t-xs);
+  letter-spacing: 0.08em;
 }
 
 .title {
   min-width: 0;
   margin: 0;
   color: var(--ink);
-  font-size: clamp(1.5rem, 3vw, 2rem);
+  font-size: clamp(1.25rem, 2.5vw, 1.5rem);
   line-height: 1.35;
 }
 
-.meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--s-3) var(--s-6);
-  margin: var(--s-5) 0 0;
-  color: var(--ink-3);
-  font-size: var(--t-sm);
+.cardBody {
+  padding: var(--s-5) var(--s-6);
 }
 
-.meta > div {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--s-1) var(--s-2);
-}
-
-.meta dd {
-  margin: 0;
-}
-
-.layout {
+.deviceCheck {
   display: grid;
-  gap: var(--s-6);
-  align-items: start;
+  justify-items: start;
+  gap: var(--s-3);
 }
 
-.layout > *,
-.actions > * {
-  min-width: 0;
-}
-
-.layout :global(.admin-panel__title) {
-  font-size: var(--t-lg);
-  line-height: 1.35;
+.deviceCheck > :global(.muted) {
+  margin: 0;
 }
 
 .preparation {
@@ -87,15 +107,13 @@
   color: var(--accent);
 }
 
-.preparation h3,
-.service h3 {
+.preparation h3 {
   margin: 0 0 var(--s-2);
   font-size: 1rem;
   font-weight: 600;
 }
 
-.preparation p,
-.service p {
+.preparation p {
   margin: 0;
   color: var(--ink-3);
   font-size: var(--t-sm);
@@ -122,75 +140,101 @@
   }
 }
 
-.service {
-  padding-block: var(--s-5);
-}
-
-.fullPrecautions {
-  border-block: 1px solid var(--line);
-  font-size: var(--t-sm);
-}
-
-.fullPrecautions summary {
-  padding-block: var(--s-4);
-  cursor: pointer;
-  font-weight: 600;
-}
-
-.fullPrecautions > ol {
-  padding-bottom: var(--s-4);
-}
-
-.actions,
-.fields {
+/* 卡片下方的到场准备：标题行 + 四张虚线说明卡，与报名卡同宽成组。 */
+.preparationSection {
   display: grid;
-  gap: var(--s-5);
+  gap: var(--s-3);
+  min-width: 0;
 }
 
-.actions > section > :global(.admin-panel__title) {
-  margin-bottom: var(--s-5);
+.preparationHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s-1) var(--s-3);
+  padding: 0 var(--s-1) var(--s-3);
+  border-bottom: 1px dashed var(--line-strong);
 }
 
-.actions :global(.field__input) {
+.preparationTitle {
+  margin: 0;
+  font-size: var(--t-sm);
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.preparationNote {
+  margin: 0;
+  color: var(--ink-3);
+  font-size: var(--t-xs);
+  line-height: 1.6;
+}
+
+.preparationCards {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--s-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.preparationCards li {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--s-2);
+  min-width: 0;
+  padding: var(--s-4);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--r-mid);
   background: var(--surface-1);
 }
 
-.required {
+.preparationCardIcon {
+  display: grid;
+  place-items: center;
+  inline-size: 1.5rem;
+  block-size: 1.5rem;
+  border-radius: 6px;
+  background: var(--surface-2);
   color: var(--accent);
 }
 
-.actions :global(.signup__actions) {
-  margin-top: 0;
-  padding-top: 0;
-  border-top: 0;
+.preparationCardIcon svg {
+  inline-size: 1rem;
+  block-size: 1rem;
 }
 
-.actions :global(.signup__actions .btn) {
-  width: 100%;
-  justify-content: center;
-}
-
-.actions :global(.muted) {
-  font-size: var(--t-sm);
-}
-
-.signupResult {
-  display: grid;
-  gap: var(--s-1);
-  padding: var(--s-3);
-  border: 1px solid var(--status-success-line);
-  border-radius: var(--r-mid);
-  background: var(--status-success-wash);
-  color: var(--ink-2);
-  font-size: var(--t-sm);
-}
-
-.signupResult strong {
-  color: var(--status-success-deep);
-}
-
-.signupResult p {
+.preparationCards h3 {
   margin: 0;
+  font-size: var(--t-sm);
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.preparationCards p {
+  margin: var(--s-1) 0 0;
+  color: var(--ink-3);
+  font-size: var(--t-xs);
+  line-height: 1.55;
+}
+
+@media (max-width: 900px) {
+  .preparationCards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 360px) {
+  .preparationCards {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.required {
+  color: var(--accent-deep);
 }
 
 .signupCode {
@@ -200,79 +244,394 @@
   overflow-wrap: anywhere;
 }
 
-.signupPending {
+/* 报名终态（issue #393）：结果整块替换向导，不占步骤条。 */
+.signupTerminal {
   display: grid;
-  gap: var(--s-2);
-  padding: var(--s-3);
-  border: 1px solid var(--status-warning-line);
-  border-radius: var(--r-mid);
-  background: var(--status-warning-wash);
-  color: var(--ink-2);
-  font-size: var(--t-sm);
+  gap: var(--s-4);
 }
 
-.signupPending strong {
+.resultPanel {
+  display: grid;
+  gap: var(--s-4);
+}
+
+.resultHead {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--s-1);
+}
+
+.resultMark {
+  display: grid;
+  place-items: center;
+  inline-size: 2.25rem;
+  block-size: 2.25rem;
+  margin-bottom: var(--s-1);
+  border-radius: 50%;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.resultMarkSuccess {
+  color: var(--status-success-deep);
+  background: var(--status-success-wash);
+}
+
+.resultMarkError {
   color: var(--status-warning-deep);
+  background: var(--status-warning-wash);
 }
 
-.signupPending p {
+.resultTitle {
   margin: 0;
+  font-size: var(--t-md);
+  line-height: 1.4;
 }
 
-.signupPendingActions {
+.resultDesc {
+  margin: 0;
+  color: var(--ink-3);
+  font-size: var(--t-sm);
+  line-height: 1.7;
+}
+
+.resultActions {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: var(--s-2);
 }
 
-.signupNotice {
+/* 三步向导：步骤条 + 单步面板。步骤条是卡头与卡体之间的一条虚线带。 */
+.wizard {
   display: grid;
-  gap: var(--s-2);
-  padding-left: var(--s-3);
-  border-left: 2px solid var(--accent);
-  color: var(--ink-2);
-  font-size: var(--t-sm);
-}
-
-.signupNotice p {
-  margin: 0;
-}
-
-.signupConfirm {
-  display: grid;
-  gap: var(--s-1);
-  padding: var(--s-3);
-  border: 1px solid var(--line);
-  border-radius: var(--r-mid);
-  background: var(--surface-1);
-  font-size: var(--t-sm);
-}
-
-.signupConfirm p {
-  margin: 0;
-}
-
-.signupConfirmList {
-  display: grid;
-  gap: var(--s-1);
-  margin: 0;
-}
-
-.signupConfirmList > div {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
   gap: var(--s-3);
 }
 
-.signupConfirmList dt {
-  color: var(--ink-3);
+.stepper {
+  display: flex;
+  align-items: center;
+  margin: 0;
+  padding: var(--s-3) var(--s-6);
+  list-style: none;
+  border-bottom: 1px dashed var(--line);
 }
 
-.signupConfirmList dd {
+.step {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.step:not(:last-child) {
+  flex: 1;
+}
+
+.step:not(:last-child)::after {
+  content: "";
+  flex: 1;
+  min-width: 10px;
+  margin-inline: var(--s-2);
+  border-top: 1px dashed var(--line-strong);
+}
+
+.stepButton {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-width: 0;
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  color: var(--ink-3);
+  text-align: start;
+}
+
+.stepButton:disabled {
+  cursor: default;
+}
+
+.stepButton:not(:disabled) {
+  cursor: pointer;
+}
+
+.stepButton:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 4px;
+}
+
+.stepDone .stepButton {
+  color: var(--ink-2);
+}
+
+.stepCurrent .stepButton {
+  color: var(--ink);
+}
+
+.stepDot {
+  display: grid;
+  place-items: center;
+  inline-size: 24px;
+  block-size: 24px;
+  flex: 0 0 24px;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  background: var(--surface-1);
+  color: var(--ink-3);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: var(--t-xs);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.stepDone .stepDot {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-on);
+}
+
+.stepCurrent .stepDot {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--surface-1);
+}
+
+.stepFuture .stepDot {
+  border-style: dashed;
+}
+
+.stepText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  line-height: 1.2;
+}
+
+.stepIndex {
+  color: var(--ink-3);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: var(--t-xs);
+  letter-spacing: 0.06em;
+}
+
+.stepLabel {
+  font-size: var(--t-sm);
+  line-height: 1.35;
+}
+
+.flowLock {
+  margin: 0;
+  padding: var(--s-3) var(--s-6);
+  border-bottom: 1px dashed var(--line);
+  background: var(--surface-2);
+  color: var(--ink-3);
+  font-size: var(--t-sm);
+  line-height: 1.7;
+}
+
+.stepPanel {
+  display: grid;
+  gap: var(--s-3);
+}
+
+/* 作者样式的 display 会盖掉 UA 的 [hidden]，必须显式还原。 */
+.stepPanel[hidden] {
+  display: none;
+}
+
+.stepTitle {
+  margin: 0;
+  font-size: var(--t-md);
+  line-height: 1.35;
+}
+
+.stepTitle:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 4px;
+}
+
+.stepLead {
+  margin: calc(var(--s-1) * -1) 0 0;
+  color: var(--ink-3);
+  font-size: var(--t-sm);
+  line-height: 1.7;
+}
+
+.detailList {
+  margin: 0;
+  padding: 0 var(--s-4);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--r-mid);
+  background: var(--surface-2);
+}
+
+.detailRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s-4);
+  padding: var(--s-2) 0;
+  border-bottom: 1px dashed var(--line);
+}
+
+.detailRow:last-child {
+  border-bottom: 0;
+}
+
+.detailRow dt {
+  flex: none;
+  color: var(--ink-3);
+  font-size: var(--t-sm);
+}
+
+.detailRow dd {
+  margin: 0;
+  min-width: 0;
+  color: var(--ink);
+  font-size: var(--t-sm);
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+  overflow-wrap: anywhere;
+}
+
+.countdownBox {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-4);
+  padding: var(--s-3) var(--s-4);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--r-mid);
+  background: var(--surface-1);
+}
+
+.countdownMain {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.countdownLabel {
+  margin: 0;
+  color: var(--ink-3);
+  font-size: var(--t-xs);
+}
+
+.countdownValue {
   margin: 0;
   color: var(--ink);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: clamp(1.375rem, 4vw, 1.6875rem);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+}
+
+.countdownOpening {
+  margin: 0;
+  color: var(--ink);
+  font-size: var(--t-md);
   font-weight: 600;
-  overflow-wrap: anywhere;
+  line-height: 1.3;
+}
+
+.countdownHint {
+  max-inline-size: 230px;
+  margin: 0;
+  color: var(--ink-3);
+  font-size: var(--t-sm);
+  line-height: 1.6;
+  text-align: end;
+}
+
+.noticeBlock {
+  padding: var(--s-3) var(--s-4);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--r-mid);
+  background: var(--surface-2);
+}
+
+.noticeTitle {
+  margin: 0 0 var(--s-2);
+  font-size: var(--t-sm);
+  font-weight: 600;
+}
+
+.consentCheck {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-3);
+  padding: var(--s-3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-mid);
+  background: var(--surface-1);
+  font-size: var(--t-sm);
+  line-height: 1.6;
+  cursor: pointer;
+}
+
+.consentCheck input {
+  inline-size: 1rem;
+  block-size: 1rem;
+  margin-top: 2px;
+  flex: none;
+  accent-color: var(--accent);
+}
+
+.consentSummary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-2);
+  margin-top: var(--s-3);
+  padding: var(--s-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-mid);
+  color: var(--ink-3);
+  font-size: var(--t-xs);
+}
+
+.formGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s-4);
+  margin-top: var(--s-3);
+}
+
+.stepActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-3);
+  margin-top: var(--s-1);
+}
+
+.stepActions > :global(.btn) {
+  flex: 0 0 auto;
+}
+
+.textLink {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink-3);
+  font-size: var(--t-sm);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.textLink:hover {
+  color: var(--ink);
+}
+
+.textLink:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 4px;
 }
 
 .fullHint {
@@ -308,13 +667,45 @@
   color: var(--status-success-deep);
 }
 
-.lookup {
-  padding-top: var(--s-5);
-  border-top: 1px solid var(--line);
+.lookupView {
+  display: grid;
+  gap: var(--s-4);
 }
 
-.lookup > :global(.muted) {
-  margin-block: var(--s-3) var(--s-4);
+.lookupViewHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s-4);
+}
+
+.lookupViewTitle {
+  margin: 0 0 var(--s-1);
+  color: var(--ink);
+  font-size: var(--t-lg);
+  line-height: 1.35;
+}
+
+.lookupViewTitle:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 4px;
+}
+
+.lookupHint {
+  margin: 0;
+  color: var(--ink-3);
+  font-size: var(--t-sm);
+  line-height: 1.7;
+}
+
+.lookupBody {
+  display: grid;
+  gap: var(--s-4);
+}
+
+.lookupBody > :global(.muted) {
+  margin: 0;
+  font-size: var(--t-sm);
 }
 
 .queue {
@@ -377,10 +768,95 @@
   font-size: var(--t-sm);
 }
 
-@media (min-width: 1100px) {
-  .layout {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: var(--s-7);
+/* 窄屏：步骤条与面板收紧，表单与按钮改为单列。 */
+@media (max-width: 720px) {
+  .cardHead {
+    flex-direction: column;
+    gap: var(--s-2);
+    padding: var(--s-4) var(--s-4);
+  }
+
+  .cardBody {
+    padding: var(--s-4);
+  }
+
+  .stepper {
+    padding: var(--s-3) var(--s-4);
+  }
+
+  .step:not(:last-child)::after {
+    min-width: 6px;
+    margin-inline: 5px;
+  }
+
+  .stepButton {
+    gap: 6px;
+  }
+
+  .stepIndex {
+    display: none;
+  }
+
+  .stepLabel {
+    font-size: var(--t-xs);
+  }
+
+  .stepDot {
+    inline-size: 22px;
+    block-size: 22px;
+    flex-basis: 22px;
+  }
+
+  .flowLock {
+    padding: var(--s-3) var(--s-4);
+  }
+
+  .countdownBox {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--s-1);
+  }
+
+  .countdownHint {
+    max-inline-size: none;
+    text-align: start;
+  }
+
+  .detailRow {
+    align-items: flex-start;
+  }
+
+  .detailRow dd {
+    max-inline-size: 62%;
+    text-align: end;
+  }
+
+  .formGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .consentSummary {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .stepActions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .stepActions > :global(.btn) {
+    inline-size: 100%;
+    justify-content: center;
+  }
+
+  .stepActions > .textLink {
+    align-self: center;
+  }
+
+  .lookupViewHead {
+    flex-direction: column;
+    gap: var(--s-2);
   }
 }
 
@@ -616,44 +1092,6 @@
   text-align: center;
 }
 
-.receiptPrep {
-  display: grid;
-  gap: var(--s-2);
-  animation: receipt-block-in var(--d-mid) var(--ease-quart) 180ms both;
-}
-
-.receiptPrepLabel {
-  margin: 0;
-  color: var(--ink-3);
-  font-size: var(--t-xs);
-}
-
-/* 到场准备：两列图标 + 标题，不再套一层卡片。 */
-.preparationCompact {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--s-2) var(--s-3);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.preparationCompact li {
-  display: flex;
-  align-items: center;
-  gap: var(--s-2);
-  min-width: 0;
-  color: var(--ink-2);
-  font-size: var(--t-sm);
-}
-
-.preparationCompact svg {
-  inline-size: 1rem;
-  block-size: 1rem;
-  flex: none;
-  color: var(--accent);
-}
-
 @keyframes receipt-block-in {
   from {
     opacity: 0;
@@ -698,8 +1136,7 @@
 @media (prefers-reduced-motion: reduce) {
   .successHero,
   .receiptActivity,
-  .receiptHolder,
-  .receiptPrep {
+  .receiptHolder {
     animation: receipt-fade-in var(--d-ui) ease both;
   }
 
