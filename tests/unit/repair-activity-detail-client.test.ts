@@ -35,6 +35,24 @@ function findElement(
   }
 }
 
+function findElements(
+  node: ReactNode,
+  predicate: (element: ReactElement<Record<string, unknown>>) => boolean,
+): ReactElement<Record<string, unknown>>[] {
+  const matches: ReactElement<Record<string, unknown>>[] = [];
+  const visit = (current: ReactNode) => {
+    if (Array.isArray(current)) {
+      current.forEach(visit);
+      return;
+    }
+    if (!React.isValidElement<Record<string, unknown>>(current)) return;
+    if (predicate(current)) matches.push(current);
+    visit(current.props.children as ReactNode);
+  };
+  visit(node);
+  return matches;
+}
+
 function pageAlerts(node: ReactNode) {
   const alerts: ReactElement<{ message: string; closeLabel?: string; onClose?: () => void }>[] = [];
   const visit = (current: ReactNode) => {
@@ -373,6 +391,23 @@ async function mount(
     const raw = sessionStore.get(`zafu-pchospital:repair-activity-signup-draft:${activityId}`);
     return raw ? (JSON.parse(raw) as Record<string, string>) : null;
   };
+  const openLookupView = () => {
+    const existing = findElement(
+      view(),
+      (element) => element.props["aria-label"] === repairActivitiesPage.detail.lookupTitle,
+    );
+    if (existing) return;
+    const entry = findElement(
+      view(),
+      (element) =>
+        (element.props.children === repairActivitiesPage.detail.lookupEntry ||
+          element.props.children === repairActivitiesPage.detail.lookupMine) &&
+        typeof element.props.onClick === "function",
+    );
+    assert.ok(entry, "找不到查询本人记录的入口");
+    (entry.props.onClick as () => void)();
+    view();
+  };
   return {
     view,
     requests,
@@ -383,6 +418,7 @@ async function mount(
     agreeConsent,
     openSignupForm,
     submitForm,
+    openLookup: openLookupView,
     submitSignup(overrides: Record<string, string> = {}) {
       openSignupForm(overrides);
       submitForm();
@@ -394,6 +430,7 @@ async function mount(
     signupNameNode: () => signupNameNode,
     storedDraft,
     requestLookup(phone: string) {
+      openLookupView();
       const form = findElement(
         view(),
         (element) => element.props["aria-label"] === repairActivitiesPage.detail.lookupTitle,
@@ -601,6 +638,15 @@ test("切换活动时清空查询状态并中止在途查询", async (t) => {
   assert.ok(content.includes("新活动"));
   assert.equal(content.includes(copy.lookupRegisteredTitle), false, "旧查询结果不能写入新活动");
   assert.equal(content.includes(registration.name), false);
+  assert.equal(
+    findElement(
+      ui.view(),
+      (element) => element.props["aria-labelledby"] === "repair-activity-lookup-title",
+    ),
+    undefined,
+    "切换活动后收起查询视图",
+  );
+  ui.openLookup();
   const lookupSection = findElement(
     ui.view(),
     (element) => element.props["aria-labelledby"] === "repair-activity-lookup-title",
@@ -619,20 +665,30 @@ test("三步向导先确认活动、再阅读须知，勾选同意后才进入�
   const copy = repairActivitiesPage.detail;
   const ui = await mount(t);
   await ui.finish(0, { ...activity, status: "OPEN" });
-  const panel = findElement(
-    ui.view(),
-    (element) => element.props["aria-labelledby"] === "repair-activity-precautions-title",
-  );
-  assert.ok(panel);
-  const { RepairActivityPrecautions } =
-    await import("../../src/components/repair-activities/RepairActivityPrecautions");
   const { RepairActivityPreparation } =
     await import("../../src/components/repair-activities/RepairActivityPreparation");
-  assert.ok(findElement(panel, (element) => element.type === RepairActivityPreparation));
-  const fullNotice = findElement(panel, (element) => element.type === "details");
-  assert.ok(fullNotice);
-  assert.equal(fullNotice.props.open, undefined, "默认折叠完整须知");
-  assert.ok(findElement(fullNotice, (element) => element.type === RepairActivityPrecautions));
+  const preparationSection = findElement(
+    ui.view(),
+    (element) => element.props["aria-labelledby"] === "repair-activity-preparation-title",
+  );
+  assert.ok(preparationSection, "卡片下方展示到场准备说明区");
+  const preparationCardsElement = findElement(
+    preparationSection,
+    (element) => element.type === RepairActivityPreparation,
+  );
+  assert.ok(preparationCardsElement, "下方说明区渲染到场准备卡");
+  assert.equal(preparationCardsElement.props.layout, "cards");
+  const preparationCards = RepairActivityPreparation(preparationCardsElement.props as never);
+  assert.equal(
+    findElements(preparationCards, (element) => element.type === "li").length,
+    4,
+    "下方说明区有且只有四张准备卡",
+  );
+  for (const item of repairActivitiesPage.detail.preparation) {
+    assert.ok(text(preparationCards).includes(item.title), `下方说明区缺到场准备：${item.title}`);
+  }
+  const { RepairActivityPrecautions } =
+    await import("../../src/components/repair-activities/RepairActivityPrecautions");
   assert.equal(
     text(RepairActivityPrecautions()),
     repairActivitiesPage.detail.consent.clauses.join(""),
@@ -642,6 +698,11 @@ test("三步向导先确认活动、再阅读须知，勾选同意后才进入�
   const step1 = ui.stepElement(1)!;
   assert.ok(text(step1).includes(copy.stepTitles[0]));
   assert.ok(text(step1).includes(activity.location!), "第一步摘要带地点");
+  assert.equal(
+    text(ui.view()).split("2026/10/24 18:00").length - 1,
+    1,
+    "活动时间只在第一步出现一次",
+  );
   assert.equal(ui.requests.length, 1, "尚未开始填写时不发送报名请求");
 
   ui.clickInStep(1, copy.startSignup);
@@ -745,6 +806,7 @@ test("报名未开始时锁住向导，不进入须知并保留查询入口", as
   (cta!.props.onClick as () => void)();
   ui.view();
   assert.equal(ui.visibleStep(), 1, "锁定状态不能进入须知");
+  ui.openLookup();
   assert.ok(
     findElement(ui.view(), (element) => element.props.id === "repair-activity-lookup-name"),
     "锁定状态仍可查询本人记录",
@@ -841,7 +903,7 @@ test("步骤条可回退，返回时保留已填内容与同意状态", async (t
   assert.equal(ui.visibleStep(), 2, "第三步可返回须知");
 });
 
-test("报名成功后直接渲染一屏凭条：活动名、起止时间、地点与一行到场准备", async (t) => {
+test("报名成功后凭条保留活动与报名信息，四件到场准备只在下方说明区", async (t) => {
   const ui = await mount(t);
   await ui.finish(0, {
     ...activity,
@@ -880,7 +942,28 @@ test("报名成功后直接渲染一屏凭条：活动名、起止时间、地�
     RepairActivityReceipt(receipt.props as never),
     (element) => element.type === RepairActivityPreparation,
   );
-  assert.equal(preparation?.props.layout, "compact", "凭条下方到场准备用紧凑两列");
+  assert.equal(preparation, undefined, "凭条内不再重复到场准备");
+  const preparationSection = findElement(
+    ui.view(),
+    (element) => element.props["aria-labelledby"] === "repair-activity-preparation-title",
+  );
+  assert.ok(preparationSection, "成功终态卡片下方仍有到场准备说明区");
+  const preparationCardsElement = findElement(
+    preparationSection,
+    (element) => element.type === RepairActivityPreparation,
+  );
+  assert.ok(preparationCardsElement, "下方说明区渲染到场准备卡");
+  assert.equal(preparationCardsElement.props.layout, "cards");
+  const preparationCards = RepairActivityPreparation(preparationCardsElement.props as never);
+  assert.equal(
+    findElements(preparationCards, (element) => element.type === "li").length,
+    4,
+    "下方说明区有且只有四张准备卡",
+  );
+  const preparationText = text(preparationCards);
+  for (const item of repairActivitiesPage.detail.preparation) {
+    assert.ok(preparationText.includes(item.title), `下方说明区缺到场准备：${item.title}`);
+  }
   assert.equal(
     findElement(
       RepairActivityReceipt(receipt.props as never),
@@ -1164,7 +1247,14 @@ test("待确认时主查询到本人记录会清除待确认并展示凭条", as
   assert.ok(text(ui.view()).includes(copy.signupPendingTitle));
   assert.ok(text(ui.view()).includes(copy.pendingRestart));
 
-  ui.requestLookup("13800000000");
+  const checkButton = findElement(
+    ui.view(),
+    (element) =>
+      element.props.children === copy.checkResult && typeof element.props.onClick === "function",
+  );
+  assert.ok(checkButton, "待确认状态提供查询报名结果");
+  (checkButton.props.onClick as () => void)();
+  ui.view();
   assert.equal(ui.requests[index + 2].url, "/api/v1/repair-activities/a/registrations/lookup");
   assert.ok(ui.requests[index + 2].init.signal instanceof AbortSignal, "主查询带超时/中止信号");
   ui.requests[index + 2].finish(Response.json({ success: true, data: lookupRegistration }));
@@ -1461,7 +1551,11 @@ test("报名失败进入结果终态，保留输入以便重试，不显示成�
   let content = text(ui.view());
   assert.ok(content.includes(copy.signupFailedTitle), "报名失败进入结果终态");
   assert.ok(content.includes("名额已满"));
-  assert.equal(content.includes(copy.signupSuccessTitle), false);
+  assert.equal(
+    findElement(ui.view(), (element) => element.props.children === copy.signupSuccessTitle),
+    undefined,
+    "失败终态不显示报名成功标题",
+  );
   assert.equal(ui.visibleStep(), null, "结果终态收起向导");
   assert.equal(ui.storedDraft()?.name, "测试客户", "失败时保留已填写的草稿");
   assert.equal(ui.requests.length, 2, "失败时不刷新活动或再次提交");
@@ -1555,9 +1649,16 @@ test("本设备已提交时收起报名表单，只保留查询入口", async (t
     undefined,
     "已提交设备不再渲染报名表单",
   );
+  assert.equal(
+    findElement(ui.view(), (element) => element.props.id === "repair-activity-lookup-name"),
+    undefined,
+    "查询表单收在卡内，不默认展开",
+  );
+  assert.ok(text(ui.view()).includes(copy.lookupMine), "已提交面板保留查询入口");
+  ui.openLookup();
   assert.ok(
     findElement(ui.view(), (element) => element.props.id === "repair-activity-lookup-name"),
-    "查询表单仍在",
+    "打开后可在卡内查询本人记录",
   );
   assert.equal(ui.storedDraft(), null, "收起表单时清掉残留草稿");
 });

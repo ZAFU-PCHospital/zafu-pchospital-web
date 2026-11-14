@@ -122,14 +122,14 @@ test("跨天区间两端都显示完整日期时间；结束时间为空时只�
   assert.equal(legacy.includes("–"), false, "没有结束时间就不拼区间");
 });
 
-test("到场准备用紧凑两列，只保留标题不展开说明", async () => {
+test("到场准备卡展示标题与一行说明", async () => {
   const { RepairActivityPreparation } =
     await import("../../src/components/repair-activities/RepairActivityPreparation");
-  const compact = text(RepairActivityPreparation({ layout: "compact" }));
+  const cards = text(RepairActivityPreparation({ layout: "cards" }));
 
   for (const item of page.detail.preparation) {
-    assert.ok(compact.includes(item.title), item.title);
-    assert.equal(compact.includes(item.description), false, "凭条里只保留标题");
+    assert.ok(cards.includes(item.title), item.title);
+    assert.ok(cards.includes(item.description), `${item.title} 说明`);
   }
 });
 

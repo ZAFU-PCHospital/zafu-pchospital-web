@@ -124,6 +124,16 @@ function clearSignupDraft(activityId: string) {
   }
 }
 
+function formatCountdownClock(parts: {
+  days: number;
+  hours: string;
+  minutes: string;
+  seconds: string;
+}) {
+  const clock = `${parts.hours}:${parts.minutes}:${parts.seconds}`;
+  return parts.days > 0 ? `${parts.days}天 ${clock}` : clock;
+}
+
 export function RepairActivityDetail({ activityId }: Props) {
   const copy = repairActivitiesPage.detail;
   const [state, setState] = useState<"loading" | "ready" | "missing" | "error">("loading");
@@ -152,6 +162,8 @@ export function RepairActivityDetail({ activityId }: Props) {
   const [signupIssueTypeError, setSignupIssueTypeError] = useState("");
   const [signupDeviceModelError, setSignupDeviceModelError] = useState("");
   const [signupFocusField, setSignupFocusField] = useState<SignupField | null>(null);
+  /** 查询 / 修改报名是卡片内的独立视图，不占三步向导。 */
+  const [lookupMode, setLookupMode] = useState(false);
   const [lookup, setLookup] = useState<RegistrationLookupView | null>(null);
   const [lookupPhone, setLookupPhone] = useState("");
   const [lookupPhoneError, setLookupPhoneError] = useState("");
@@ -177,6 +189,8 @@ export function RepairActivityDetail({ activityId }: Props) {
   const draftHydratedRef = useRef(false);
   const lookupPhoneInputRef = useRef<HTMLInputElement>(null);
   const lookupNameInputRef = useRef<HTMLInputElement>(null);
+  const lookupHeadingRef = useRef<HTMLHeadingElement>(null);
+  const pendingLookupPrefillRef = useRef<{ name?: string; phone?: string } | null>(null);
   /** 换活动后丢弃旧的设备状态响应（含「重新检查」）。 */
   const deviceAttemptRef = useRef(0);
   /** 防止连点在 busy 重新渲染前发出第二个 POST。 */
@@ -216,6 +230,22 @@ export function RepairActivityDetail({ activityId }: Props) {
       else window.clearTimeout(frame);
     };
   }, [busy, signupFocusField]);
+
+  /** 打开卡内查询视图后，带入结果页的姓名 / 手机号，并把焦点移到查询标题。 */
+  useEffect(() => {
+    if (!lookupMode) return;
+    const prefill = pendingLookupPrefillRef.current;
+    pendingLookupPrefillRef.current = null;
+    if (prefill?.phone && lookupPhoneInputRef.current) {
+      lookupPhoneInputRef.current.value = prefill.phone;
+    }
+    if (prefill?.name && lookupNameInputRef.current) {
+      lookupNameInputRef.current.value = prefill.name;
+    }
+    setLookupPhoneError("");
+    setLookupNameError("");
+    lookupHeadingRef.current?.focus({ preventScroll: true });
+  }, [lookupMode]);
 
   /**
    * `background` = 倒计时驱动的自动重取：传输 / 服务端瞬时失败时保留已渲染内容，
@@ -292,6 +322,8 @@ export function RepairActivityDetail({ activityId }: Props) {
     setSignupIssueTypeError("");
     setSignupDeviceModelError("");
     setSignupFocusField(null);
+    setLookupMode(false);
+    pendingLookupPrefillRef.current = null;
     setLookup(null);
     setLookupPhone("");
     setLookupPhoneError("");
@@ -411,28 +443,34 @@ export function RepairActivityDetail({ activityId }: Props) {
     return () => window.clearInterval(timer);
   }, [activity, serverOffsetMs]);
 
-  /** 报名未开始时每秒走一格倒计时；状态一旦离开 UPCOMING 就停表。 */
+  /** 报名开始 / 截止倒计时每秒走一格；离开对应状态就停表。 */
   useEffect(() => {
-    if (activity?.status !== "UPCOMING") return;
+    const status = activity?.status;
+    if (status !== "UPCOMING" && status !== "OPEN") return;
     setNowMs(Date.now());
     const timer = window.setInterval(() => setNowMs(Date.now()), 1000);
     return () => window.clearInterval(timer);
   }, [activity?.status]);
 
   const signupOpensAtMs = activity ? Date.parse(activity.signupOpensAt) : Number.NaN;
+  const signupClosesAtMs = activity ? Date.parse(activity.signupClosesAt) : Number.NaN;
   const countdownMs = Number.isFinite(signupOpensAtMs)
     ? signupOpensAtMs - (nowMs + serverOffsetMs)
     : Number.POSITIVE_INFINITY;
+  const closeCountdownMs = Number.isFinite(signupClosesAtMs)
+    ? signupClosesAtMs - (nowMs + serverOffsetMs)
+    : Number.POSITIVE_INFINITY;
   const waitingForOpen = activity?.status === "UPCOMING" && countdownMs <= 0;
+  const waitingForClose = activity?.status === "OPEN" && closeCountdownMs <= 0;
   const queueVisible =
     activity !== null && canShowPublicQueue(activity, new Date(nowMs + serverOffsetMs));
 
   /**
    * 倒计时归零：立刻重取活动状态（服务端按自己的时钟判定 OPEN / FULL / CLOSED）。
-   * 仍显示未开始就每 30 秒重试，满足「无需手动刷新」—— 可能是本机与服务器时钟略有偏差。
+   * 报名开始或截止后状态仍未变化就每 30 秒重试，无需手动刷新。
    */
   useEffect(() => {
-    if (!waitingForOpen) return;
+    if (!waitingForOpen && !waitingForClose) return;
     const refresh = () => void load(true);
     const visibility = () => {
       if (document.visibilityState === "visible") refresh();
@@ -451,7 +489,7 @@ export function RepairActivityDetail({ activityId }: Props) {
       window.removeEventListener("focus", refresh);
       document.removeEventListener("visibilitychange", visibility);
     };
-  }, [waitingForOpen, load]);
+  }, [waitingForOpen, waitingForClose, load]);
 
   /** 排队区块只在活动开始到活动结束之间出现；在边界时刻刷新可见性。 */
   useEffect(() => {
@@ -746,7 +784,6 @@ export function RepairActivityDetail({ activityId }: Props) {
             setConsentChecked(false);
             setSignupOutcome(null);
             setNotice({ text: copy.deviceRegisteredTitle, tone: "neutral" });
-            focusLookup(undefined, registration.name);
           } else {
             // 设备 409 与「当前手机号重复」无关，不能用 duplicateHint 的文案。
             setSignupOutcome("device");
@@ -824,15 +861,25 @@ export function RepairActivityDetail({ activityId }: Props) {
     focusSignupHeading(stepFormHeadingRef.current);
   }
 
-  function focusLookup(phone?: string, name?: string) {
-    const input = lookupPhoneInputRef.current;
-    if (phone && input) input.value = phone;
-    const nameInput = lookupNameInputRef.current;
-    if (name && nameInput) nameInput.value = name;
+  function openLookup(phone?: string, name?: string) {
+    pendingLookupPrefillRef.current =
+      phone || name ? { phone, name } : lookup ? { name: lookup.name, phone: lookupPhone } : null;
     setLookupPhoneError("");
     setLookupNameError("");
-    (name ? nameInput : input)?.scrollIntoView({ block: "center" });
-    (name ? nameInput : input)?.focus({ preventScroll: true });
+    setLookupMode(true);
+  }
+
+  function closeLookup() {
+    setLookupMode(false);
+    setProblem("");
+    setNotice(null);
+    window.setTimeout(() => {
+      if (registrationResult || signupPending || deviceRegistration || signupOutcome) {
+        focusResult();
+      } else {
+        focusSignupHeading(stepConfirmHeadingRef.current);
+      }
+    }, 0);
   }
 
   async function doLookup(event: FormEvent<HTMLFormElement>) {
@@ -872,6 +919,7 @@ export function RepairActivityDetail({ activityId }: Props) {
         setSignupOutcome(null);
         setRegistrationResult(outcome.data);
         setDeviceRegistration(outcome.data);
+        setLookupMode(false);
         resetSignupDraft();
         setStep(1);
         focusResult();
@@ -966,6 +1014,7 @@ export function RepairActivityDetail({ activityId }: Props) {
         return;
       }
       setCancelOpen(false);
+      setLookupMode(false);
       setLookup(null);
       setLookupPhone("");
       setLookupPhoneError("");
@@ -997,747 +1046,28 @@ export function RepairActivityDetail({ activityId }: Props) {
     }
   }
 
-  if (state === "loading") return <p className="muted">正在加载活动…</p>;
-  if (state === "missing") {
+  /** 卡内查询视图：与报名向导同级切换，避免页面下方再出现一套查询入口。 */
+  function renderLookupView() {
     return (
-      <Card className="repair-panel">
-        <h1 className="admin-panel__title" id="repair-activity-detail-title">
-          {copy.breadcrumb}
-        </h1>
-        <p className="muted" role="alert">
-          {problem || "活动已结束"}
-        </p>
-        <div className="signup__actions">
-          <Button variant="ghost" href="/repair-activities">
-            返回活动列表
-          </Button>
-        </div>
-      </Card>
-    );
-  }
-  if (state === "error" || !activity) {
-    return (
-      <div className={styles.detail}>
-        <h1 className="admin-panel__title" id="repair-activity-detail-title">
-          {copy.breadcrumb}
-        </h1>
-        <LoadFailure
-          message={problem}
-          retryLabel={copy.reload}
-          onRetry={() => load()}
-          backHref="/repair-activities"
-          backLabel={copy.backToList}
-        />
-      </div>
-    );
-  }
-
-  const open = canAcceptNewRegistration(activity.status);
-  const countdown = signupCountdownParts(countdownMs);
-  const countdownOpens = copy.countdownOpensHint.replace(
-    "{open}",
-    formatShanghaiDateTime(activity.signupOpensAt),
-  );
-  const signupDisabledReason =
-    activity.status === "UPCOMING"
-      ? copy.upcomingDisabled
-      : activity.status === "CLOSED"
-        ? copy.closedDisabled
-        : activity.status === "FULL"
-          ? copy.fullDisabled
-          : copy.signupDisabled;
-  const activityTimeRange =
-    formatShanghaiTimeRange(activity.activityAt, activity.endsAt) ??
-    formatShanghaiDateTime(activity.activityAt);
-  const signupWindow = `${formatShanghaiDateTime(activity.signupOpensAt)} — ${formatShanghaiDateTime(activity.signupClosesAt)}`;
-  const signupTerminal =
-    registrationResult !== null ||
-    signupPending !== null ||
-    deviceRegistration !== null ||
-    signupOutcome !== null;
-  const steps = [
-    { index: 1 as const, label: copy.steps[0] },
-    { index: 2 as const, label: copy.steps[1] },
-    { index: 3 as const, label: copy.steps[2] },
-  ];
-
-  return (
-    <div className={`activity-detail ${styles.detail}`}>
-      <nav className={styles.breadcrumb} aria-label={copy.breadcrumb}>
-        <Link href="/repair-activities">{copy.backToList}</Link>
-        <span aria-hidden="true"> / </span>
-        <span>{copy.breadcrumb}</span>
-      </nav>
-      <header className={styles.overview}>
-        <p className={styles.category}>{copy.category}</p>
-        <div className="activity-card__head">
-          <h1 className={styles.title} id="repair-activity-detail-title">
-            {activity.title}
-          </h1>
-          <span className={repairActivityStatusBadgeClass(activity.status)}>
-            {repairActivityStatusLabels[activity.status as RepairActivityStatus]}
-          </span>
-        </div>
-        <dl className={styles.meta}>
-          <div>
-            <dt>{repairActivitiesPage.activityAt}</dt>
-            <dd>
-              {formatShanghaiTimeRange(activity.activityAt, activity.endsAt) ??
-                formatShanghaiDateTime(activity.activityAt)}
-            </dd>
-          </div>
-          {activity.location ? (
+      <div className={styles.cardBody}>
+        <div className={styles.lookupView}>
+          <div className={styles.lookupViewHead}>
             <div>
-              <dt>{repairActivitiesPage.location}</dt>
-              <dd>{activity.location}</dd>
+              <h2
+                className={styles.lookupViewTitle}
+                id="repair-activity-lookup-title"
+                ref={lookupHeadingRef}
+                tabIndex={-1}
+              >
+                {copy.lookupTitle}
+              </h2>
+              <p className={styles.lookupHint}>{copy.lookupHint}</p>
             </div>
-          ) : null}
-          <div>
-            <dt>{repairActivitiesPage.window}</dt>
-            <dd>
-              {formatShanghaiDateTime(activity.signupOpensAt)} —{" "}
-              {formatShanghaiDateTime(activity.signupClosesAt)}
-            </dd>
+            <button type="button" className={styles.textLink} onClick={closeLookup}>
+              {copy.lookupBack}
+            </button>
           </div>
-          <div>
-            <dt className="sr-only">名额</dt>
-            <dd>
-              {repairActivitiesPage.capacity
-                .replace("{registered}", String(activity.registeredCount))
-                .replace("{capacity}", String(activity.capacity))}
-              {" · "}
-              {repairActivitiesPage.remaining.replace("{count}", String(activity.remaining))}
-            </dd>
-          </div>
-        </dl>
-      </header>
-
-      {queueVisible ? <RepairActivityQueue key={activity.id} activityId={activity.id} /> : null}
-
-      <AdminToast toast={notice} onDismiss={() => setNotice(null)} />
-      {problem ? (
-        <PageAlert
-          message={problem}
-          closeLabel={copy.dismissError}
-          onClose={() => setProblem("")}
-        />
-      ) : null}
-
-      <div className={styles.layout}>
-        <section aria-labelledby="repair-activity-precautions-title">
-          <h2 className="admin-panel__title" id="repair-activity-precautions-title">
-            {copy.precautionsTitle}
-          </h2>
-          <RepairActivityPreparation />
-          <div className={styles.service}>
-            <h3>{copy.serviceTitle}</h3>
-            <p>{copy.serviceHint}</p>
-          </div>
-          <details className={styles.fullPrecautions}>
-            <summary>
-              {copy.fullPrecautions.replace("{count}", String(copy.consent.clauses.length))}
-            </summary>
-            <RepairActivityPrecautions />
-          </details>
-        </section>
-
-        <div className={styles.actions}>
-          <section
-            className="activity-detail__signup"
-            aria-labelledby="repair-activity-signup-title"
-          >
-            <h2
-              className="admin-panel__title"
-              id="repair-activity-signup-title"
-              ref={resultHeadingRef}
-              tabIndex={-1}
-            >
-              {signupTerminal ? copy.resultTitle : copy.signupTitle}
-            </h2>
-
-            {signupTerminal ? (
-              <div className={styles.signupTerminal}>
-                {registrationResult ? (
-                  <>
-                    <RepairActivityReceipt activity={activity} registration={registrationResult} />
-                    <p className="muted">{copy.registeredHint}</p>
-                    <div className={styles.resultActions}>
-                      <Button
-                        variant="ghost"
-                        onClick={() => focusLookup(registeredPhone, registrationResult.name)}
-                      >
-                        {copy.lookupMine}
-                      </Button>
-                    </div>
-                  </>
-                ) : signupPending ? (
-                  <div className={styles.resultPanel}>
-                    <div className={styles.resultHead}>
-                      <span
-                        className={`${styles.resultMark} ${styles.resultMarkError}`}
-                        aria-hidden="true"
-                      >
-                        !
-                      </span>
-                      <h3 className={styles.resultTitle}>{copy.signupPendingTitle}</h3>
-                      <p className={styles.resultDesc}>{copy.signupPendingHint}</p>
-                      {pendingCheckResult ? (
-                        <p className={styles.resultDesc}>
-                          {pendingCheckResult === "not-found"
-                            ? copy.lookupNotFoundRetry
-                            : copy.lookupFailedRetry}
-                        </p>
-                      ) : null}
-                    </div>
-                    <div className={styles.resultActions}>
-                      <Button
-                        variant="ghost"
-                        onClick={() => void checkPendingSignup()}
-                        disabled={busy}
-                      >
-                        {copy.checkResult}
-                      </Button>
-                      {pendingCheckResult === "not-found" ? (
-                        <Button variant="ghost" onClick={restartPendingSignup} disabled={busy}>
-                          {copy.pendingRestart}
-                        </Button>
-                      ) : null}
-                    </div>
-                    {pendingCheckResult === "not-found" ? (
-                      <p className="muted">{copy.pendingRestartHint}</p>
-                    ) : null}
-                  </div>
-                ) : deviceRegistration ? (
-                  /* 本设备已提交：收起报名流程，只保留查询与重查出口（issue #304）。 */
-                  <div className={styles.resultPanel}>
-                    <div className={styles.resultHead}>
-                      <span
-                        className={`${styles.resultMark} ${styles.resultMarkError}`}
-                        aria-hidden="true"
-                      >
-                        !
-                      </span>
-                      <h3 className={styles.resultTitle}>{copy.deviceRegisteredTitle}</h3>
-                      <p className={styles.resultDesc}>
-                        {deviceRegistration.name} · {deviceRegistration.phoneMasked}
-                      </p>
-                      <p className={styles.resultDesc}>
-                        {copy.receiptIssueType.replace(
-                          "{type}",
-                          repairActivityIssueTypeLabels[
-                            deviceRegistration.issueType as RepairActivityIssueType
-                          ] ?? deviceRegistration.issueType,
-                        )}
-                      </p>
-                      <p className={styles.resultDesc}>{copy.deviceRegisteredHint}</p>
-                    </div>
-                    <div className={styles.resultActions}>
-                      <Button
-                        variant="ghost"
-                        onClick={() => focusLookup(undefined, deviceRegistration.name)}
-                      >
-                        {copy.lookupMine}
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        onClick={() => void recheckDeviceStatus()}
-                        disabled={deviceRechecking}
-                      >
-                        {copy.deviceRecheck}
-                      </Button>
-                    </div>
-                    <p className="muted">{copy.deviceRecheckHint}</p>
-                  </div>
-                ) : signupOutcome ? (
-                  <div className={styles.resultPanel}>
-                    <div className={styles.resultHead}>
-                      <span
-                        className={`${styles.resultMark} ${
-                          signupOutcome === "duplicate"
-                            ? styles.resultMarkSuccess
-                            : styles.resultMarkError
-                        }`}
-                        aria-hidden="true"
-                      >
-                        {signupOutcome === "duplicate" ? "✓" : "!"}
-                      </span>
-                      <h3 className={styles.resultTitle}>
-                        {signupOutcome === "duplicate"
-                          ? copy.duplicateTitle
-                          : signupOutcome === "full"
-                            ? copy.fullResultTitle
-                            : signupOutcome === "device"
-                              ? copy.deviceRegisteredTitle
-                              : copy.signupFailedTitle}
-                      </h3>
-                      <p className={styles.resultDesc}>
-                        {signupOutcome === "duplicate"
-                          ? copy.duplicateHint
-                          : signupOutcome === "full"
-                            ? copy.fullResultHint
-                            : signupProblem || copy.deviceConflictFallback}
-                      </p>
-                      {signupOutcome === "full" ? (
-                        <p className={styles.resultDesc}>{copy.fullLookupHint}</p>
-                      ) : null}
-                    </div>
-                    <div className={styles.resultActions}>
-                      {signupOutcome === "failed" ? (
-                        <Button variant="solid" onClick={backToForm}>
-                          {copy.confirmEdit}
-                        </Button>
-                      ) : (
-                        <>
-                          <Button
-                            variant="solid"
-                            onClick={() =>
-                              focusLookup(registeredPhone, signupDraft.name.trim() || undefined)
-                            }
-                          >
-                            {copy.lookupMine}
-                          </Button>
-                          {signupOutcome === "device" ? (
-                            <Button
-                              variant="ghost"
-                              onClick={() => void recheckDeviceStatus()}
-                              disabled={deviceRechecking}
-                            >
-                              {copy.deviceRecheck}
-                            </Button>
-                          ) : null}
-                        </>
-                      )}
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-            ) : !deviceStatusResolved ? (
-              <p className="muted" role="status">
-                {copy.deviceStatusChecking}
-              </p>
-            ) : (
-              <div className={styles.wizard}>
-                {open ? (
-                  <ol className={styles.stepper} aria-label={copy.stepLabel}>
-                    {steps.map((item) => {
-                      const mode =
-                        item.index < step ? "done" : item.index === step ? "current" : "future";
-                      const modeClass =
-                        mode === "done"
-                          ? styles.stepDone
-                          : mode === "current"
-                            ? styles.stepCurrent
-                            : "";
-                      const modeLabel =
-                        mode === "done"
-                          ? copy.stepDoneSuffix
-                          : mode === "current"
-                            ? copy.stepCurrentSuffix
-                            : "";
-                      return (
-                        <li key={item.index} className={`${styles.step} ${modeClass}`}>
-                          <button
-                            type="button"
-                            className={styles.stepButton}
-                            aria-current={mode === "current" ? "step" : undefined}
-                            aria-label={`${copy.stepIndex.replace(
-                              "{index}",
-                              String(item.index),
-                            )}：${item.label}${modeLabel}`}
-                            disabled={item.index >= step}
-                            onClick={() => {
-                              if (item.index === 1) goToStep(1);
-                              else if (item.index === 2) goToStep(2);
-                            }}
-                          >
-                            <span className={styles.stepDot} aria-hidden="true">
-                              {mode === "done" ? "✓" : item.index}
-                            </span>
-                            <span className={styles.stepText}>
-                              <span className={styles.stepIndex}>
-                                {copy.stepIndex.replace("{index}", String(item.index))}
-                              </span>
-                              <span className={styles.stepLabel}>{item.label}</span>
-                            </span>
-                          </button>
-                        </li>
-                      );
-                    })}
-                  </ol>
-                ) : (
-                  <p className={styles.flowLock}>{copy.flowLocked}</p>
-                )}
-
-                <section
-                  className={styles.stepPanel}
-                  hidden={step !== 1}
-                  aria-labelledby="repair-activity-signup-step-1"
-                >
-                  <h3
-                    className={styles.stepTitle}
-                    id="repair-activity-signup-step-1"
-                    ref={stepConfirmHeadingRef}
-                    tabIndex={-1}
-                  >
-                    {copy.stepTitles[0]}
-                  </h3>
-                  <p className={styles.stepLead}>{copy.stepLeads[0]}</p>
-                  <dl className={styles.summary}>
-                    <div>
-                      <dt>{repairActivitiesPage.activityAt}</dt>
-                      <dd>{activityTimeRange}</dd>
-                    </div>
-                    {activity.location ? (
-                      <div>
-                        <dt>{repairActivitiesPage.location}</dt>
-                        <dd>{activity.location}</dd>
-                      </div>
-                    ) : null}
-                    <div>
-                      <dt>{repairActivitiesPage.window}</dt>
-                      <dd>{signupWindow}</dd>
-                    </div>
-                    <div>
-                      <dt className="sr-only">名额</dt>
-                      <dd>
-                        {repairActivitiesPage.capacity
-                          .replace("{registered}", String(activity.registeredCount))
-                          .replace("{capacity}", String(activity.capacity))}
-                        {" · "}
-                        {repairActivitiesPage.remaining.replace(
-                          "{count}",
-                          String(activity.remaining),
-                        )}
-                      </dd>
-                    </div>
-                  </dl>
-                  {/* 开始时间解析不出（契约保证不会）时整块不渲染，避免数字块出现 Infinity。 */}
-                  {activity.status === "UPCOMING" && Number.isFinite(countdownMs) ? (
-                    <div className="activity-countdown" role="timer">
-                      <p className="activity-countdown__label">{copy.countdownPrefix}</p>
-                      {waitingForOpen ? (
-                        <p className="activity-countdown__opening">{copy.countdownOpeningSoon}</p>
-                      ) : (
-                        <>
-                          <div className="activity-countdown__blocks">
-                            {countdown.days > 0 ? (
-                              <>
-                                <span className="activity-countdown__block">
-                                  <span className="activity-countdown__num">
-                                    {String(countdown.days).padStart(2, "0")}
-                                  </span>
-                                  <span className="activity-countdown__unit">
-                                    {copy.countdownUnits.days}
-                                  </span>
-                                </span>
-                                <span className="activity-countdown__colon" aria-hidden="true">
-                                  :
-                                </span>
-                              </>
-                            ) : null}
-                            <span className="activity-countdown__block">
-                              <span className="activity-countdown__num">{countdown.hours}</span>
-                              <span className="activity-countdown__unit">
-                                {copy.countdownUnits.hours}
-                              </span>
-                            </span>
-                            <span className="activity-countdown__colon" aria-hidden="true">
-                              :
-                            </span>
-                            <span className="activity-countdown__block">
-                              <span className="activity-countdown__num">{countdown.minutes}</span>
-                              <span className="activity-countdown__unit">
-                                {copy.countdownUnits.minutes}
-                              </span>
-                            </span>
-                            <span className="activity-countdown__colon" aria-hidden="true">
-                              :
-                            </span>
-                            <span className="activity-countdown__block">
-                              <span className="activity-countdown__num">{countdown.seconds}</span>
-                              <span className="activity-countdown__unit">
-                                {copy.countdownUnits.seconds}
-                              </span>
-                            </span>
-                          </div>
-                          <p className="activity-countdown__hint">{countdownOpens}</p>
-                        </>
-                      )}
-                    </div>
-                  ) : null}
-                  {activity.status === "FULL" ? (
-                    <div className={styles.fullHint}>
-                      <p className="muted">{copy.fullLookupHint}</p>
-                      <Button variant="ghost" onClick={() => focusLookup()}>
-                        {copy.lookupMine}
-                      </Button>
-                    </div>
-                  ) : null}
-                  <div className={styles.stepActions}>
-                    <Button variant="solid" onClick={startSignup} disabled={!open}>
-                      {open
-                        ? consentChecked
-                          ? copy.continueSignup
-                          : copy.startSignup
-                        : signupDisabledReason}
-                    </Button>
-                    <Button variant="ghost" onClick={() => focusLookup()}>
-                      {copy.lookupEntry}
-                    </Button>
-                  </div>
-                </section>
-
-                <section
-                  className={styles.stepPanel}
-                  hidden={step !== 2}
-                  aria-labelledby="repair-activity-signup-step-2"
-                >
-                  <h3
-                    className={styles.stepTitle}
-                    id="repair-activity-signup-step-2"
-                    ref={stepNoticeHeadingRef}
-                    tabIndex={-1}
-                  >
-                    {copy.stepTitles[1]}
-                  </h3>
-                  <p className={styles.stepLead}>{copy.consent.subtitle}</p>
-                  <div className={styles.noticeBlock} tabIndex={0}>
-                    <RepairActivityPrecautions />
-                  </div>
-                  <label className={styles.consentCheck}>
-                    <input
-                      ref={consentInputRef}
-                      type="checkbox"
-                      checked={consentChecked}
-                      onChange={(event) => {
-                        setConsentChecked(event.target.checked);
-                        if (event.target.checked) setConsentError("");
-                      }}
-                      aria-invalid={consentError ? true : undefined}
-                      aria-describedby={
-                        consentError ? "repair-activity-signup-consent-error" : undefined
-                      }
-                    />
-                    <span>{copy.consent.agree}</span>
-                  </label>
-                  {consentError ? (
-                    <p
-                      className="field__hint text-accent-deep"
-                      id="repair-activity-signup-consent-error"
-                      role="alert"
-                    >
-                      {consentError}
-                    </p>
-                  ) : null}
-                  <div className={styles.stepActions}>
-                    <Button variant="outline" onClick={() => goToStep(1)}>
-                      {copy.previousStep}
-                    </Button>
-                    <Button variant="solid" onClick={continueToForm}>
-                      {copy.nextStep}
-                    </Button>
-                  </div>
-                </section>
-
-                <section
-                  className={styles.stepPanel}
-                  hidden={step !== 3}
-                  aria-labelledby="repair-activity-signup-step-3"
-                >
-                  <h3
-                    className={styles.stepTitle}
-                    id="repair-activity-signup-step-3"
-                    ref={stepFormHeadingRef}
-                    tabIndex={-1}
-                  >
-                    {copy.stepTitles[2]}
-                  </h3>
-                  <p className={styles.stepLead}>{copy.confirmIdentityHint}</p>
-                  <p className={styles.stepActivity}>
-                    {activity.title} · {activityTimeRange}
-                  </p>
-                  <form
-                    className="admin-form"
-                    ref={signupFormRef}
-                    tabIndex={-1}
-                    onSubmit={requestSignup}
-                    aria-label={copy.signupTitle}
-                  >
-                    <div className={styles.fields}>
-                      <label className="field">
-                        <span className="field__label">
-                          {copy.name} <span className={styles.required}>*</span>
-                        </span>
-                        <input
-                          ref={signupNameInputRef}
-                          className="field__input"
-                          id="repair-activity-signup-name"
-                          name="name"
-                          placeholder={copy.namePlaceholder}
-                          required
-                          minLength={2}
-                          maxLength={40}
-                          value={signupDraft.name}
-                          aria-invalid={signupNameError ? true : undefined}
-                          aria-describedby={
-                            signupNameError ? "repair-activity-signup-name-error" : undefined
-                          }
-                          onChange={(event) => {
-                            updateSignupDraft({ name: event.target.value });
-                            setSignupNameError("");
-                          }}
-                          disabled={!open || busy}
-                        />
-                        {signupNameError ? (
-                          <p
-                            className="field__hint text-accent-deep"
-                            id="repair-activity-signup-name-error"
-                            role="alert"
-                          >
-                            {signupNameError}
-                          </p>
-                        ) : null}
-                      </label>
-                      <label className="field">
-                        <span className="field__label">
-                          {copy.phone} <span className={styles.required}>*</span>
-                        </span>
-                        <input
-                          ref={signupPhoneInputRef}
-                          className="field__input"
-                          id="repair-activity-signup-phone"
-                          name="phone"
-                          placeholder={copy.phonePlaceholder}
-                          required
-                          inputMode="numeric"
-                          maxLength={11}
-                          value={signupDraft.phone}
-                          aria-invalid={signupPhoneError ? true : undefined}
-                          aria-describedby={
-                            signupPhoneError ? "repair-activity-signup-phone-error" : undefined
-                          }
-                          onChange={(event) => {
-                            updateSignupDraft({ phone: event.target.value });
-                            setSignupPhoneError("");
-                          }}
-                          disabled={!open || busy}
-                        />
-                        {signupPhoneError ? (
-                          <p
-                            className="field__hint text-accent-deep"
-                            id="repair-activity-signup-phone-error"
-                            role="alert"
-                          >
-                            {signupPhoneError}
-                          </p>
-                        ) : null}
-                      </label>
-                      <label className="field">
-                        <span className="field__label">
-                          {copy.issueType} <span className={styles.required}>*</span>
-                        </span>
-                        <select
-                          className="field__input"
-                          name="issueType"
-                          required
-                          value={signupDraft.issueType}
-                          aria-invalid={signupIssueTypeError ? true : undefined}
-                          aria-describedby={
-                            signupIssueTypeError
-                              ? "repair-activity-signup-issue-type-error"
-                              : undefined
-                          }
-                          onChange={(event) => {
-                            updateSignupDraft({ issueType: event.target.value });
-                            setSignupIssueTypeError("");
-                          }}
-                          disabled={!open || busy}
-                        >
-                          {repairActivitiesPage.issueTypes.map((opt) => (
-                            <option key={opt.value} value={opt.value}>
-                              {opt.label}
-                            </option>
-                          ))}
-                        </select>
-                        {signupIssueTypeError ? (
-                          <p
-                            className="field__hint text-accent-deep"
-                            id="repair-activity-signup-issue-type-error"
-                            role="alert"
-                          >
-                            {signupIssueTypeError}
-                          </p>
-                        ) : null}
-                      </label>
-                      <label className="field">
-                        <span className="field__label">{copy.deviceModel}</span>
-                        <input
-                          className="field__input"
-                          name="deviceModel"
-                          maxLength={REPAIR_ACTIVITY_DEVICE_MODEL_MAX_LENGTH}
-                          placeholder={copy.deviceModelPlaceholder}
-                          value={signupDraft.deviceModel}
-                          aria-invalid={signupDeviceModelError ? true : undefined}
-                          aria-describedby={
-                            signupDeviceModelError
-                              ? "repair-activity-signup-device-model-error"
-                              : undefined
-                          }
-                          onChange={(event) => {
-                            updateSignupDraft({ deviceModel: event.target.value });
-                            setSignupDeviceModelError("");
-                          }}
-                          disabled={!open || busy}
-                        />
-                        {signupDeviceModelError ? (
-                          <p
-                            className="field__hint text-accent-deep"
-                            id="repair-activity-signup-device-model-error"
-                            role="alert"
-                          >
-                            {signupDeviceModelError}
-                          </p>
-                        ) : null}
-                      </label>
-                    </div>
-                    <div className={styles.consentSummary}>
-                      <span>
-                        {consentChecked ? copy.consentSummary : copy.consentSummaryMissing}
-                      </span>
-                      <Button variant="ghost" onClick={() => goToStep(2)}>
-                        {copy.reviewNotice}
-                      </Button>
-                    </div>
-                    <div className={styles.stepActions}>
-                      <Button variant="outline" onClick={() => goToStep(2)}>
-                        {copy.previousStep}
-                      </Button>
-                      <Button
-                        type="submit"
-                        variant="solid"
-                        trailingIcon="arrowRight"
-                        disabled={!open || busy}
-                      >
-                        {busy ? copy.submitting : copy.submitSignup}
-                      </Button>
-                    </div>
-                  </form>
-                </section>
-
-                {openedNotice ? (
-                  <p className="sr-only" role="status">
-                    {copy.countdownOpened}
-                  </p>
-                ) : null}
-              </div>
-            )}
-          </section>
-
-          <section className={styles.lookup} aria-labelledby="repair-activity-lookup-title">
-            <h2 className="admin-panel__title" id="repair-activity-lookup-title">
-              {copy.lookupTitle}
-            </h2>
-            <p className="muted">{copy.lookupHint}</p>
+          <section className={styles.lookupBody} aria-labelledby="repair-activity-lookup-title">
             <form className="admin-form" onSubmit={doLookup} aria-label={copy.lookupTitle}>
               <label className="field">
                 <span className="field__label">{copy.name}</span>
@@ -1875,6 +1205,717 @@ export function RepairActivityDetail({ activityId }: Props) {
           </section>
         </div>
       </div>
+    );
+  }
+
+  if (state === "loading") return <p className="muted">正在加载活动…</p>;
+  if (state === "missing") {
+    return (
+      <Card className="repair-panel">
+        <h1 className="admin-panel__title" id="repair-activity-detail-title">
+          {copy.breadcrumb}
+        </h1>
+        <p className="muted" role="alert">
+          {problem || "活动已结束"}
+        </p>
+        <div className="signup__actions">
+          <Button variant="ghost" href="/repair-activities">
+            返回活动列表
+          </Button>
+        </div>
+      </Card>
+    );
+  }
+  if (state === "error" || !activity) {
+    return (
+      <div className={styles.detail}>
+        <h1 className="admin-panel__title" id="repair-activity-detail-title">
+          {copy.breadcrumb}
+        </h1>
+        <LoadFailure
+          message={problem}
+          retryLabel={copy.reload}
+          onRetry={() => load()}
+          backHref="/repair-activities"
+          backLabel={copy.backToList}
+        />
+      </div>
+    );
+  }
+
+  const open = canAcceptNewRegistration(activity.status);
+  const countdown = signupCountdownParts(countdownMs);
+  const closeCountdown = signupCountdownParts(closeCountdownMs);
+  const countdownOpens = copy.countdownOpensHint.replace(
+    "{open}",
+    formatShanghaiDateTime(activity.signupOpensAt),
+  );
+  const signupDisabledReason =
+    activity.status === "UPCOMING"
+      ? copy.upcomingDisabled
+      : activity.status === "CLOSED"
+        ? copy.closedDisabled
+        : activity.status === "FULL"
+          ? copy.fullDisabled
+          : copy.signupDisabled;
+  const activityTimeRange =
+    formatShanghaiTimeRange(activity.activityAt, activity.endsAt) ??
+    formatShanghaiDateTime(activity.activityAt);
+  const signupWindow = `${formatShanghaiDateTime(activity.signupOpensAt)} — ${formatShanghaiDateTime(activity.signupClosesAt)}`;
+  const signupTerminal =
+    registrationResult !== null ||
+    signupPending !== null ||
+    deviceRegistration !== null ||
+    signupOutcome !== null;
+  const steps = [
+    { index: 1 as const, label: copy.steps[0] },
+    { index: 2 as const, label: copy.steps[1] },
+    { index: 3 as const, label: copy.steps[2] },
+  ];
+  const flowLockText =
+    activity.status === "FULL"
+      ? copy.flowLockedFull
+      : activity.status === "ENDED"
+        ? copy.flowLockedEnded
+        : activity.status === "CLOSED"
+          ? copy.flowLockedClosed
+          : copy.flowLocked;
+  const countdownLabel =
+    activity.status === "OPEN"
+      ? copy.countdownClosePrefix
+      : activity.status === "UPCOMING"
+        ? copy.countdownPrefix
+        : activity.status === "FULL"
+          ? copy.countdownFullLabel
+          : activity.status === "CLOSED"
+            ? copy.countdownClosedLabel
+            : copy.countdownEndedLabel;
+  const countdownValue =
+    activity.status === "OPEN"
+      ? formatCountdownClock(closeCountdown)
+      : activity.status === "UPCOMING"
+        ? formatCountdownClock(countdown)
+        : activity.status === "FULL"
+          ? copy.countdownFullValue
+          : activity.status === "CLOSED"
+            ? copy.countdownClosedValue
+            : copy.countdownEndedValue;
+  const countdownHint =
+    activity.status === "OPEN"
+      ? waitingForClose
+        ? copy.countdownClosedHint
+        : copy.countdownCloseHint
+      : activity.status === "UPCOMING"
+        ? waitingForOpen
+          ? copy.countdownOpeningSoon
+          : countdownOpens
+        : activity.status === "FULL"
+          ? copy.countdownFullHint
+          : activity.status === "CLOSED"
+            ? copy.countdownClosedHint
+            : copy.countdownEndedHint;
+  const showCountdown = open || activity.status === "UPCOMING";
+
+  return (
+    <div className={`activity-detail ${styles.detail}`}>
+      <nav className={styles.breadcrumb} aria-label={copy.breadcrumb}>
+        <Link href="/repair-activities">{copy.backToList}</Link>
+        <span aria-hidden="true"> / </span>
+        <span>{copy.breadcrumb}</span>
+      </nav>
+      <AdminToast toast={notice} onDismiss={() => setNotice(null)} />
+      {problem ? (
+        <PageAlert
+          message={problem}
+          closeLabel={copy.dismissError}
+          onClose={() => setProblem("")}
+        />
+      ) : null}
+
+      <div className={styles.stage}>
+        <section className={styles.flowCard} aria-labelledby="repair-activity-detail-title">
+          <header className={styles.cardHead}>
+            <div className={styles.cardIntro}>
+              <p className={styles.kicker}>{copy.flowKicker}</p>
+              <h1 className={styles.title} id="repair-activity-detail-title">
+                {activity.title}
+              </h1>
+            </div>
+            <span className={repairActivityStatusBadgeClass(activity.status)}>
+              {repairActivityStatusLabels[activity.status as RepairActivityStatus]}
+            </span>
+          </header>
+
+          {lookupMode ? (
+            renderLookupView()
+          ) : signupTerminal ? (
+            <div className={styles.cardBody}>
+              <h2
+                className="sr-only"
+                id="repair-activity-signup-title"
+                ref={resultHeadingRef}
+                tabIndex={-1}
+              >
+                {copy.resultTitle}
+              </h2>
+              <div className={styles.signupTerminal}>
+                {registrationResult ? (
+                  <>
+                    <RepairActivityReceipt activity={activity} registration={registrationResult} />
+                    <div className={styles.resultActions}>
+                      <Button
+                        variant="ghost"
+                        onClick={() => openLookup(registeredPhone, registrationResult.name)}
+                      >
+                        {copy.lookupEntry}
+                      </Button>
+                    </div>
+                  </>
+                ) : signupPending ? (
+                  <div className={styles.resultPanel}>
+                    <div className={styles.resultHead}>
+                      <span
+                        className={`${styles.resultMark} ${styles.resultMarkError}`}
+                        aria-hidden="true"
+                      >
+                        !
+                      </span>
+                      <h3 className={styles.resultTitle}>{copy.signupPendingTitle}</h3>
+                      <p className={styles.resultDesc}>{copy.signupPendingHint}</p>
+                      {pendingCheckResult ? (
+                        <p className={styles.resultDesc}>
+                          {pendingCheckResult === "not-found"
+                            ? copy.lookupNotFoundRetry
+                            : copy.lookupFailedRetry}
+                        </p>
+                      ) : null}
+                    </div>
+                    <div className={styles.resultActions}>
+                      <Button
+                        variant="ghost"
+                        onClick={() => void checkPendingSignup()}
+                        disabled={busy}
+                      >
+                        {copy.checkResult}
+                      </Button>
+                      {pendingCheckResult === "not-found" ? (
+                        <Button variant="ghost" onClick={restartPendingSignup} disabled={busy}>
+                          {copy.pendingRestart}
+                        </Button>
+                      ) : null}
+                    </div>
+                    {pendingCheckResult === "not-found" ? (
+                      <p className="muted">{copy.pendingRestartHint}</p>
+                    ) : null}
+                  </div>
+                ) : deviceRegistration ? (
+                  /* 本设备已提交：收起报名流程，只保留查询与重查出口（issue #304）。 */
+                  <div className={styles.resultPanel}>
+                    <div className={styles.resultHead}>
+                      <span
+                        className={`${styles.resultMark} ${styles.resultMarkError}`}
+                        aria-hidden="true"
+                      >
+                        !
+                      </span>
+                      <h3 className={styles.resultTitle}>{copy.deviceRegisteredTitle}</h3>
+                      <p className={styles.resultDesc}>
+                        {deviceRegistration.name} · {deviceRegistration.phoneMasked}
+                      </p>
+                      <p className={styles.resultDesc}>
+                        {copy.receiptIssueType.replace(
+                          "{type}",
+                          repairActivityIssueTypeLabels[
+                            deviceRegistration.issueType as RepairActivityIssueType
+                          ] ?? deviceRegistration.issueType,
+                        )}
+                      </p>
+                      <p className={styles.resultDesc}>{copy.deviceRegisteredHint}</p>
+                    </div>
+                    <div className={styles.resultActions}>
+                      <Button
+                        variant="ghost"
+                        onClick={() => openLookup(undefined, deviceRegistration.name)}
+                      >
+                        {copy.lookupMine}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        onClick={() => void recheckDeviceStatus()}
+                        disabled={deviceRechecking}
+                      >
+                        {copy.deviceRecheck}
+                      </Button>
+                    </div>
+                    <p className="muted">{copy.deviceRecheckHint}</p>
+                  </div>
+                ) : signupOutcome ? (
+                  <div className={styles.resultPanel}>
+                    <div className={styles.resultHead}>
+                      <span
+                        className={`${styles.resultMark} ${
+                          signupOutcome === "duplicate"
+                            ? styles.resultMarkSuccess
+                            : styles.resultMarkError
+                        }`}
+                        aria-hidden="true"
+                      >
+                        {signupOutcome === "duplicate" ? "✓" : "!"}
+                      </span>
+                      <h3 className={styles.resultTitle}>
+                        {signupOutcome === "duplicate"
+                          ? copy.duplicateTitle
+                          : signupOutcome === "full"
+                            ? copy.fullResultTitle
+                            : signupOutcome === "device"
+                              ? copy.deviceRegisteredTitle
+                              : copy.signupFailedTitle}
+                      </h3>
+                      <p className={styles.resultDesc}>
+                        {signupOutcome === "duplicate"
+                          ? copy.duplicateHint
+                          : signupOutcome === "full"
+                            ? copy.fullResultHint
+                            : signupProblem || copy.deviceConflictFallback}
+                      </p>
+                      {signupOutcome === "full" ? (
+                        <p className={styles.resultDesc}>{copy.fullLookupHint}</p>
+                      ) : null}
+                    </div>
+                    <div className={styles.resultActions}>
+                      {signupOutcome === "failed" ? (
+                        <Button variant="solid" onClick={backToForm}>
+                          {copy.confirmEdit}
+                        </Button>
+                      ) : (
+                        <>
+                          <Button
+                            variant="solid"
+                            onClick={() =>
+                              openLookup(registeredPhone, signupDraft.name.trim() || undefined)
+                            }
+                          >
+                            {copy.lookupMine}
+                          </Button>
+                          {signupOutcome === "device" ? (
+                            <Button
+                              variant="ghost"
+                              onClick={() => void recheckDeviceStatus()}
+                              disabled={deviceRechecking}
+                            >
+                              {copy.deviceRecheck}
+                            </Button>
+                          ) : null}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          ) : !deviceStatusResolved ? (
+            <div className={styles.cardBody}>
+              <div className={styles.deviceCheck}>
+                <p className="muted" role="status">
+                  {copy.deviceStatusChecking}
+                </p>
+                <button type="button" className={styles.textLink} onClick={() => openLookup()}>
+                  {copy.lookupMine}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              {open ? (
+                <ol className={styles.stepper} aria-label={copy.stepLabel}>
+                  {steps.map((item) => {
+                    const mode =
+                      item.index < step ? "done" : item.index === step ? "current" : "future";
+                    const modeClass =
+                      mode === "done"
+                        ? styles.stepDone
+                        : mode === "current"
+                          ? styles.stepCurrent
+                          : styles.stepFuture;
+                    const modeLabel =
+                      mode === "done"
+                        ? copy.stepDoneSuffix
+                        : mode === "current"
+                          ? copy.stepCurrentSuffix
+                          : "";
+                    return (
+                      <li key={item.index} className={`${styles.step} ${modeClass}`}>
+                        <button
+                          type="button"
+                          className={styles.stepButton}
+                          aria-current={mode === "current" ? "step" : undefined}
+                          aria-label={`${copy.stepIndex.replace(
+                            "{index}",
+                            String(item.index),
+                          )}：${item.label}${modeLabel}`}
+                          disabled={item.index >= step}
+                          onClick={() => {
+                            if (item.index === 1) goToStep(1);
+                            else if (item.index === 2) goToStep(2);
+                          }}
+                        >
+                          <span className={styles.stepDot} aria-hidden="true">
+                            {mode === "done" ? "✓" : item.index}
+                          </span>
+                          <span className={styles.stepText}>
+                            <span className={styles.stepIndex}>
+                              {copy.stepIndex.replace("{index}", String(item.index))}
+                            </span>
+                            <span className={styles.stepLabel}>{item.label}</span>
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ol>
+              ) : (
+                <p className={styles.flowLock}>{flowLockText}</p>
+              )}
+              <div className={styles.cardBody}>
+                <div className={styles.wizard}>
+                  <section
+                    className={styles.stepPanel}
+                    hidden={step !== 1}
+                    aria-labelledby="repair-activity-signup-step-1"
+                  >
+                    <h3
+                      className={styles.stepTitle}
+                      id="repair-activity-signup-step-1"
+                      ref={stepConfirmHeadingRef}
+                      tabIndex={-1}
+                    >
+                      {copy.stepTitles[0]}
+                    </h3>
+                    <p className={styles.stepLead}>{copy.stepLeads[0]}</p>
+                    <dl className={styles.detailList}>
+                      <div className={styles.detailRow}>
+                        <dt>{repairActivitiesPage.activityAt}</dt>
+                        <dd>{activityTimeRange}</dd>
+                      </div>
+                      {activity.location ? (
+                        <div className={styles.detailRow}>
+                          <dt>{repairActivitiesPage.location}</dt>
+                          <dd>{activity.location}</dd>
+                        </div>
+                      ) : null}
+                      <div className={styles.detailRow}>
+                        <dt>{repairActivitiesPage.window}</dt>
+                        <dd>{signupWindow}</dd>
+                      </div>
+                      <div className={styles.detailRow}>
+                        <dt>名额</dt>
+                        <dd>
+                          限额 {activity.capacity} 人 · 剩余 {activity.remaining} 人
+                        </dd>
+                      </div>
+                    </dl>
+                    <div className={styles.countdownBox} role={showCountdown ? "timer" : undefined}>
+                      <div className={styles.countdownMain}>
+                        <p className={styles.countdownLabel}>{countdownLabel}</p>
+                        {showCountdown && waitingForOpen ? (
+                          <p className={styles.countdownOpening}>{copy.countdownOpeningSoon}</p>
+                        ) : (
+                          <p className={styles.countdownValue}>{countdownValue}</p>
+                        )}
+                      </div>
+                      <p className={styles.countdownHint}>{countdownHint}</p>
+                    </div>
+                    {activity.status === "FULL" ? (
+                      <div className={styles.fullHint}>
+                        <p className="muted">{copy.fullLookupHint}</p>
+                        <Button variant="ghost" onClick={() => openLookup()}>
+                          {copy.lookupMine}
+                        </Button>
+                      </div>
+                    ) : null}
+                    <div className={styles.stepActions}>
+                      <Button variant="solid" onClick={startSignup} disabled={!open}>
+                        {open
+                          ? consentChecked
+                            ? copy.continueSignup
+                            : copy.startSignup
+                          : signupDisabledReason}
+                      </Button>
+                      <button
+                        type="button"
+                        className={styles.textLink}
+                        onClick={() => openLookup()}
+                      >
+                        {copy.lookupEntry}
+                      </button>
+                    </div>
+                  </section>
+
+                  <section
+                    className={styles.stepPanel}
+                    hidden={step !== 2}
+                    aria-labelledby="repair-activity-signup-step-2"
+                  >
+                    <h3
+                      className={styles.stepTitle}
+                      id="repair-activity-signup-step-2"
+                      ref={stepNoticeHeadingRef}
+                      tabIndex={-1}
+                    >
+                      {copy.stepTitles[1]}
+                    </h3>
+                    <p className={styles.stepLead}>{copy.consent.subtitle}</p>
+                    <div className={styles.noticeBlock}>
+                      <h4 className={styles.noticeTitle}>{copy.consent.noticeTitle}</h4>
+                      <RepairActivityPrecautions />
+                    </div>
+                    <label className={styles.consentCheck}>
+                      <input
+                        ref={consentInputRef}
+                        type="checkbox"
+                        checked={consentChecked}
+                        onChange={(event) => {
+                          setConsentChecked(event.target.checked);
+                          if (event.target.checked) setConsentError("");
+                        }}
+                        aria-invalid={consentError ? true : undefined}
+                        aria-describedby={
+                          consentError ? "repair-activity-signup-consent-error" : undefined
+                        }
+                      />
+                      <span>{copy.consent.agree}</span>
+                    </label>
+                    {consentError ? (
+                      <p
+                        className="field__hint text-accent-deep"
+                        id="repair-activity-signup-consent-error"
+                        role="alert"
+                      >
+                        {consentError}
+                      </p>
+                    ) : null}
+                    <div className={styles.stepActions}>
+                      <Button variant="outline" onClick={() => goToStep(1)}>
+                        {copy.previousStep}
+                      </Button>
+                      <Button variant="solid" onClick={continueToForm}>
+                        {copy.nextStep}
+                      </Button>
+                    </div>
+                  </section>
+
+                  <section
+                    className={styles.stepPanel}
+                    hidden={step !== 3}
+                    aria-labelledby="repair-activity-signup-step-3"
+                  >
+                    <h3
+                      className={styles.stepTitle}
+                      id="repair-activity-signup-step-3"
+                      ref={stepFormHeadingRef}
+                      tabIndex={-1}
+                    >
+                      {copy.stepTitles[2]}
+                    </h3>
+                    <p className={styles.stepLead}>{copy.confirmIdentityHint}</p>
+                    <form
+                      className="admin-form"
+                      ref={signupFormRef}
+                      tabIndex={-1}
+                      onSubmit={requestSignup}
+                      aria-label={copy.signupTitle}
+                    >
+                      <div className={styles.formGrid}>
+                        <label className="field">
+                          <span className="field__label">
+                            {copy.name} <span className={styles.required}>*</span>
+                          </span>
+                          <input
+                            ref={signupNameInputRef}
+                            className="field__input"
+                            id="repair-activity-signup-name"
+                            name="name"
+                            placeholder={copy.namePlaceholder}
+                            required
+                            minLength={2}
+                            maxLength={40}
+                            value={signupDraft.name}
+                            aria-invalid={signupNameError ? true : undefined}
+                            aria-describedby={
+                              signupNameError ? "repair-activity-signup-name-error" : undefined
+                            }
+                            onChange={(event) => {
+                              updateSignupDraft({ name: event.target.value });
+                              setSignupNameError("");
+                            }}
+                            disabled={!open || busy}
+                          />
+                          {signupNameError ? (
+                            <p
+                              className="field__hint text-accent-deep"
+                              id="repair-activity-signup-name-error"
+                              role="alert"
+                            >
+                              {signupNameError}
+                            </p>
+                          ) : null}
+                        </label>
+                        <label className="field">
+                          <span className="field__label">
+                            {copy.phone} <span className={styles.required}>*</span>
+                          </span>
+                          <input
+                            ref={signupPhoneInputRef}
+                            className="field__input"
+                            id="repair-activity-signup-phone"
+                            name="phone"
+                            placeholder={copy.phonePlaceholder}
+                            required
+                            inputMode="numeric"
+                            maxLength={11}
+                            value={signupDraft.phone}
+                            aria-invalid={signupPhoneError ? true : undefined}
+                            aria-describedby={
+                              signupPhoneError ? "repair-activity-signup-phone-error" : undefined
+                            }
+                            onChange={(event) => {
+                              updateSignupDraft({ phone: event.target.value });
+                              setSignupPhoneError("");
+                            }}
+                            disabled={!open || busy}
+                          />
+                          {signupPhoneError ? (
+                            <p
+                              className="field__hint text-accent-deep"
+                              id="repair-activity-signup-phone-error"
+                              role="alert"
+                            >
+                              {signupPhoneError}
+                            </p>
+                          ) : null}
+                        </label>
+                        <label className="field">
+                          <span className="field__label">
+                            {copy.issueType} <span className={styles.required}>*</span>
+                          </span>
+                          <select
+                            className="field__input"
+                            name="issueType"
+                            required
+                            value={signupDraft.issueType}
+                            aria-invalid={signupIssueTypeError ? true : undefined}
+                            aria-describedby={
+                              signupIssueTypeError
+                                ? "repair-activity-signup-issue-type-error"
+                                : undefined
+                            }
+                            onChange={(event) => {
+                              updateSignupDraft({ issueType: event.target.value });
+                              setSignupIssueTypeError("");
+                            }}
+                            disabled={!open || busy}
+                          >
+                            {repairActivitiesPage.issueTypes.map((opt) => (
+                              <option key={opt.value} value={opt.value}>
+                                {opt.label}
+                              </option>
+                            ))}
+                          </select>
+                          {signupIssueTypeError ? (
+                            <p
+                              className="field__hint text-accent-deep"
+                              id="repair-activity-signup-issue-type-error"
+                              role="alert"
+                            >
+                              {signupIssueTypeError}
+                            </p>
+                          ) : null}
+                        </label>
+                        <label className="field">
+                          <span className="field__label">{copy.deviceModel}</span>
+                          <input
+                            className="field__input"
+                            name="deviceModel"
+                            maxLength={REPAIR_ACTIVITY_DEVICE_MODEL_MAX_LENGTH}
+                            placeholder={copy.deviceModelPlaceholder}
+                            value={signupDraft.deviceModel}
+                            aria-invalid={signupDeviceModelError ? true : undefined}
+                            aria-describedby={
+                              signupDeviceModelError
+                                ? "repair-activity-signup-device-model-error"
+                                : undefined
+                            }
+                            onChange={(event) => {
+                              updateSignupDraft({ deviceModel: event.target.value });
+                              setSignupDeviceModelError("");
+                            }}
+                            disabled={!open || busy}
+                          />
+                          {signupDeviceModelError ? (
+                            <p
+                              className="field__hint text-accent-deep"
+                              id="repair-activity-signup-device-model-error"
+                              role="alert"
+                            >
+                              {signupDeviceModelError}
+                            </p>
+                          ) : null}
+                        </label>
+                      </div>
+                      <div className={styles.consentSummary}>
+                        <span>
+                          {consentChecked ? copy.consentSummary : copy.consentSummaryMissing}
+                        </span>
+                        <button
+                          type="button"
+                          className={styles.textLink}
+                          onClick={() => goToStep(2)}
+                        >
+                          {copy.reviewNotice}
+                        </button>
+                      </div>
+                      <div className={styles.stepActions}>
+                        <Button variant="outline" onClick={() => goToStep(2)}>
+                          {copy.previousStep}
+                        </Button>
+                        <Button
+                          type="submit"
+                          variant="solid"
+                          trailingIcon="arrowRight"
+                          disabled={!open || busy}
+                        >
+                          {busy ? copy.submitting : copy.submitSignup}
+                        </Button>
+                      </div>
+                    </form>
+                  </section>
+
+                  {openedNotice ? (
+                    <p className="sr-only" role="status">
+                      {copy.countdownOpened}
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+            </>
+          )}
+        </section>
+
+        <section
+          className={styles.preparationSection}
+          aria-labelledby="repair-activity-preparation-title"
+        >
+          <div className={styles.preparationHead}>
+            <h2 className={styles.preparationTitle} id="repair-activity-preparation-title">
+              {copy.precautionsTitle}
+            </h2>
+            <p className={styles.preparationNote}>{copy.preparationNote}</p>
+          </div>
+          <RepairActivityPreparation layout="cards" />
+        </section>
+      </div>
+
+      {queueVisible ? <RepairActivityQueue key={activity.id} activityId={activity.id} /> : null}
 
       {cancelOpen && lookup ? (
         <ConfirmDialog
