@@ -149,6 +149,63 @@ test("超过体积上限返回 413", async (t) => {
   assert.equal(response.status, 413);
 });
 
+test("无 Content-Length 的分块大请求超限后立即停止读取", async (t) => {
+  const { logs } = setup(t);
+  const chunkSize = 64 * 1024;
+  let pulled = 0;
+  let emitted = 0;
+  const stream = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      pulled++;
+      emitted += chunkSize;
+      controller.enqueue(new Uint8Array(chunkSize));
+    },
+  });
+
+  const init: RequestInit & { duplex: "half" } = {
+    method: "POST",
+    headers: {
+      origin: ORIGIN,
+      "content-type": "application/json",
+      "x-real-ip": "203.0.113.12",
+      "x-request-id": "req_telemetry_test",
+    },
+    body: stream,
+    duplex: "half",
+  };
+  const response = await POST(new Request(`${ORIGIN}/api/v1/telemetry`, init));
+
+  assert.equal(response.status, 413);
+  // 10 MiB 的请求若被读完会是 160 个 64 KiB chunk；这里必须很早就停。
+  assert.ok(emitted <= 256 * 1024, `超限后仍在读取：已拉取 ${emitted} 字节`);
+  assert.ok(pulled <= 4, `超限后仍在拉取：${pulled} 次`);
+  assert.equal(logs.length, 0);
+});
+
+test("服务端开关关闭接收时直接确认且不写日志", async (t) => {
+  const { logs } = setup(t);
+  process.env.TELEMETRY_DISABLED = "1";
+  t.after(() => {
+    delete process.env.TELEMETRY_DISABLED;
+  });
+
+  const response = await POST(
+    new Request(`${ORIGIN}/api/v1/telemetry`, {
+      method: "POST",
+      headers: {
+        origin: ORIGIN,
+        "content-type": "application/json",
+        "x-real-ip": "203.0.113.13",
+        "x-request-id": "req_telemetry_test",
+      },
+      body: "x".repeat(4097),
+    }),
+  );
+
+  assert.equal(response.status, 202);
+  assert.equal(logs.length, 0);
+});
+
 test("按客户端 IP 限流，第 121 次请求返回 429", async (t) => {
   const { request } = setup(t);
   const body = { kind: "web-vital", route: "/", metric: "LCP", value: 1 };

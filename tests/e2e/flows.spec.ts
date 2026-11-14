@@ -2,8 +2,14 @@ import { expect, test } from "@playwright/test";
 
 import { loadSeed, login } from "./support";
 
-test("成员报名 → 管理员签到入队 → 成员接待", async ({ browser, baseURL }) => {
+test("成员报名 → 管理员签到入队 → 成员接待", async ({ browser, baseURL }, testInfo) => {
   const seed = loadSeed();
+  // CI 会给失败用例一次 retry；固定手机号会撞上首次尝试的报名记录。
+  // 每个 attempt 用独立手机号与姓名，旧记录仍留在看板里也能按精确名称定位。
+  const suffix = String(testInfo.retry).padStart(2, "0");
+  const customerName =
+    testInfo.retry === 0 ? seed.customer.name : `${seed.customer.name}-R${testInfo.retry}`;
+  const customerPhone = `${seed.customer.phone.slice(0, 9)}${suffix}`;
   const memberContext = await browser.newContext({ baseURL });
   const adminContext = await browser.newContext({ baseURL });
   try {
@@ -30,8 +36,8 @@ test("成员报名 → 管理员签到入队 → 成员接待", async ({ browser
     await memberPage.goto(`/repair-activities/${seed.activity.id}`);
     await expect(memberPage.getByRole("heading", { name: seed.activity.title })).toBeVisible();
 
-    await memberPage.locator("#repair-activity-signup-name").fill(seed.customer.name);
-    await memberPage.locator("#repair-activity-signup-phone").fill(seed.customer.phone);
+    await memberPage.locator("#repair-activity-signup-name").fill(customerName);
+    await memberPage.locator("#repair-activity-signup-phone").fill(customerPhone);
     await memberPage.locator('select[name="issueType"]').selectOption("CLEAN_PASTE");
     await memberPage.getByRole("button", { name: "提交报名", exact: true }).click();
     await memberPage.getByRole("button", { name: "我已阅读并同意", exact: true }).click();
@@ -74,7 +80,7 @@ test("成员报名 → 管理员签到入队 → 成员接待", async ({ browser
     await login(adminPage, seed.admin.qq, seed.admin.password);
     await adminPage.goto(`/admin/repair-activities/${seed.activity.id}?tab=board`);
     await expect(adminPage.locator(".activity-board--ready")).toBeVisible();
-    await adminPage.getByRole("checkbox", { name: new RegExp(seed.customer.name) }).check();
+    await adminPage.getByRole("checkbox", { name: `姓名 ${customerName}`, exact: true }).check();
     await adminPage.getByRole("button", { name: "签到入队", exact: true }).click();
     await adminPage.getByRole("button", { name: "确认签到", exact: true }).click();
     await expect(adminPage.getByText("已签到入队", { exact: true })).toBeVisible();
@@ -84,14 +90,12 @@ test("成员报名 → 管理员签到入队 → 成员接待", async ({ browser
       .getByRole("button", { name: "立即刷新", exact: true })
       .click();
     const queueRow = memberPage.locator(".activity-board__row").filter({
-      hasText: seed.customer.name,
+      has: memberPage.getByText(customerName, { exact: true }),
     });
     await expect(queueRow).toBeVisible();
     await queueRow.getByRole("button", { name: "接待", exact: true }).click();
     await expect(memberPage.getByText("已接待，请继续填写维修记录", { exact: true })).toBeVisible();
-    await expect(memberPage.locator("#activity-board-served-list")).toContainText(
-      seed.customer.name,
-    );
+    await expect(memberPage.locator("#activity-board-served-list")).toContainText(customerName);
   } finally {
     await Promise.all([memberContext.close(), adminContext.close()]);
   }
