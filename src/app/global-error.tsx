@@ -5,6 +5,7 @@ import { useEffect } from "react";
 import { Container } from "@/components/layout/Container";
 import { globalErrorPage } from "@/config/errors";
 import { siteConfig } from "@/config/site";
+import { reportClientError } from "@/lib/telemetry/client";
 
 import "./globals.css";
 
@@ -32,6 +33,7 @@ export default function GlobalError({
 }) {
   useEffect(() => {
     console.error(error);
+    reportClientError(error, "global");
   }, [error]);
 
   return (

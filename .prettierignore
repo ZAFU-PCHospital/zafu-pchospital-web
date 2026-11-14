@@ -8,3 +8,6 @@ next-env.d.ts
 
 # 站点数据由构建脚本生成，不参与格式化
 src/data/doc-manifest.json
+
+# Playwright 运行时可重录的 axe 基线
+tests/e2e/axe-baseline.json

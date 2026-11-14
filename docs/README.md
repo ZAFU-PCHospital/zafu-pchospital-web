@@ -11,6 +11,7 @@
 | 数据库、Migration、测试隔离         | [数据库指南](database.md) · [Windows 环境](database-windows.md)                       |
 | 数据语义与约束                      | [数据契约](contracts/data-contract.md)                                                |
 | HTTP 接口与错误口径                 | [API v1](contracts/api-v1.md)                                                         |
+| 前端遥测、E2E 巡检与无障碍基线      | [可观测性](observability.md)                                                          |
 | 分支、提交、评审与合并              | [Git 工作流](git-workflow.md)                                                         |
 | 第二期原始需求背景                  | [需求设计](第二期需求分析文档.md)（历史设计背景；后续变化以现行契约和已合并实现为准） |
 

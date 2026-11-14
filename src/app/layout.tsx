@@ -5,6 +5,7 @@ import { Header } from "@/components/layout/Header";
 import { SiteEffects } from "@/components/layout/SiteEffects";
 import { ThemeIcon } from "@/components/layout/ThemeIcon";
 import { SessionMonitor } from "@/components/auth/SessionMonitor";
+import { ClientTelemetry } from "@/components/telemetry/ClientTelemetry";
 import { siteConfig } from "@/config/site";
 import { DEFAULT_THEME_MODE, resolveTheme } from "@/config/theme";
 import { buildThemeBootstrapScript } from "@/lib/theme";
@@ -81,6 +82,7 @@ export default function RootLayout({
         </a>
 
         <SiteEffects />
+        <ClientTelemetry />
         <SessionMonitor />
         <Header />
 

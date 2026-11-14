@@ -1,0 +1,87 @@
+# 夜间 E2E 冒烟与无障碍基线
+#
+# 为什么不在每个 PR 跑：整套流程要构建生产包、起 MySQL、跑真实浏览器，
+# 单轮约 5–10 分钟，且与 `ci.yml` 的 lint/build 高度重叠。本 workflow 按
+# **夜间 + 手动**运行，覆盖 issue #380 要求的 3–5 条关键路径冒烟与 axe 基线；
+# PR 仍由 ci.yml 拦截类型、lint、构建与文档产物。
+#
+# 数据只写独立测试库：MySQL service 的库名以 `_test` 结尾，Playwright 配置与
+# 夹具脚本都会过 `tests/integration/db-guard.ts` 的闸门。夹具带随机前缀，
+# 正常结束时由 global teardown 清理。
+name: E2E
+
+on:
+  schedule:
+    # 03:00（北京时间）—— 每日一次，避开白天 PR 高峰
+    - cron: "0 19 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    name: 夜间冒烟与无障碍
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      mysql:
+        image: mysql:8.0.32
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: zafu_pchospital_test
+          MYSQL_USER: app_user
+          MYSQL_PASSWORD: change-me
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uapp_user -pchange-me"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      DATABASE_URL: mysql://app_user:change-me@127.0.0.1:3306/zafu_pchospital_test?allowPublicKeyRetrieval=true
+      AUTH_SECRET: e2e-auth-secret-not-for-production
+      INVITE_CODE_PEPPER: e2e-invite-pepper-not-for-production
+      PII_AUDIT_PEPPER: e2e-pii-pepper-not-for-production
+      APP_BASE_URL: http://localhost:3311
+      E2E_PORT: "3311"
+    steps:
+      - name: 检出仓库
+        uses: actions/checkout@v4
+
+      - name: 安装 pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 部署数据库迁移
+        run: pnpm db:migrate:deploy
+
+      - name: 安装 Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      # webServer 内完成生产构建与启动；配置加载时先校验测试库
+      - name: 运行 E2E 与 axe 基线
+        run: pnpm test:e2e
+
+      - name: 上传失败产物与报告
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-artifacts
+          path: |
+            tests/e2e/.report
+            tests/e2e/.artifacts
+          retention-days: 7

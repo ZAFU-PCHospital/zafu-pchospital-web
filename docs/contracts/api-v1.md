@@ -1394,3 +1394,37 @@ body `{ name, phone, editToken }`，同源、统一信封 / requestId，沿用�
   取消后同一手机号也按正常名额规则重新校验。
 - 管理员既有删除报名入口不变；本端点不处理维修记录、照片或 no-show 事件。无 Schema /
   Migration 变更。
+
+## 前端遥测（issue #380）
+
+`POST /api/v1/telemetry`：匿名写接口，同源、仅接受 `application/json`、请求体上限 4 KB
+（读取请求流时累计字节，超限立即取消并返回 `413`，不依赖 `Content-Length`），
+按 IP **120 次/分钟**限流。成功返回 `202` 与统一信封
+`{ success: true, data: { accepted: true }, meta: { requestId } }`，`Cache-Control: private, no-store`。
+服务端环境变量 `TELEMETRY_DISABLED=1` 时停止接收：直接返回同样的 `202`，不读取正文、
+不写遥测日志（用于无需重新构建前端的运营开关）。
+
+请求体是以下两种之一（未知字段忽略）：
+
+```json
+{ "kind": "web-vital", "route": "/repair-activities/[id]", "release": "<7–40 位 hex>",
+  "metric": "LCP", "value": 1234.567, "rating": "good" }
+{ "kind": "error", "route": "/member", "release": "<7–40 位 hex>",
+  "boundary": "route", "name": "TypeError", "digest": "…" }
+```
+
+- `metric` 只允许 `CLS` / `FCP` / `INP` / `LCP` / `TTFB`；`value` 为非负数，服务端保留 3 位小数；
+  `rating` 只允许 `good` / `needs-improvement` / `poor`；
+- `boundary` 只允许 `route` / `global` / `window` / `unhandledrejection`，
+  日志中映射为 `ROUTE_ERROR` / `GLOBAL_ERROR` / `WINDOW_ERROR` / `UNHANDLED_REJECTION`；
+- `route` 只保留 pathname：查询串与 hash 被丢弃，UUID 与最长 20 位数字段替换为 `[id]`，最长 200；
+- `name` 只接受错误类型名；`message` / `stack` 不在契约里，传了也会被丢弃；
+- `release` 只接受 7–40 位十六进制 SHA。
+
+失败口径：跨源 `403`；非 JSON `415`；超过 4 KB `413`；结构或类型不符
+`400 VALIDATION_FAILED`；超过频率 `429`。
+
+服务端只往 stdout 写一行结构化日志（`event=client_telemetry`），**不入库、不写第三方**。
+日志中的 `release` 是服务端构建 SHA；仅当客户端上报的 SHA 与服务端不同才追加 `clientRelease`。
+IP、User-Agent、Cookie 与错误内容都不写入日志。实现见
+[可观测性](../observability.md)；无 Schema / Migration 变更。

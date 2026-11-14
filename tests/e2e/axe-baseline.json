@@ -1,0 +1,46 @@
+{
+  "recordedAt": "2026-11-14",
+  "tool": "axe-core（wcag2a / wcag2aa / wcag21a / wcag21aa）",
+  "routes": {
+    "/": {
+      "normal": [
+        {
+          "id": "color-contrast",
+          "target": ".activity-card__stub-weekday"
+        }
+      ],
+      "dark": [
+        {
+          "id": "color-contrast",
+          "target": ".activity-card__stub-weekday"
+        }
+      ]
+    },
+    "/login": {
+      "normal": [],
+      "dark": []
+    },
+    "/repair-activities": {
+      "normal": [
+        {
+          "id": "color-contrast",
+          "target": ".activity-card__stub-weekday"
+        }
+      ],
+      "dark": [
+        {
+          "id": "color-contrast",
+          "target": ".activity-card__stub-weekday"
+        }
+      ]
+    },
+    "/repair-activities/[id]": {
+      "normal": [],
+      "dark": []
+    },
+    "/admin/members": {
+      "normal": [],
+      "dark": []
+    }
+  }
+}

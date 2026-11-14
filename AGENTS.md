@@ -194,6 +194,7 @@ pnpm --version           # 应与上一条一致；不一致时先按环境指�
 | `pnpm lint`                  | `eslint .` + 主题调色板一致性校验，**必须 0 error**                                                           |
 | `pnpm test`                  | 单元与 Contract 测试                                                                                          |
 | `pnpm test:db`               | 真实 GreatSQL 集成测试                                                                                        |
+| `pnpm test:e2e`              | Playwright 冒烟 + axe 基线（夜间 workflow 运行；需 `_test` 库，见[可观测性](docs/observability.md)）          |
 | `pnpm db:migrate:deploy`     | 部署版本化 Migration                                                                                          |
 | `pnpm db:seed`               | 幂等基础角色 Seed                                                                                             |
 | `pnpm db:health`             | GreatSQL 连接与运行参数检查                                                                                   |
@@ -401,6 +402,9 @@ git switch -c feat/xxx  # 确认不在 main 上直接开发
 
 `main` 合并后不会自动发布：生产部署由维护者在本地按 [README 的「部署与维护」](README.md#部署与维护)
 执行 `tools/deploy/deploy-prod.sh`（本地构建、备份、迁移核对、原子切换与回滚）。
+
+`.github/workflows/e2e.yml` 单独跑 Playwright 冒烟与 axe 基线：**夜间计划任务 + 手动触发**，
+不在 PR 上运行，也不阻塞合并。运行方式、夹具与基线维护见[可观测性](docs/observability.md)。
 
 **依赖漏洞审计：**
 
