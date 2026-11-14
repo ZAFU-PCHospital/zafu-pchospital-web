@@ -174,25 +174,6 @@
   font-size: var(--t-sm);
 }
 
-.signupResult {
-  display: grid;
-  gap: var(--s-1);
-  padding: var(--s-3);
-  border: 1px solid var(--status-success-line);
-  border-radius: var(--r-mid);
-  background: var(--status-success-wash);
-  color: var(--ink-2);
-  font-size: var(--t-sm);
-}
-
-.signupResult strong {
-  color: var(--status-success-deep);
-}
-
-.signupResult p {
-  margin: 0;
-}
-
 .signupCode {
   font-variant-numeric: tabular-nums;
   font-size: var(--t-xs);
@@ -200,79 +181,279 @@
   overflow-wrap: anywhere;
 }
 
-.signupPending {
+/* 报名终态（issue #393）：结果整块替换向导，不占步骤条。 */
+.signupTerminal {
   display: grid;
-  gap: var(--s-2);
-  padding: var(--s-3);
-  border: 1px solid var(--status-warning-line);
+  gap: var(--s-4);
+}
+
+.resultPanel {
+  display: grid;
+  gap: var(--s-4);
+  padding: var(--s-4);
+  border: 1px solid var(--line);
   border-radius: var(--r-mid);
-  background: var(--status-warning-wash);
-  color: var(--ink-2);
-  font-size: var(--t-sm);
+  background: var(--surface-1);
 }
 
-.signupPending strong {
+.resultHead {
+  display: grid;
+  justify-items: start;
+  gap: var(--s-2);
+}
+
+.resultMark {
+  display: grid;
+  place-items: center;
+  inline-size: 2rem;
+  block-size: 2rem;
+  border-radius: 50%;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.resultMarkSuccess {
+  color: var(--status-success-deep);
+  background: var(--status-success-wash);
+}
+
+.resultMarkError {
   color: var(--status-warning-deep);
+  background: var(--status-warning-wash);
 }
 
-.signupPending p {
+.resultTitle {
+  margin: 0;
+  font-size: var(--t-md);
+  line-height: 1.4;
+}
+
+.resultDesc {
+  margin: 0;
+  color: var(--ink-3);
+  font-size: var(--t-sm);
+  line-height: 1.7;
+}
+
+.resultActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2);
+}
+
+/* 三步向导：步骤条 + 单步面板。 */
+.wizard {
+  display: grid;
+  gap: var(--s-4);
+}
+
+.stepper {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--s-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.step {
+  min-width: 0;
+}
+
+.stepButton {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  inline-size: 100%;
+  padding: var(--s-2);
+  border: 0;
+  border-radius: var(--r-mid);
+  background: transparent;
+  color: var(--ink-3);
+  text-align: start;
+}
+
+.stepButton:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.stepDone .stepButton {
+  color: var(--ink-2);
+  cursor: pointer;
+}
+
+.stepDone .stepButton:hover {
+  background: var(--surface-2);
+}
+
+.stepCurrent .stepButton {
+  color: var(--ink);
+}
+
+.stepDot {
+  display: grid;
+  place-items: center;
+  inline-size: 1.75rem;
+  block-size: 1.75rem;
+  flex: none;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  background: var(--surface-1);
+  font-size: var(--t-xs);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.stepDone .stepDot {
+  border-color: var(--status-success-line);
+  background: var(--status-success-wash);
+  color: var(--status-success-deep);
+}
+
+.stepCurrent .stepDot {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--ink);
+}
+
+.stepText {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.stepIndex {
+  color: var(--ink-3);
+  font-size: var(--t-xs);
+  letter-spacing: 0.06em;
+}
+
+.stepLabel {
+  font-size: var(--t-sm);
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.flowLock {
+  margin: 0;
+  padding: var(--s-3);
+  border-inline-start: 2px solid var(--line-strong);
+  color: var(--ink-3);
+  font-size: var(--t-sm);
+  line-height: 1.7;
+}
+
+.stepPanel {
+  display: grid;
+  gap: var(--s-3);
+  padding-top: var(--s-4);
+  border-top: 1px solid var(--line);
+}
+
+/* 作者样式的 display 会盖掉 UA 的 [hidden]，必须显式还原。 */
+.stepPanel[hidden] {
+  display: none;
+}
+
+.stepTitle {
+  margin: 0;
+  font-size: var(--t-md);
+  line-height: 1.4;
+}
+
+.stepTitle:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 4px;
+}
+
+.stepLead {
+  margin: 0;
+  color: var(--ink-3);
+  font-size: var(--t-sm);
+  line-height: 1.7;
+}
+
+.summary {
+  display: grid;
+  gap: var(--s-1);
   margin: 0;
 }
 
-.signupPendingActions {
+.summary > div {
+  display: grid;
+  grid-template-columns: minmax(4.5rem, auto) minmax(0, 1fr);
+  gap: var(--s-3);
+  align-items: baseline;
+}
+
+.summary dt {
+  color: var(--ink-3);
+  font-size: var(--t-sm);
+}
+
+.summary dd {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: var(--t-sm);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.noticeBlock {
+  max-block-size: 18rem;
+  overflow-y: auto;
+  padding: var(--s-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-mid);
+  background: var(--surface-1);
+}
+
+.consentCheck {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-2);
+  font-size: var(--t-sm);
+  line-height: 1.6;
+  cursor: pointer;
+}
+
+.consentCheck input {
+  margin-top: 0.2em;
+  flex: none;
+}
+
+.consentSummary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-2);
+  padding: var(--s-2) var(--s-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-mid);
+  color: var(--ink-3);
+  font-size: var(--t-sm);
+}
+
+.stepActivity {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: var(--t-sm);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.stepActions {
   display: flex;
   flex-wrap: wrap;
   gap: var(--s-2);
 }
 
-.signupNotice {
-  display: grid;
-  gap: var(--s-2);
-  padding-left: var(--s-3);
-  border-left: 2px solid var(--accent);
-  color: var(--ink-2);
-  font-size: var(--t-sm);
-}
-
-.signupNotice p {
-  margin: 0;
-}
-
-.signupConfirm {
-  display: grid;
-  gap: var(--s-1);
-  padding: var(--s-3);
-  border: 1px solid var(--line);
-  border-radius: var(--r-mid);
-  background: var(--surface-1);
-  font-size: var(--t-sm);
-}
-
-.signupConfirm p {
-  margin: 0;
-}
-
-.signupConfirmList {
-  display: grid;
-  gap: var(--s-1);
-  margin: 0;
-}
-
-.signupConfirmList > div {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: var(--s-3);
-}
-
-.signupConfirmList dt {
-  color: var(--ink-3);
-}
-
-.signupConfirmList dd {
-  margin: 0;
-  color: var(--ink);
-  font-weight: 600;
-  overflow-wrap: anywhere;
+.stepActions > :global(.btn) {
+  flex: 1 1 auto;
+  justify-content: center;
 }
 
 .fullHint {

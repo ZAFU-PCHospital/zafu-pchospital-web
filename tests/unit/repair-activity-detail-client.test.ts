@@ -61,17 +61,6 @@ function pageAlertText(node: ReactNode): string {
     .join("");
 }
 
-function signupErrorDialog(node: ReactNode) {
-  return findElement(
-    node,
-    (element) => element.props.title === repairActivitiesPage.detail.signupFailedTitle,
-  );
-}
-
-function signupDialog(node: ReactNode) {
-  return findElement(node, (element) => typeof element.props.onConfirm === "function");
-}
-
 function queueElement(node: ReactNode) {
   return findElement(node, (element) => {
     const type = element.type as { name?: string } | string;
@@ -113,6 +102,7 @@ async function mount(
   t: TestContext,
   options: {
     device?: { submitted: boolean; registration: unknown } | "pending" | "error";
+    draft?: unknown;
   } = {},
 ) {
   const originalCss = require.extensions[".css"];
@@ -137,6 +127,12 @@ async function mount(
     removeEventListener: (name: string) => handlers.delete(name),
   };
   const document = { visibilityState: "visible", activeElement: null as unknown, ...events };
+  const sessionStore = new Map<string, string>();
+  const sessionStorage = {
+    getItem: (key: string) => sessionStore.get(key) ?? null,
+    setItem: (key: string, value: string) => sessionStore.set(key, String(value)),
+    removeItem: (key: string) => sessionStore.delete(key),
+  };
   const timeoutDelays: number[] = [];
   const recordTimeout = (handler: () => void, delay?: number) => {
     timeoutDelays.push(delay ?? 0);
@@ -144,7 +140,14 @@ async function mount(
   };
   Object.defineProperty(globalThis, "window", {
     configurable: true,
-    value: { setInterval, clearInterval, setTimeout: recordTimeout, clearTimeout, ...events },
+    value: {
+      setInterval,
+      clearInterval,
+      setTimeout: recordTimeout,
+      clearTimeout,
+      sessionStorage,
+      ...events,
+    },
   });
   Object.defineProperty(globalThis, "document", { configurable: true, value: document });
   const slots: unknown[] = [];
@@ -242,51 +245,154 @@ async function mount(
     }
   });
   if (options.device) deviceStatus = options.device;
+  if (options.draft !== undefined) {
+    sessionStore.set(
+      `zafu-pchospital:repair-activity-signup-draft:${id}`,
+      typeof options.draft === "string" ? options.draft : JSON.stringify(options.draft),
+    );
+  }
   view();
-  let formResets = 0;
   let signupNameNode: { focus(): void } | null = null;
+  const stepElement = (index: 1 | 2 | 3) =>
+    findElement(
+      view(),
+      (element) => element.props["aria-labelledby"] === `repair-activity-signup-step-${index}`,
+    );
+  const visibleStep = () => {
+    for (const index of [1, 2, 3] as const) {
+      if (stepElement(index)?.props.hidden === false) return index;
+    }
+    return null;
+  };
+  const clickInStep = (index: 1 | 2 | 3, label: string) => {
+    const section = stepElement(index);
+    assert.ok(section, `第 ${index} 步未渲染`);
+    const button = findElement(
+      section,
+      (element) => element.props.children === label && typeof element.props.onClick === "function",
+    );
+    assert.ok(button, `第 ${index} 步找不到按钮「${label}」`);
+    (button.props.onClick as () => void)();
+    view();
+  };
+  const setDraftField = (field: string, value: string) => {
+    const section = stepElement(3);
+    assert.ok(section, "第三步未渲染");
+    if (field === "issueType") {
+      const select = findElement(
+        section,
+        (element) => element.type === "select" && element.props.name === "issueType",
+      );
+      assert.ok(select, "第三步没有故障类型选择");
+      (select.props.onChange as (event: unknown) => void)({ target: { value } });
+      return;
+    }
+    const input = findElement(section, (element) => element.props.name === field);
+    assert.ok(input, `找不到字段 ${field}`);
+    (input.props.onChange as (event: unknown) => void)({ target: { value } });
+  };
+  const fillSignupDraft = (overrides: Record<string, string> = {}) => {
+    const values = {
+      name: "测试客户",
+      phone: "13800000000",
+      issueType: "CLEAN_PASTE",
+      deviceModel: "测试机型",
+      ...overrides,
+    };
+    Object.entries(values).forEach(([field, value]) => setDraftField(field, value));
+    view();
+    const nameInput = findElement(
+      stepElement(3) ?? [],
+      (element) => element.props.id === "repair-activity-signup-name",
+    );
+    if (nameInput) {
+      signupNameNode = {
+        focus() {
+          document.activeElement = signupNameNode;
+        },
+      };
+      (nameInput.props.ref as { current: unknown }).current = signupNameNode;
+    }
+  };
+  const agreeConsent = () => {
+    const section = stepElement(2);
+    assert.ok(section, "第二步未渲染");
+    const checkbox = findElement(
+      section,
+      (element) => element.type === "input" && element.props.type === "checkbox",
+    );
+    assert.ok(checkbox, "第二步没有同意勾选框");
+    (checkbox.props.onChange as (event: unknown) => void)({ target: { checked: true } });
+    view();
+  };
+  const startWizard = () => {
+    const section = stepElement(1);
+    assert.ok(section, "第一步未渲染");
+    const button = findElement(
+      section,
+      (element) =>
+        (element.props.children === repairActivitiesPage.detail.startSignup ||
+          element.props.children === repairActivitiesPage.detail.continueSignup) &&
+        typeof element.props.onClick === "function",
+    );
+    assert.ok(button, "第一步没有开始报名按钮");
+    (button.props.onClick as () => void)();
+    view();
+  };
+  const signupFormInStep = () => {
+    const section = stepElement(3);
+    assert.ok(section, "第三步未渲染");
+    return findElement(
+      section,
+      (element) =>
+        element.type === "form" &&
+        element.props["aria-label"] === repairActivitiesPage.detail.signupTitle,
+    );
+  };
+  const openSignupForm = (overrides: Record<string, string> = {}) => {
+    if (visibleStep() === 1) startWizard();
+    if (visibleStep() === 2) {
+      agreeConsent();
+      clickInStep(2, repairActivitiesPage.detail.nextStep);
+    }
+    fillSignupDraft(overrides);
+    const form = signupFormInStep();
+    assert.ok(form, "第三步没有报名表单");
+    return form;
+  };
+  const submitForm = () => {
+    const form = signupFormInStep();
+    assert.ok(form, "第三步没有报名表单");
+    (form.props.onSubmit as (event: unknown) => void)({
+      preventDefault() {},
+      currentTarget: {},
+    });
+    view();
+  };
+  const storedDraft = (activityId = id) => {
+    const raw = sessionStore.get(`zafu-pchospital:repair-activity-signup-draft:${activityId}`);
+    return raw ? (JSON.parse(raw) as Record<string, string>) : null;
+  };
   return {
     view,
     requests,
     timeoutDelays,
-    formResets: () => formResets,
+    stepElement,
+    visibleStep,
+    clickInStep,
+    agreeConsent,
+    openSignupForm,
+    submitForm,
+    submitSignup(overrides: Record<string, string> = {}) {
+      openSignupForm(overrides);
+      submitForm();
+      const index = requests.findLastIndex((request) => request.init.method === "POST");
+      assert.ok(index >= 0, "提交后应发出报名 POST");
+      return { index, request: requests[index] };
+    },
     activeElement: () => document.activeElement,
     signupNameNode: () => signupNameNode,
-    requestSignup(overrides: Record<string, string> = {}) {
-      const form = findElement(view(), (element) => element.props["aria-label"] === "报名参加");
-      assert.ok(form);
-      (form.props.ref as { current: unknown }).current = {
-        reset() {
-          formResets++;
-        },
-        focus() {},
-      };
-      const nameInput = findElement(
-        form,
-        (element) => element.props.id === "repair-activity-signup-name",
-      );
-      const nameNode = {
-        focus() {
-          document.activeElement = nameNode;
-        },
-      };
-      if (nameInput) (nameInput.props.ref as { current: unknown }).current = nameNode;
-      signupNameNode = nameNode;
-      formValues = new Map(
-        Object.entries({
-          name: "测试客户",
-          phone: "13800000000",
-          issueType: "CLEAN_PASTE",
-          deviceModel: "测试机型",
-          ...overrides,
-        }),
-      );
-      (form.props.onSubmit as (event: unknown) => void)({
-        preventDefault() {},
-        currentTarget: {},
-      });
-      return signupDialog(view())!;
-    },
+    storedDraft,
     requestLookup(phone: string) {
       const form = findElement(
         view(),
@@ -442,7 +548,8 @@ test("切换活动时解除旧的报名在途禁用，迟到响应不能展示�
   const copy = repairActivitiesPage.detail;
   const ui = await mount(t);
   await ui.finish(0, { ...activity, status: "OPEN" });
-  (ui.requestSignup().props.onConfirm as () => void)();
+  ui.openSignupForm();
+  ui.submitForm();
   assert.equal(ui.requests[1].init.method, "POST");
   assert.equal(
     findElement(ui.view(), (element) => element.props.id === "repair-activity-signup-phone")?.props
@@ -455,26 +562,23 @@ test("切换活动时解除旧的报名在途禁用，迟到响应不能展示�
   assert.equal(ui.requests[2].url, "/api/v1/repair-activities/b");
   await ui.finish(2, { ...activity, id: "b", title: "新活动", status: "OPEN" });
   assert.ok(text(ui.view()).includes("新活动"));
+  assert.equal(ui.visibleStep(), 1, "切换活动后回到第一步");
   assert.equal(
     findElement(ui.view(), (element) => element.props.id === "repair-activity-signup-phone")?.props
       .disabled,
     false,
     "切换活动后旧报名的 busy 不能残留",
   );
-  assert.equal(
-    findElement(ui.view(), (element) => element.props.children === copy.submitSignup)?.props
-      .disabled,
-    false,
+  const submitButton = findElement(
+    ui.stepElement(3)!,
+    (element) => element.props.children === copy.submitSignup,
   );
+  assert.equal(submitButton?.props.disabled, false);
 
   ui.requests[1].finish(Response.json({ success: true, data: registration }));
   await setImmediate();
-  assert.equal(
-    text(ui.view()).includes(copy.signupSuccessTitle),
-    false,
-    "旧活动响应不能展示新活动成功",
-  );
-  assert.equal(signupDialog(ui.view()), undefined);
+  assert.equal(ui.visibleStep(), 1, "旧活动响应不能展示新活动成功");
+  assert.equal(ui.visibleStep(), 1);
 });
 
 test("切换活动时清空查询状态并中止在途查询", async (t) => {
@@ -511,7 +615,8 @@ test("切换活动时清空查询状态并中止在途查询", async (t) => {
   );
 });
 
-test("完整须知可展开且提交前必须同意，成功只展示到场准备并且不重复提交", async (t) => {
+test("三步向导先确认活动、再阅读须知，勾选同意后才进入填写", async (t) => {
+  const copy = repairActivitiesPage.detail;
   const ui = await mount(t);
   await ui.finish(0, { ...activity, status: "OPEN" });
   const panel = findElement(
@@ -533,83 +638,219 @@ test("完整须知可展开且提交前必须同意，成功只展示到场准�
     repairActivitiesPage.detail.consent.clauses.join(""),
   );
 
-  const consent = ui.requestSignup();
-  assert.ok(text(consent).includes(activity.title), "确认弹层应展示活动名");
-  assert.ok(text(consent).includes("测试客户"), "确认弹层应展示姓名");
-  assert.ok(text(consent).includes("13800000000"), "确认弹层应展示完整手机号供核对");
-  assert.equal(ui.requests.length, 1, "未同意须知时不发送报名请求");
-  assert.equal(consent.props.title, repairActivitiesPage.detail.consent.title);
-  assert.equal(consent.props.confirmLabel, repairActivitiesPage.detail.consent.agree);
-  assert.equal(consent.props.cancelLabel, repairActivitiesPage.detail.confirmEdit);
-  assert.ok(findElement(consent, (element) => element.type === RepairActivityPrecautions));
-  (consent.props.onConfirm as () => void)();
-  assert.equal(signupDialog(ui.view())?.props.busy, true);
-  assert.deepEqual(JSON.parse(ui.requests[1].init.body as string), {
+  assert.equal(ui.visibleStep(), 1);
+  const step1 = ui.stepElement(1)!;
+  assert.ok(text(step1).includes(copy.stepTitles[0]));
+  assert.ok(text(step1).includes(activity.location!), "第一步摘要带地点");
+  assert.equal(ui.requests.length, 1, "尚未开始填写时不发送报名请求");
+
+  ui.clickInStep(1, copy.startSignup);
+  assert.equal(ui.visibleStep(), 2, "第一步继续后进入须知");
+
+  const step2 = ui.stepElement(2)!;
+  assert.ok(text(step2).includes(copy.stepTitles[1]));
+  assert.ok(text(step2).includes(copy.consent.subtitle));
+  assert.ok(findElement(step2, (element) => element.type === RepairActivityPrecautions));
+
+  ui.clickInStep(2, copy.nextStep);
+  assert.equal(ui.visibleStep(), 2, "未勾选同意不能进入填写");
+  const consentError = findElement(
+    ui.stepElement(2)!,
+    (element) => element.props.id === "repair-activity-signup-consent-error",
+  );
+  assert.equal(consentError?.props.role, "alert");
+  assert.ok(text(consentError).includes(copy.consent.required));
+  assert.equal(ui.requests.length, 1, "未勾选同意不发送报名请求");
+
+  ui.agreeConsent();
+  assert.equal(
+    findElement(
+      ui.stepElement(2)!,
+      (element) => element.props.id === "repair-activity-signup-consent-error",
+    ),
+    undefined,
+    "勾选后错误消失",
+  );
+  ui.clickInStep(2, copy.nextStep);
+  assert.equal(ui.visibleStep(), 3);
+
+  const { index, request } = ui.submitSignup();
+  assert.deepEqual(JSON.parse(request.init.body as string), {
     name: "测试客户",
     phone: "13800000000",
     issueType: "CLEAN_PASTE",
     deviceModel: "测试机型",
     consentAccepted: true,
   });
-  ui.requests[1].finish(Response.json({ success: true, data: registration }));
-  await setImmediate();
-  let success = signupDialog(ui.view());
-  assert.equal(success?.props.title, repairActivitiesPage.detail.signupSuccessTitle);
-  assert.equal(success?.props.cancelLabel, undefined);
-  assert.equal(ui.formResets(), 1, "成功后清空报名表单");
   assert.equal(
-    findElement(success, (element) => element.type === RepairActivityPrecautions),
-    undefined,
+    findElement(ui.stepElement(3)!, (element) => element.props.children === copy.submitting)?.props
+      .disabled,
+    true,
+    "提交在途时禁用提交按钮",
   );
-  // 到场准备已收进凭条组件内部：在凭条渲染出的子树里找它。
-  const { RepairActivityReceipt: ReceiptForPrep } =
-    await import("../../src/components/repair-activities/RepairActivityReceipt");
-  const receiptForPrep = findElement(
-    success,
-    (element) => element.type === ReceiptForPrep,
-  );
-  assert.ok(receiptForPrep, "成功态应渲染凭条");
-  assert.ok(
-    findElement(
-      ReceiptForPrep(receiptForPrep.props as never),
-      (element) => element.type === RepairActivityPreparation,
-    ),
-    "凭条下方保留到场准备",
-  );
-  for (const item of repairActivitiesPage.detail.preparation) {
-    assert.ok(text(RepairActivityPreparation()).includes(item.title));
-  }
+  ui.requests[index].finish(Response.json({ success: true, data: registration }));
+  await setImmediate();
 
-  await ui.finish(2, null); // 成功后的刷新失败不能覆盖成功提醒。
-  success = signupDialog(ui.view());
-  assert.equal(success?.props.title, repairActivitiesPage.detail.signupSuccessTitle);
-  (success?.props.onConfirm as () => void)();
-  assert.equal(signupDialog(ui.view()), undefined);
-  assert.ok(text(ui.view()).includes(repairActivitiesPage.detail.signupSuccessTitle));
-  assert.ok(text(ui.view()).includes(registration.phoneMasked), "弹层关闭后仍显示已报名记录");
-  assert.ok(
-    text(ui.view()).includes(
-      repairActivitiesPage.detail.registrationNumber.replace("{id}", registration.id),
-    ),
-    "凭条应包含报名编号",
+  const { RepairActivityReceipt } =
+    await import("../../src/components/repair-activities/RepairActivityReceipt");
+  const content = text(ui.view());
+  assert.ok(content.includes(copy.resultTitle), "终态标题换成报名结果");
+  const receipt = findElement(ui.view(), (element) => element.type === RepairActivityReceipt);
+  assert.ok(receipt, "直接展示成功凭条");
+  const receiptContent = text(RepairActivityReceipt(receipt.props as never));
+  assert.ok(receiptContent.includes(registration.phoneMasked));
+  assert.ok(receiptContent.includes(repairActivityIssueTypeLabels.CLEAN_PASTE));
+  assert.equal(ui.visibleStep(), null, "结果不占步骤条");
+  assert.equal(
+    findElement(ui.view(), (element) => element.props["aria-label"] === copy.signupTitle),
+    undefined,
+    "成功后收起报名表单",
   );
-  assert.ok(
-    text(ui.view()).includes(
-      repairActivitiesPage.detail.receiptStatus.replace("{status}", "报名成功"),
-    ),
-    "凭条应包含报名状态",
+  assert.equal(ui.storedDraft(), null, "成功后清空草稿");
+  assert.equal(
+    ui.requests.filter((request) => request.init.method === "POST").length,
+    1,
+    "只提交一次",
   );
-  assert.equal(ui.requests.filter((request) => request.init.method === "POST").length, 1);
+
+  await ui.finish(index + 1, null);
+  assert.ok(
+    findElement(ui.view(), (element) => element.type === RepairActivityReceipt),
+    "刷新失败仍保留成功凭条",
+  );
 });
 
-test("报名成功弹层渲染一屏凭条：活动名、起止时间、地点、凭条字段与一行到场准备", async (t) => {
+test("报名未开始时锁住向导，不进入须知并保留查询入口", async (t) => {
+  const copy = repairActivitiesPage.detail;
   const ui = await mount(t);
-  await ui.finish(0, { ...activity, endsAt: "2026-10-24T12:00:00Z" });
-  const consent = ui.requestSignup();
-  (consent.props.onConfirm as () => void)();
-  // 倒计时归零后组件会自行复查状态，GET 条数不固定：按方法定位那条 POST。
-  const postIndex = ui.requests.findIndex((request) => request.init.method === "POST");
-  assert.ok(postIndex >= 0, "确认后必须发出报名 POST");
+  await ui.finish(0, {
+    ...activity,
+    status: "UPCOMING",
+    signupOpensAt: "2026-10-24T05:00:00Z",
+    signupClosesAt: "2026-10-24T09:00:00Z",
+  });
+  const content = text(ui.view());
+  assert.ok(content.includes(copy.flowLocked), "非 OPEN 状态显示锁定提示");
+  assert.equal(ui.visibleStep(), 1);
+  assert.equal(
+    findElement(ui.view(), (element) => element.props["aria-label"] === copy.stepLabel),
+    undefined,
+    "锁定时不渲染步骤条",
+  );
+  const cta = findElement(
+    ui.stepElement(1)!,
+    (element) => element.props.children === copy.upcomingDisabled,
+  );
+  assert.equal(cta?.props.disabled, true, "未开始报名时 CTA 禁用");
+  (cta!.props.onClick as () => void)();
+  ui.view();
+  assert.equal(ui.visibleStep(), 1, "锁定状态不能进入须知");
+  assert.ok(
+    findElement(ui.view(), (element) => element.props.id === "repair-activity-lookup-name"),
+    "锁定状态仍可查询本人记录",
+  );
+});
+
+test("刷新后从 sessionStorage 恢复报名草稿", async (t) => {
+  const copy = repairActivitiesPage.detail;
+  const ui = await mount(t, {
+    draft: {
+      name: "恢复客户",
+      phone: "13911112222",
+      issueType: "CLEAN_ONLY",
+      deviceModel: "联想小新",
+    },
+  });
+  await ui.finish(0, { ...activity, status: "OPEN" });
+  ui.clickInStep(1, copy.startSignup);
+  ui.agreeConsent();
+  ui.clickInStep(2, copy.nextStep);
+  assert.equal(ui.visibleStep(), 3);
+
+  const section = ui.stepElement(3)!;
+  assert.equal(
+    findElement(section, (element) => element.props.id === "repair-activity-signup-name")?.props
+      .value,
+    "恢复客户",
+  );
+  assert.equal(
+    findElement(section, (element) => element.props.id === "repair-activity-signup-phone")?.props
+      .value,
+    "13911112222",
+  );
+  assert.equal(
+    findElement(
+      section,
+      (element) => element.type === "select" && element.props.name === "issueType",
+    )?.props.value,
+    "CLEAN_ONLY",
+  );
+  assert.equal(
+    findElement(section, (element) => element.props.name === "deviceModel")?.props.value,
+    "联想小新",
+  );
+});
+
+test("步骤条可回退，返回时保留已填内容与同意状态", async (t) => {
+  const copy = repairActivitiesPage.detail;
+  const ui = await mount(t);
+  await ui.finish(0, { ...activity, status: "OPEN" });
+  ui.openSignupForm({
+    name: "回退客户",
+    phone: "13700000000",
+    issueType: "SOFTWARE_SYSTEM",
+    deviceModel: "ThinkPad",
+  });
+  const stepper = findElement(
+    ui.view(),
+    (element) => element.props["aria-label"] === copy.stepLabel,
+  );
+  assert.ok(stepper, "报名中渲染步骤条");
+  const step1Button = findElement(
+    stepper,
+    (element) =>
+      typeof element.props["aria-label"] === "string" &&
+      element.props["aria-label"].startsWith(copy.stepIndex.replace("{index}", "1")) &&
+      typeof element.props.onClick === "function",
+  );
+  assert.ok(step1Button, "已完成步骤可点回");
+  assert.equal(step1Button.props.disabled, false);
+  (step1Button.props.onClick as () => void)();
+  ui.view();
+  assert.equal(ui.visibleStep(), 1);
+
+  ui.clickInStep(1, copy.continueSignup);
+  assert.equal(ui.visibleStep(), 2, "已同意时第一步直接继续");
+  ui.clickInStep(2, copy.nextStep);
+  assert.equal(ui.visibleStep(), 3);
+  const section = ui.stepElement(3)!;
+  assert.equal(
+    findElement(section, (element) => element.props.id === "repair-activity-signup-name")?.props
+      .value,
+    "回退客户",
+  );
+  assert.equal(
+    findElement(
+      section,
+      (element) => element.type === "select" && element.props.name === "issueType",
+    )?.props.value,
+    "SOFTWARE_SYSTEM",
+  );
+
+  ui.clickInStep(3, copy.previousStep);
+  assert.equal(ui.visibleStep(), 2, "第三步可返回须知");
+});
+
+test("报名成功后直接渲染一屏凭条：活动名、起止时间、地点与一行到场准备", async (t) => {
+  const ui = await mount(t);
+  await ui.finish(0, {
+    ...activity,
+    status: "OPEN",
+    endsAt: "2026-10-24T12:00:00Z",
+  });
+  ui.submitSignup();
+  const postIndex = ui.requests.findLastIndex((request) => request.init.method === "POST");
+  assert.ok(postIndex >= 0, "第三步提交必须发出报名 POST");
   ui.requests[postIndex].finish(Response.json({ success: true, data: registration }));
   await setImmediate();
 
@@ -620,34 +861,20 @@ test("报名成功弹层渲染一屏凭条：活动名、起止时间、地点�
   const { RepairActivityPrecautions } =
     await import("../../src/components/repair-activities/RepairActivityPrecautions");
 
-  const success = signupDialog(ui.view());
-  assert.ok(success);
-  assert.equal(
-    success.props.confirmLabel,
-    repairActivitiesPage.detail.receipt.close,
-    "底部恢复「关闭」按钮",
-  );
-  assert.equal(success.props.cancelLabel, undefined, "成功态不渲染取消按钮");
-  assert.equal(success.props.titleTone, "success", "标题用成功色辅助表达状态");
-  assert.equal(success.props.titleHidden, true, "可见标题由凭条顶部承担，弹层标题只留给读屏");
-  assert.equal(success.props.closeIconOnly, true, "标题栏只留图标 ✕");
-  assert.equal(success.props.layout, "fit", "内容自适应高度、底部按钮固定");
-  assert.equal(success.props.size, "narrow", "成功态用 640px 窄档，桌面不铺满");
-  const receipt = findElement(success, (element) => element.type === RepairActivityReceipt);
+  const receipt = findElement(ui.view(), (element) => element.type === RepairActivityReceipt);
   assert.ok(receipt, "成功态必须是凭条，而不是一段纯文字");
 
-  const content = text(RepairActivityReceipt(receipt.props as never));
-  assert.ok(content.includes(activity.title), "凭条要有活动名称");
-  assert.ok(content.includes("2026/10/24 18:00–20:00"), "凭条要有起止时间区间");
-  assert.ok(content.includes(activity.location!), "凭条要有地点");
-  assert.ok(content.includes(registration.name), "凭条要有姓名");
-  assert.ok(content.includes(registration.phoneMasked), "凭条要有脱敏手机");
-  assert.ok(content.includes(repairActivitiesPage.detail.receipt.screenshotHint), "截图提示");
-  assert.equal(
-    content.includes(registration.id),
-    false,
-    "用户已裁定凭条不放报名编号，编号仍在常驻成功面板",
+  const receiptContent = text(RepairActivityReceipt(receipt.props as never));
+  assert.ok(receiptContent.includes(activity.title), "凭条要有活动名称");
+  assert.ok(receiptContent.includes("2026/10/24 18:00–20:00"), "凭条要有起止时间区间");
+  assert.ok(receiptContent.includes(activity.location!), "凭条要有地点");
+  assert.ok(receiptContent.includes(registration.name), "凭条要有姓名");
+  assert.ok(receiptContent.includes(registration.phoneMasked), "凭条要有脱敏手机");
+  assert.ok(
+    receiptContent.includes(repairActivitiesPage.detail.receipt.screenshotHint),
+    "截图提示",
   );
+  assert.equal(receiptContent.includes(registration.id), false, "用户已裁定凭条不放报名编号");
 
   const preparation = findElement(
     RepairActivityReceipt(receipt.props as never),
@@ -655,17 +882,21 @@ test("报名成功弹层渲染一屏凭条：活动名、起止时间、地点�
   );
   assert.equal(preparation?.props.layout, "compact", "凭条下方到场准备用紧凑两列");
   assert.equal(
-    findElement(success, (element) => element.type === RepairActivityPrecautions),
+    findElement(
+      RepairActivityReceipt(receipt.props as never),
+      (element) => element.type === RepairActivityPrecautions,
+    ),
     undefined,
     "凭条里不展开完整须知",
   );
 });
 
-test("非法手机号在打开确认弹层前拦截并可纠正", async (t) => {
+test("非法手机号在填写步骤内拦截并可纠正", async (t) => {
   const ui = await mount(t);
   await ui.finish(0, { ...activity, status: "OPEN" });
-  ui.requestSignup({ phone: "1380000" });
-  assert.equal(signupDialog(ui.view()), undefined, "非法手机号不能打开确认弹层");
+  ui.openSignupForm({ phone: "1380000" });
+  ui.submitForm();
+  assert.equal(ui.visibleStep(), 3, "校验失败时仍停在填写步骤");
   assert.equal(ui.requests.length, 1, "非法手机号不发送报名请求");
   const phoneInput = findElement(
     ui.view(),
@@ -680,26 +911,30 @@ test("非法手机号在打开确认弹层前拦截并可纠正", async (t) => {
   assert.equal(error?.props.role, "alert");
   assert.ok(text(ui.view()).includes(repairActivitiesPage.detail.phoneFormatHint));
 
-  ui.requestSignup({ phone: "13900000000" });
-  const consent = signupDialog(ui.view());
-  assert.ok(consent);
+  (phoneInput!.props.onChange as (event: unknown) => void)({
+    target: { value: "13900000000" },
+  });
+  ui.view();
   assert.equal(
     text(ui.view()).includes(repairActivitiesPage.detail.phoneFormatHint),
     false,
     "纠正手机号后错误消失",
   );
-  assert.ok(text(consent).includes("13900000000"));
-  assert.equal(ui.requests.length, 1, "纠正后仍需同意须知才提交");
+  ui.submitForm();
+  const request = ui.requests.find((item) => item.init.method === "POST");
+  assert.ok(request, "纠正后可以提交");
+  assert.equal(JSON.parse(request.init.body as string).phone, "13900000000");
 });
 
 test("姓名只输入空格时在报名表单内拦截", async (t) => {
   const copy = repairActivitiesPage.detail;
   const ui = await mount(t);
   await ui.finish(0, { ...activity, status: "OPEN" });
-  ui.requestSignup({ name: "   " });
+  ui.openSignupForm({ name: "   " });
+  ui.submitForm();
 
   assert.equal(ui.requests.length, 1, "空格姓名不发送报名请求");
-  assert.equal(signupDialog(ui.view()), undefined, "空格姓名不能打开确认弹层");
+  assert.equal(ui.visibleStep(), 3, "字段错误仍停在填写步骤");
   const nameInput = findElement(
     ui.view(),
     (element) => element.props.id === "repair-activity-signup-name",
@@ -714,13 +949,12 @@ test("姓名只输入空格时在报名表单内拦截", async (t) => {
   assert.ok(text(ui.view()).includes(copy.nameFormatHint));
 });
 
-test("服务端字段校验错误回到表单内，不进入 Alert 对话框", async (t) => {
+test("服务端字段校验错误回到表单内，不进入结果终态", async (t) => {
   const copy = repairActivitiesPage.detail;
   const ui = await mount(t);
   await ui.finish(0, { ...activity, status: "OPEN" });
-  const consent = ui.requestSignup();
-  (consent.props.onConfirm as () => void)();
-  ui.requests[1].finish(
+  const { index } = ui.submitSignup();
+  ui.requests[index].finish(
     Response.json(
       {
         success: false,
@@ -735,7 +969,7 @@ test("服务端字段校验错误回到表单内，不进入 Alert 对话框", a
   );
   await setImmediate();
 
-  assert.equal(signupErrorDialog(ui.view()), undefined);
+  assert.equal(ui.visibleStep(), 3, "字段错误仍停在填写步骤");
   assert.equal(pageAlertText(ui.view()), "");
   const nameInput = findElement(
     ui.view(),
@@ -769,30 +1003,34 @@ test("查询手机号非法时就地提示且不发送请求", async (t) => {
   assert.equal(ui.requests[1].url, "/api/v1/repair-activities/a/registrations/lookup");
 });
 
-test("报名确认连点只发送一个 POST，成功后保留已报名提示", async (t) => {
+test("第三步提交连点只发送一个 POST，成功后保留已报名凭条", async (t) => {
   const ui = await mount(t);
   await ui.finish(0, { ...activity, status: "OPEN" });
-  const consent = ui.requestSignup();
-  (consent.props.onConfirm as () => void)();
-  (consent.props.onConfirm as () => void)();
+  ui.openSignupForm();
+  ui.submitForm();
+  ui.submitForm();
   assert.equal(
     ui.requests.filter((request) => request.init.method === "POST").length,
     1,
-    "确认按钮连点不能重复提交",
+    "提交按钮连点不能重复提交",
   );
-  ui.requests[1].finish(Response.json({ success: true, data: registration }));
+  const index = ui.requests.findLastIndex((request) => request.init.method === "POST");
+  ui.requests[index].finish(Response.json({ success: true, data: registration }));
   await setImmediate();
-  (signupDialog(ui.view())?.props.onConfirm as () => void)();
-  assert.ok(text(ui.view()).includes(repairActivitiesPage.detail.signupSuccessTitle));
-  assert.ok(text(ui.view()).includes(registration.phoneMasked));
+  const { RepairActivityReceipt } =
+    await import("../../src/components/repair-activities/RepairActivityReceipt");
+  const receipt = findElement(ui.view(), (element) => element.type === RepairActivityReceipt);
+  assert.ok(receipt, "成功后显示凭条");
+  assert.ok(text(RepairActivityReceipt(receipt.props as never)).includes(registration.phoneMasked));
+  assert.equal(ui.visibleStep(), null);
 });
 
 test("重复报名提示引导查询已有记录，不覆盖为普通失败", async (t) => {
+  const copy = repairActivitiesPage.detail;
   const ui = await mount(t);
   await ui.finish(0, { ...activity, status: "OPEN" });
-  const consent = ui.requestSignup();
-  (consent.props.onConfirm as () => void)();
-  ui.requests[1].finish(
+  const { index } = ui.submitSignup();
+  ui.requests[index].finish(
     Response.json(
       {
         success: false,
@@ -802,54 +1040,57 @@ test("重复报名提示引导查询已有记录，不覆盖为普通失败", as
     ),
   );
   await setImmediate();
-  assert.equal(signupDialog(ui.view()), undefined);
-  assert.ok(text(ui.view()).includes(repairActivitiesPage.detail.duplicateHint));
-  assert.equal(ui.formResets(), 0, "重复报名时保留已填写的表单以便查询");
+  const content = text(ui.view());
+  assert.ok(content.includes(copy.duplicateTitle), "重复报名用独立结果标题");
+  assert.ok(content.includes(copy.duplicateHint));
+  assert.equal(ui.visibleStep(), null, "结果终态收起向导");
+  assert.equal(ui.storedDraft()?.phone, "13800000000", "重复报名保留草稿以便查询");
   assert.equal(ui.requests.length, 2, "重复报名不刷新活动");
 });
 
 test("报名响应丢失时先查询确认，查到记录按成功处理", async (t) => {
   const ui = await mount(t);
   await ui.finish(0, { ...activity, status: "OPEN" });
-  (ui.requestSignup().props.onConfirm as () => void)();
-  ui.requests[1].fail(new Error("network"));
+  const { index } = ui.submitSignup();
+  ui.requests[index].fail(new Error("network"));
   await setImmediate();
   assert.equal(
-    ui.requests[2].url,
+    ui.requests[index + 1].url,
     "/api/v1/repair-activities/a/registrations/lookup",
     "网络异常后先查询本人记录",
   );
-  ui.requests[2].finish(Response.json({ success: true, data: lookupRegistration }));
+  ui.requests[index + 1].finish(Response.json({ success: true, data: lookupRegistration }));
   await setImmediate();
-  const dialog = signupDialog(ui.view());
-  assert.equal(dialog?.props.title, repairActivitiesPage.detail.signupSuccessTitle);
-  (dialog?.props.onConfirm as () => void)();
-  assert.ok(text(ui.view()).includes(repairActivitiesPage.detail.signupSuccessTitle));
-  assert.ok(text(ui.view()).includes(registration.phoneMasked));
+  const { RepairActivityReceipt } =
+    await import("../../src/components/repair-activities/RepairActivityReceipt");
+  const receipt = findElement(ui.view(), (element) => element.type === RepairActivityReceipt);
+  assert.ok(receipt, "确认报名成功后显示凭条");
+  assert.ok(text(RepairActivityReceipt(receipt.props as never)).includes(registration.phoneMasked));
+  assert.equal(ui.visibleStep(), null);
 });
 
 test("报名响应丢失且查询不到时停在待确认，不直接报失败", async (t) => {
   const ui = await mount(t);
   await ui.finish(0, { ...activity, status: "OPEN" });
-  (ui.requestSignup().props.onConfirm as () => void)();
-  ui.requests[1].fail(new Error("network"));
+  const { index } = ui.submitSignup();
+  ui.requests[index].fail(new Error("network"));
   await setImmediate();
-  ui.requests[2].finish(Response.json({ success: false }, { status: 404 }));
+  ui.requests[index + 1].finish(Response.json({ success: false }, { status: 404 }));
   await setImmediate();
-  assert.equal(signupDialog(ui.view()), undefined);
-  assert.ok(text(ui.view()).includes(repairActivitiesPage.detail.signupPendingTitle));
-  assert.ok(text(ui.view()).includes(repairActivitiesPage.detail.lookupNotFoundRetry));
-  assert.equal(text(ui.view()).includes("网络异常，请稍后重试"), false);
+  const content = text(ui.view());
+  assert.ok(content.includes(repairActivitiesPage.detail.signupPendingTitle));
+  assert.ok(content.includes(repairActivitiesPage.detail.lookupNotFoundRetry));
+  assert.equal(content.includes("网络异常，请稍后重试"), false);
 });
 
 test("待确认查询失败可重试，确认未报名后可重新填写", async (t) => {
   const copy = repairActivitiesPage.detail;
   const ui = await mount(t);
   await ui.finish(0, { ...activity, status: "OPEN" });
-  (ui.requestSignup().props.onConfirm as () => void)();
-  ui.requests[1].fail(new Error("network"));
+  const { index } = ui.submitSignup();
+  ui.requests[index].fail(new Error("network"));
   await setImmediate();
-  ui.requests[2].fail(new Error("network"));
+  ui.requests[index + 1].fail(new Error("network"));
   await setImmediate();
   assert.ok(text(ui.view()).includes(copy.signupPendingTitle));
   assert.ok(text(ui.view()).includes(copy.lookupFailedRetry));
@@ -863,8 +1104,8 @@ test("待确认查询失败可重试，确认未报名后可重新填写", async
   assert.ok(retry);
   (retry.props.onClick as () => void)();
   await setImmediate();
-  assert.equal(ui.requests[3].url, "/api/v1/repair-activities/a/registrations/lookup");
-  ui.requests[3].fail(new Error("network"));
+  assert.equal(ui.requests[index + 2].url, "/api/v1/repair-activities/a/registrations/lookup");
+  ui.requests[index + 2].fail(new Error("network"));
   await setImmediate();
   assert.ok(text(ui.view()).includes(copy.lookupFailedRetry));
   assert.equal(text(ui.view()).includes(copy.pendingRestart), false);
@@ -877,8 +1118,8 @@ test("待确认查询失败可重试，确认未报名后可重新填写", async
   assert.ok(retry);
   (retry.props.onClick as () => void)();
   await setImmediate();
-  assert.equal(ui.requests[4].url, "/api/v1/repair-activities/a/registrations/lookup");
-  ui.requests[4].finish(Response.json({ success: false }, { status: 404 }));
+  assert.equal(ui.requests[index + 3].url, "/api/v1/repair-activities/a/registrations/lookup");
+  ui.requests[index + 3].finish(Response.json({ success: false }, { status: 404 }));
   await setImmediate();
   let content = text(ui.view());
   assert.ok(content.includes(copy.lookupNotFoundRetry));
@@ -891,9 +1132,12 @@ test("待确认查询失败可重试，确认未报名后可重新填写", async
   );
   assert.ok(restart, "确认未报名后提供重新填写");
   (restart.props.onClick as () => void)();
+  ui.view();
 
   content = text(ui.view());
   assert.equal(content.includes(copy.signupPendingTitle), false, "重新填写后解除待确认");
+  assert.equal(ui.visibleStep(), 3, "重新填写回到第三步");
+  assert.equal(ui.storedDraft(), null, "重新填写清空旧草稿");
   assert.equal(
     findElement(ui.view(), (element) => element.props.id === "repair-activity-signup-phone")?.props
       .disabled,
@@ -901,46 +1145,46 @@ test("待确认查询失败可重试，确认未报名后可重新填写", async
     "重新填写后报名手机号恢复可编辑",
   );
   assert.equal(
-    findElement(ui.view(), (element) => element.props.children === copy.submitSignup)?.props
-      .disabled,
+    findElement(ui.stepElement(3)!, (element) => element.props.children === copy.submitSignup)
+      ?.props.disabled,
     false,
     "重新填写后可以再次提交",
   );
-  assert.equal(ui.formResets(), 1, "重新填写清空旧表单");
-  assert.equal(ui.requestSignup().props.title, copy.consent.title);
 });
 
 test("待确认时主查询到本人记录会清除待确认并展示凭条", async (t) => {
   const copy = repairActivitiesPage.detail;
   const ui = await mount(t);
   await ui.finish(0, { ...activity, status: "OPEN" });
-  (ui.requestSignup().props.onConfirm as () => void)();
-  ui.requests[1].fail(new Error("network"));
+  const { index } = ui.submitSignup();
+  ui.requests[index].fail(new Error("network"));
   await setImmediate();
-  ui.requests[2].finish(Response.json({ success: false }, { status: 404 }));
+  ui.requests[index + 1].finish(Response.json({ success: false }, { status: 404 }));
   await setImmediate();
   assert.ok(text(ui.view()).includes(copy.signupPendingTitle));
   assert.ok(text(ui.view()).includes(copy.pendingRestart));
 
   ui.requestLookup("13800000000");
-  assert.equal(ui.requests[3].url, "/api/v1/repair-activities/a/registrations/lookup");
-  assert.ok(ui.requests[3].init.signal instanceof AbortSignal, "主查询带超时/中止信号");
-  ui.requests[3].finish(Response.json({ success: true, data: lookupRegistration }));
+  assert.equal(ui.requests[index + 2].url, "/api/v1/repair-activities/a/registrations/lookup");
+  assert.ok(ui.requests[index + 2].init.signal instanceof AbortSignal, "主查询带超时/中止信号");
+  ui.requests[index + 2].finish(Response.json({ success: true, data: lookupRegistration }));
   await setImmediate();
 
   const content = text(ui.view());
   assert.equal(content.includes(copy.signupPendingTitle), false, "查到记录后不再显示待确认");
-  assert.ok(content.includes(copy.signupSuccessTitle), "主查询结果转为成功凭条");
-  assert.ok(
-    content.includes(copy.registrationNumber.replace("{id}", registration.id)),
-    "凭条展示报名编号",
-  );
+  const { RepairActivityReceipt } =
+    await import("../../src/components/repair-activities/RepairActivityReceipt");
+  const receipt = findElement(ui.view(), (element) => element.type === RepairActivityReceipt);
+  assert.ok(receipt, "主查询结果转为成功凭条");
   assert.equal(
     findElement(ui.view(), (element) => element.props.id === "repair-activity-signup-phone"),
     undefined,
     "确认已报名后收起报名表单，避免重复提交",
   );
-  assert.ok(content.includes(registration.phoneMasked), "凭条保留脱敏手机号");
+  assert.ok(
+    text(RepairActivityReceipt(receipt.props as never)).includes(registration.phoneMasked),
+    "凭条保留脱敏手机号",
+  );
 });
 
 test("满额页保留查询本人记录入口", async (t) => {
@@ -1030,10 +1274,8 @@ test("查询到有效报名时可在活动开始前二次确认取消，成功�
 
   assert.equal(text(ui.view()).includes(copy.lookupRegisteredTitle), false);
   assert.equal(ui.requests[3].url, "/api/v1/repair-activities/a", "取消后刷新名额");
-  assert.ok(
-    findElement(ui.view(), (element) => element.props["aria-label"] === copy.signupTitle),
-    "同一设备取消后重新显示报名表单",
-  );
+  assert.equal(ui.visibleStep(), 1, "同一设备取消后重新显示报名向导");
+  assert.ok(text(ui.view()).includes(copy.stepTitles[0]));
   await ui.finish(3, { ...activity, status: "OPEN", registeredCount: 1, remaining: 9 });
 });
 
@@ -1129,10 +1371,8 @@ test("迟到的设备状态不能把刚取消的报名写回并重新收起表�
   assert.equal(ui.devicePendingCount(), 1);
   ui.resolveDevice(0, { submitted: true, registration });
   await setImmediate();
-  assert.ok(
-    findElement(ui.view(), (element) => element.props["aria-label"] === copy.signupTitle),
-    "取消成功后迟到的设备状态不能重新收起报名表单",
-  );
+  assert.equal(ui.visibleStep(), 1, "取消成功后迟到的设备状态不能重新收起报名向导");
+  assert.ok(text(ui.view()).includes(copy.stepTitles[0]));
   await ui.finish(3, { ...activity, status: "OPEN" });
 });
 
@@ -1208,38 +1448,50 @@ test("活动开始前已签到/已接待时仍不显示取消按钮", async (t) 
   assertNoCancel();
 });
 
-test("报名失败进入 Alert 对话框，保留输入以便重试，不显示成功提醒", async (t) => {
+test("报名失败进入结果终态，保留输入以便重试，不显示成功提醒", async (t) => {
   const copy = repairActivitiesPage.detail;
   const ui = await mount(t);
   await ui.finish(0, { ...activity, status: "OPEN" });
-  const consent = ui.requestSignup();
-  (consent.props.onConfirm as () => void)();
-  ui.requests[1].finish(
+  const { index } = ui.submitSignup();
+  ui.requests[index].finish(
     Response.json({ success: false, error: { message: "名额已满" } }, { status: 409 }),
   );
   await setImmediate();
 
-  const dialog = signupErrorDialog(ui.view());
-  assert.ok(dialog, "报名失败应进入 Alert 对话框");
-  assert.ok(text(dialog).includes("名额已满"));
-  assert.equal(dialog.props.confirmLabel, copy.signupFailedConfirm);
-  assert.equal(dialog.props.showCloseButton, false);
-  assert.equal(typeof dialog.props.onClose, "function");
-  assert.equal(ui.formResets(), 0, "失败时保留已填写的表单");
+  let content = text(ui.view());
+  assert.ok(content.includes(copy.signupFailedTitle), "报名失败进入结果终态");
+  assert.ok(content.includes("名额已满"));
+  assert.equal(content.includes(copy.signupSuccessTitle), false);
+  assert.equal(ui.visibleStep(), null, "结果终态收起向导");
+  assert.equal(ui.storedDraft()?.name, "测试客户", "失败时保留已填写的草稿");
   assert.equal(ui.requests.length, 2, "失败时不刷新活动或再次提交");
 
-  (dialog.props.onClose as () => void)();
-  assert.equal(signupErrorDialog(ui.view()), undefined, "关闭后对话框消失");
-  assert.equal(ui.requestSignup().props.title, copy.consent.title);
+  const retry = findElement(
+    ui.view(),
+    (element) =>
+      element.props.children === copy.confirmEdit && typeof element.props.onClick === "function",
+  );
+  assert.ok(retry, "失败结果提供返回修改");
+  (retry.props.onClick as () => void)();
+  ui.view();
+  assert.equal(ui.visibleStep(), 3, "返回修改回到第三步");
+  assert.equal(
+    findElement(ui.view(), (element) => element.props.id === "repair-activity-signup-name")?.props
+      .value,
+    "测试客户",
+    "返回后保留姓名",
+  );
+
+  content = text(ui.view());
+  assert.equal(content.includes(copy.signupFailedTitle), false, "返回修改后清除失败结果");
 });
 
-test("报名被客户黑名单拦截时，错误进入可关闭的 Alert 对话框", async (t) => {
+test("报名被客户黑名单拦截时，错误进入结果终态并可返回修改", async (t) => {
   const copy = repairActivitiesPage.detail;
   const ui = await mount(t);
   await ui.finish(0, { ...activity, status: "OPEN" });
-  const consent = ui.requestSignup();
-  (consent.props.onConfirm as () => void)();
-  ui.requests[1].finish(
+  const { index } = ui.submitSignup();
+  ui.requests[index].finish(
     Response.json(
       {
         success: false,
@@ -1254,57 +1506,39 @@ test("报名被客户黑名单拦截时，错误进入可关闭的 Alert 对话�
   );
   await setImmediate();
 
-  const dialog = signupErrorDialog(ui.view());
-  assert.ok(dialog, "阻断报名应进入 Alert 对话框");
+  const content = text(ui.view());
+  assert.ok(content.includes(copy.signupFailedTitle));
   assert.ok(
-    text(dialog).includes(
+    content.includes(
       "该姓名与手机号近期有未到场的活动记录，暂时无法报名本场活动。请联系活动管理员处理。",
     ),
   );
-  assert.equal(dialog.props.confirmLabel, copy.signupFailedConfirm);
-  assert.equal(dialog.props.showCloseButton, false);
-  assert.equal(typeof dialog.props.onClose, "function");
-  assert.equal(ui.formResets(), 0, "错误对话框不清空表单");
+  assert.equal(ui.storedDraft()?.phone, "13800000000", "错误结果不清空草稿");
   assert.equal(pageAlerts(ui.view()).length, 0);
+  assert.equal(ui.visibleStep(), null);
 
-  (dialog.props.onClose as () => void)();
-  assert.equal(signupErrorDialog(ui.view()), undefined, "关闭后对话框消失");
-  assert.ok(
-    findElement(ui.view(), (element) => element.props["aria-label"] === copy.signupTitle),
-    "关闭后仍保留报名表单",
+  const retry = findElement(
+    ui.view(),
+    (element) =>
+      element.props.children === copy.confirmEdit && typeof element.props.onClick === "function",
   );
-});
-
-test("上次报名的慢刷新结束时，不解除下一次报名的在途禁用", async (t) => {
-  const ui = await mount(t);
-  await ui.finish(0, { ...activity, status: "OPEN" });
-  (ui.requestSignup().props.onConfirm as () => void)();
-  ui.requests[1].finish(Response.json({ success: true }));
-  await setImmediate();
-  assert.equal(ui.requests[2].init.method, undefined, "首次报名成功后刷新活动");
-  (signupDialog(ui.view())?.props.onConfirm as () => void)();
-
-  (ui.requestSignup().props.onConfirm as () => void)();
-  assert.equal(ui.requests[3].init.method, "POST");
-  assert.equal(signupDialog(ui.view())?.props.busy, true);
-  await ui.finish(2, { ...activity, status: "OPEN", registeredCount: 3, remaining: 7 });
-  assert.equal(signupDialog(ui.view())?.props.busy, true, "旧 GET 不能解锁仍在提交的新报名");
-  const name = findElement(ui.view(), (element) => element.props.name === "name");
-  assert.equal(name?.props.disabled, true);
-
-  ui.requests[3].finish(Response.json({ success: true }));
-  await setImmediate();
-  assert.equal(
-    signupDialog(ui.view())?.props.title,
-    repairActivitiesPage.detail.signupSuccessTitle,
-  );
-  assert.equal(signupDialog(ui.view())?.props.busy, false);
-  await ui.finish(4, null);
+  assert.ok(retry);
+  (retry.props.onClick as () => void)();
+  ui.view();
+  assert.equal(ui.visibleStep(), 3, "返回后仍保留报名表单");
 });
 
 test("本设备已提交时收起报名表单，只保留查询入口", async (t) => {
   const copy = repairActivitiesPage.detail;
-  const ui = await mount(t, { device: { submitted: true, registration } });
+  const ui = await mount(t, {
+    device: { submitted: true, registration },
+    draft: {
+      name: "残留客户",
+      phone: "13800000000",
+      issueType: "CLEAN_PASTE",
+      deviceModel: "",
+    },
+  });
   await ui.finish(0, { ...activity, status: "OPEN" });
   await setImmediate();
 
@@ -1315,6 +1549,7 @@ test("本设备已提交时收起报名表单，只保留查询入口", async (t
     content.includes(copy.receiptIssueType.replace("{type}", "清灰换硅脂")),
     "已提交面板显示故障类型",
   );
+  assert.equal(ui.visibleStep(), null, "已提交设备不展示报名向导");
   assert.equal(
     findElement(ui.view(), (element) => element.props["aria-label"] === copy.signupTitle),
     undefined,
@@ -1324,6 +1559,7 @@ test("本设备已提交时收起报名表单，只保留查询入口", async (t
     findElement(ui.view(), (element) => element.props.id === "repair-activity-lookup-name"),
     "查询表单仍在",
   );
+  assert.equal(ui.storedDraft(), null, "收起表单时清掉残留草稿");
 });
 
 test("设备状态未返回前只显示占位，不渲染报名表单", async (t) => {
@@ -1344,8 +1580,8 @@ test("提交撞上设备 409 时直接切到已提交面板", async (t) => {
   const ui = await mount(t);
   await ui.finish(0, { ...activity, status: "OPEN" });
   ui.setDeviceStatus({ submitted: true, registration });
-  (ui.requestSignup().props.onConfirm as () => void)();
-  ui.requests[1].finish(
+  const { index } = ui.submitSignup();
+  ui.requests[index].finish(
     Response.json(
       {
         success: false,
@@ -1359,6 +1595,8 @@ test("提交撞上设备 409 时直接切到已提交面板", async (t) => {
 
   const content = text(ui.view());
   assert.ok(content.includes(copy.deviceRegisteredTitle), "命中 409 后显示已提交面板");
+  assert.ok(content.includes(registration.name));
+  assert.equal(ui.visibleStep(), null, "命中 409 后收起报名向导");
   assert.equal(
     findElement(ui.view(), (element) => element.props["aria-label"] === copy.signupTitle),
     undefined,
@@ -1384,21 +1622,25 @@ test("已提交面板可重新检查：报名被删除后恢复表单", async (t
   await setImmediate();
   await setImmediate();
 
-  assert.ok(
-    findElement(ui.view(), (element) => element.props["aria-label"] === copy.signupTitle),
-    "重新检查后恢复报名表单",
-  );
+  assert.equal(ui.visibleStep(), 1, "重新检查后恢复报名向导");
+  assert.ok(text(ui.view()).includes(copy.stepTitles[0]));
 });
 
-test("设备状态查询失败时放开报名表单", async (t) => {
+test("设备状态查询失败时放开报名向导", async (t) => {
   const copy = repairActivitiesPage.detail;
   const ui = await mount(t, { device: "error" });
   await ui.finish(0, { ...activity, status: "OPEN" });
   await setImmediate();
 
+  assert.equal(ui.visibleStep(), 1, "设备接口失败不能把报名入口挡死");
+  assert.ok(text(ui.view()).includes(copy.stepTitles[0]));
   assert.ok(
-    findElement(ui.view(), (element) => element.props["aria-label"] === copy.signupTitle),
-    "设备接口失败不能把报名入口挡死",
+    findElement(
+      ui.stepElement(1)!,
+      (element) =>
+        element.props.children === copy.startSignup && typeof element.props.onClick === "function",
+    ),
+    "第一步提供开始报名",
   );
 });
 
@@ -1407,8 +1649,8 @@ test("设备 409 后状态读取失败时用设备提示，不误报手机号重
   const ui = await mount(t);
   await ui.finish(0, { ...activity, status: "OPEN" });
   ui.setDeviceStatus("error");
-  (ui.requestSignup().props.onConfirm as () => void)();
-  ui.requests[1].finish(
+  const { index } = ui.submitSignup();
+  ui.requests[index].finish(
     Response.json(
       { success: false, error: { code: "ACTIVITY_DEVICE_ALREADY_REGISTERED" } },
       { status: 409 },
@@ -1420,6 +1662,7 @@ test("设备 409 后状态读取失败时用设备提示，不误报手机号重
   const content = text(ui.view());
   assert.ok(content.includes(copy.deviceConflictFallback), "回退到设备专用提示");
   assert.equal(content.includes(copy.duplicateHint), false, "不能说成该手机号已报名");
+  assert.equal(ui.visibleStep(), null);
 });
 
 test("切换活动时丢弃旧的设备状态响应", async (t) => {
@@ -1442,10 +1685,8 @@ test("切换活动时丢弃旧的设备状态响应", async (t) => {
 
   ui.resolveDevice(1, { submitted: false, registration: null });
   await setImmediate();
-  assert.ok(
-    findElement(ui.view(), (element) => element.props["aria-label"] === copy.signupTitle),
-    "新活动按自己的状态放开表单",
-  );
+  assert.equal(ui.visibleStep(), 1, "新活动按自己的状态放开报名向导");
+  assert.ok(text(ui.view()).includes(copy.stepTitles[0]));
 });
 
 test("AbortSignal.any 缺失时设备状态失败仍放开报名表单", async (t) => {
@@ -1460,8 +1701,12 @@ test("AbortSignal.any 缺失时设备状态失败仍放开报名表单", async (
 
   const content = text(ui.view());
   assert.equal(content.includes(copy.deviceStatusChecking), false, "占位不能常驻");
+  assert.equal(ui.visibleStep(), 1, "缺 AbortSignal.any 的浏览器也要能报名");
   assert.ok(
-    findElement(ui.view(), (element) => element.props["aria-label"] === copy.signupTitle),
-    "缺 AbortSignal.any 的浏览器也要能报名",
+    findElement(
+      ui.stepElement(1)!,
+      (element) =>
+        element.props.children === copy.startSignup && typeof element.props.onClick === "function",
+    ),
   );
 });
