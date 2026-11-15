@@ -55,6 +55,9 @@ type SignupField = "name" | "phone" | "issueType" | "deviceModel";
 
 type SignupStep = 1 | 2 | 3;
 
+/** 向导 / 终态切换后的焦点目标；由 effect 在渲染提交后执行。 */
+type SignupFocusTarget = "confirm" | "notice" | "form" | "result";
+
 /** 提交被拒绝后的终态；结果不占步骤条。 */
 type SignupOutcome = "duplicate" | "full" | "failed" | "device";
 
@@ -185,6 +188,8 @@ export function RepairActivityDetail({ activityId }: Props) {
   const stepNoticeHeadingRef = useRef<HTMLHeadingElement>(null);
   const stepFormHeadingRef = useRef<HTMLHeadingElement>(null);
   const resultHeadingRef = useRef<HTMLHeadingElement>(null);
+  /** 步骤 / 终态切换后要聚焦的标题；等本轮渲染提交后再执行。 */
+  const [focusRequest, setFocusRequest] = useState<{ target: SignupFocusTarget } | null>(null);
   /** 草稿恢复完成前不要把初始空值写回存储，避免覆盖刷新前的输入。 */
   const draftHydratedRef = useRef(false);
   const lookupPhoneInputRef = useRef<HTMLInputElement>(null);
@@ -412,7 +417,7 @@ export function RepairActivityDetail({ activityId }: Props) {
         if (registration === null) {
           setNotice({ text: copy.deviceRecheckCleared, tone: "success" });
           // 报名入口重新出现，焦点回到第一步标题。
-          focusSignupHeading(stepConfirmHeadingRef.current);
+          focusHeading("confirm");
         } else {
           clearSignupDraft(activityId);
           setSignupDraft(EMPTY_SIGNUP_DRAFT);
@@ -544,12 +549,32 @@ export function RepairActivityDetail({ activityId }: Props) {
     }
   }, [activity, step]);
 
-  function focusSignupHeading(element: HTMLElement | null) {
-    window.setTimeout(() => element?.focus({ preventScroll: true }), 0);
+  /** 渲染提交后聚焦目标标题：终态和步骤面板可能在请求发出时还没挂载。 */
+  useEffect(() => {
+    if (!focusRequest) return;
+    const target =
+      focusRequest.target === "confirm"
+        ? stepConfirmHeadingRef
+        : focusRequest.target === "notice"
+          ? stepNoticeHeadingRef
+          : focusRequest.target === "form"
+            ? stepFormHeadingRef
+            : resultHeadingRef;
+    const focus = () => target.current?.focus({ preventScroll: true });
+    if (typeof window.requestAnimationFrame === "function") {
+      const frame = window.requestAnimationFrame(focus);
+      return () => window.cancelAnimationFrame(frame);
+    }
+    const timer = window.setTimeout(focus, 0);
+    return () => window.clearTimeout(timer);
+  }, [focusRequest]);
+
+  function focusHeading(target: SignupFocusTarget) {
+    setFocusRequest({ target });
   }
 
   function focusResult() {
-    focusSignupHeading(resultHeadingRef.current);
+    focusHeading("result");
   }
 
   function updateSignupDraft(patch: Partial<SignupDraft>) {
@@ -567,14 +592,14 @@ export function RepairActivityDetail({ activityId }: Props) {
     setNotice(null);
     setConsentError("");
     setStep(2);
-    focusSignupHeading(stepNoticeHeadingRef.current);
+    focusHeading("notice");
   }
 
   function goToStep(next: 1 | 2) {
     if (next === 2 && (!activity || !canAcceptNewRegistration(activity.status))) return;
     setConsentError("");
     setStep(next);
-    focusSignupHeading(next === 1 ? stepConfirmHeadingRef.current : stepNoticeHeadingRef.current);
+    focusHeading(next === 1 ? "confirm" : "notice");
   }
 
   function continueToForm() {
@@ -585,7 +610,7 @@ export function RepairActivityDetail({ activityId }: Props) {
     }
     setConsentError("");
     setStep(3);
-    focusSignupHeading(stepFormHeadingRef.current);
+    focusHeading("form");
   }
 
   /** 失败结果保留已填内容，返回第三步即可修改后重试。 */
@@ -593,7 +618,7 @@ export function RepairActivityDetail({ activityId }: Props) {
     setSignupOutcome(null);
     setSignupProblem("");
     setStep(3);
-    focusSignupHeading(stepFormHeadingRef.current);
+    focusHeading("form");
   }
 
   function resetSignupDraft() {
@@ -621,7 +646,7 @@ export function RepairActivityDetail({ activityId }: Props) {
     if (!consentChecked) {
       setStep(2);
       setConsentError(copy.consent.required);
-      focusSignupHeading(stepNoticeHeadingRef.current);
+      focusHeading("notice");
       return;
     }
     const name = signupDraft.name.trim();
@@ -784,6 +809,7 @@ export function RepairActivityDetail({ activityId }: Props) {
             setConsentChecked(false);
             setSignupOutcome(null);
             setNotice({ text: copy.deviceRegisteredTitle, tone: "neutral" });
+            focusResult();
           } else {
             // 设备 409 与「当前手机号重复」无关，不能用 duplicateHint 的文案。
             setSignupOutcome("device");
@@ -858,7 +884,7 @@ export function RepairActivityDetail({ activityId }: Props) {
     setSignupProblem("");
     resetSignupDraft();
     setStep(3);
-    focusSignupHeading(stepFormHeadingRef.current);
+    focusHeading("form");
   }
 
   function openLookup(phone?: string, name?: string) {
@@ -873,13 +899,11 @@ export function RepairActivityDetail({ activityId }: Props) {
     setLookupMode(false);
     setProblem("");
     setNotice(null);
-    window.setTimeout(() => {
-      if (registrationResult || signupPending || deviceRegistration || signupOutcome) {
-        focusResult();
-      } else {
-        focusSignupHeading(stepConfirmHeadingRef.current);
-      }
-    }, 0);
+    if (registrationResult || signupPending || deviceRegistration || signupOutcome) {
+      focusResult();
+    } else {
+      focusHeading("confirm");
+    }
   }
 
   async function doLookup(event: FormEvent<HTMLFormElement>) {
@@ -970,7 +994,15 @@ export function RepairActivityDetail({ activityId }: Props) {
       } else {
         setNotice({ text: copy.updateSuccess, tone: "success" });
         if (json.data) {
-          setLookup({ ...lookup, issueType: json.data.issueType, status: json.data.status });
+          const updated = { issueType: json.data.issueType, status: json.data.status };
+          setLookup({ ...lookup, ...updated });
+          // 终态与设备面板都按同一条报名展示：改类型后不能留着旧故障类型。
+          setRegistrationResult((previous) =>
+            previous?.id === lookup.id ? { ...previous, ...updated } : previous,
+          );
+          setDeviceRegistration((previous) =>
+            previous?.id === lookup.id ? { ...previous, ...updated } : previous,
+          );
         }
       }
     } catch {
@@ -1021,8 +1053,11 @@ export function RepairActivityDetail({ activityId }: Props) {
       setLookupNameError("");
       // 让在途设备状态查询作废：迟到响应不能把刚取消的报名重新写回面板。
       deviceAttemptRef.current += 1;
-      // 同一设备取消后立即解锁报名表单；其它设备上的报名状态不动。
-      if (deviceRegistration?.id === target.id) setDeviceRegistration(null);
+      // 取消的是当前展示的这条报名时，成功凭条与设备面板必须一起退出，不能留下旧终态。
+      const keepsResult = registrationResult !== null && registrationResult.id !== target.id;
+      const keepsDevice = deviceRegistration !== null && deviceRegistration.id !== target.id;
+      setRegistrationResult((previous) => (previous?.id === target.id ? null : previous));
+      setDeviceRegistration((previous) => (previous?.id === target.id ? null : previous));
       setDeviceStatusResolved(true);
       resetSignupDraft();
       setSignupPending(null);
@@ -1033,7 +1068,11 @@ export function RepairActivityDetail({ activityId }: Props) {
       setStep(1);
       setNotice({ text: copy.cancelSuccess, tone: "success" });
       void load(true);
-      window.setTimeout(() => lookupNameInputRef.current?.focus({ preventScroll: true }), 0);
+      if (keepsResult || keepsDevice) {
+        focusResult();
+      } else {
+        focusHeading("confirm");
+      }
     } catch {
       if (lookupAttemptRef.current === attempt) {
         setCancelOpen(false);
@@ -1089,7 +1128,7 @@ export function RepairActivityDetail({ activityId }: Props) {
                 />
                 {lookupNameError ? (
                   <p
-                    className="field__hint text-accent-deep"
+                    className={`field__hint ${styles.fieldError}`}
                     id="repair-activity-lookup-name-error"
                     role="alert"
                   >
@@ -1117,7 +1156,7 @@ export function RepairActivityDetail({ activityId }: Props) {
                 />
                 {lookupPhoneError ? (
                   <p
-                    className="field__hint text-accent-deep"
+                    className={`field__hint ${styles.fieldError}`}
                     id="repair-activity-lookup-phone-error"
                     role="alert"
                   >
@@ -1267,6 +1306,8 @@ export function RepairActivityDetail({ activityId }: Props) {
     signupPending !== null ||
     deviceRegistration !== null ||
     signupOutcome !== null;
+  /** 已有本场有效报名时，活动「报名中」等状态会让成功凭条看起来没报上。 */
+  const signedUp = registrationResult !== null || deviceRegistration !== null;
   const steps = [
     { index: 1 as const, label: copy.steps[0] },
     { index: 2 as const, label: copy.steps[1] },
@@ -1341,8 +1382,16 @@ export function RepairActivityDetail({ activityId }: Props) {
                 {activity.title}
               </h1>
             </div>
-            <span className={repairActivityStatusBadgeClass(activity.status)}>
-              {repairActivityStatusLabels[activity.status as RepairActivityStatus]}
+            <span
+              className={
+                signedUp
+                  ? "repair-tag repair-tag--approved"
+                  : repairActivityStatusBadgeClass(activity.status)
+              }
+            >
+              {signedUp
+                ? copy.registeredBadge
+                : repairActivityStatusLabels[activity.status as RepairActivityStatus]}
             </span>
           </header>
 
@@ -1350,18 +1399,24 @@ export function RepairActivityDetail({ activityId }: Props) {
             renderLookupView()
           ) : signupTerminal ? (
             <div className={styles.cardBody}>
-              <h2
-                className="sr-only"
-                id="repair-activity-signup-title"
-                ref={resultHeadingRef}
-                tabIndex={-1}
-              >
-                {copy.resultTitle}
-              </h2>
+              {registrationResult ? null : (
+                <h2
+                  className="sr-only"
+                  id="repair-activity-signup-title"
+                  ref={resultHeadingRef}
+                  tabIndex={-1}
+                >
+                  {copy.resultTitle}
+                </h2>
+              )}
               <div className={styles.signupTerminal}>
                 {registrationResult ? (
                   <>
-                    <RepairActivityReceipt activity={activity} registration={registrationResult} />
+                    <RepairActivityReceipt
+                      activity={activity}
+                      registration={registrationResult}
+                      headingRef={resultHeadingRef}
+                    />
                     <div className={styles.resultActions}>
                       <Button
                         variant="ghost"
@@ -1526,6 +1581,8 @@ export function RepairActivityDetail({ activityId }: Props) {
             </div>
           ) : (
             <>
+              {/* 卡片标题是 h1，步骤标题是 h3：中间补一级报名区标题，避免跳级。 */}
+              <h2 className="sr-only">{copy.signupTitle}</h2>
               {open ? (
                 <ol className={styles.stepper} aria-label={copy.stepLabel}>
                   {steps.map((item) => {
@@ -1626,12 +1683,7 @@ export function RepairActivityDetail({ activityId }: Props) {
                       <p className={styles.countdownHint}>{countdownHint}</p>
                     </div>
                     {activity.status === "FULL" ? (
-                      <div className={styles.fullHint}>
-                        <p className="muted">{copy.fullLookupHint}</p>
-                        <Button variant="ghost" onClick={() => openLookup()}>
-                          {copy.lookupMine}
-                        </Button>
-                      </div>
+                      <p className="muted">{copy.fullLookupHint}</p>
                     ) : null}
                     <div className={styles.stepActions}>
                       <Button variant="solid" onClick={startSignup} disabled={!open}>
@@ -1687,7 +1739,7 @@ export function RepairActivityDetail({ activityId }: Props) {
                     </label>
                     {consentError ? (
                       <p
-                        className="field__hint text-accent-deep"
+                        className={`field__hint ${styles.fieldError}`}
                         id="repair-activity-signup-consent-error"
                         role="alert"
                       >
@@ -1718,6 +1770,16 @@ export function RepairActivityDetail({ activityId }: Props) {
                       {copy.stepTitles[2]}
                     </h3>
                     <p className={styles.stepLead}>{copy.confirmIdentityHint}</p>
+                    <p className={styles.stepSummary}>
+                      <span>
+                        {repairActivitiesPage.activityAt}：{activityTimeRange}
+                      </span>
+                      {activity.location ? (
+                        <span>
+                          {repairActivitiesPage.location}：{activity.location}
+                        </span>
+                      ) : null}
+                    </p>
                     <form
                       className="admin-form"
                       ref={signupFormRef}
@@ -1752,7 +1814,7 @@ export function RepairActivityDetail({ activityId }: Props) {
                           />
                           {signupNameError ? (
                             <p
-                              className="field__hint text-accent-deep"
+                              className={`field__hint ${styles.fieldError}`}
                               id="repair-activity-signup-name-error"
                               role="alert"
                             >
@@ -1786,7 +1848,7 @@ export function RepairActivityDetail({ activityId }: Props) {
                           />
                           {signupPhoneError ? (
                             <p
-                              className="field__hint text-accent-deep"
+                              className={`field__hint ${styles.fieldError}`}
                               id="repair-activity-signup-phone-error"
                               role="alert"
                             >
@@ -1823,7 +1885,7 @@ export function RepairActivityDetail({ activityId }: Props) {
                           </select>
                           {signupIssueTypeError ? (
                             <p
-                              className="field__hint text-accent-deep"
+                              className={`field__hint ${styles.fieldError}`}
                               id="repair-activity-signup-issue-type-error"
                               role="alert"
                             >
@@ -1853,7 +1915,7 @@ export function RepairActivityDetail({ activityId }: Props) {
                           />
                           {signupDeviceModelError ? (
                             <p
-                              className="field__hint text-accent-deep"
+                              className={`field__hint ${styles.fieldError}`}
                               id="repair-activity-signup-device-model-error"
                               role="alert"
                             >

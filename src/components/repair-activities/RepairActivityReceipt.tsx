@@ -1,3 +1,5 @@
+import type { Ref } from "react";
+
 import {
   formatShanghaiDateTime,
   formatShanghaiTimeRange,
@@ -21,6 +23,8 @@ const copy = repairActivitiesPage.detail.receipt;
 type Props = {
   activity: RepairActivityPublicView;
   registration: RegistrationPublicView;
+  /** 报名成功标题即终态焦点目标，避免再放一个只有读屏可见的结果标题。 */
+  headingRef?: Ref<HTMLHeadingElement>;
 };
 
 /**
@@ -34,7 +38,7 @@ type Props = {
  * 动效：图标描边 + 四块错峰淡入（40–70ms 间隔），只动 transform / opacity；
  * 减弱动效时只保留淡入。
  */
-export function RepairActivityReceipt({ activity, registration }: Props) {
+export function RepairActivityReceipt({ activity, registration, headingRef }: Props) {
   const timeRange = formatShanghaiTimeRange(activity.activityAt, activity.endsAt);
   const issueTypeLabel =
     repairActivityIssueTypeLabels[registration.issueType as RepairActivityIssueType] ??
@@ -55,7 +59,14 @@ export function RepairActivityReceipt({ activity, registration }: Props) {
             <path className={styles.successCheck} pathLength={1} d="M5 13l4 4L19 7" />
           </svg>
         </span>
-        <p className={styles.successTitle}>{page.detail.signupSuccessTitle}</p>
+        <h2
+          className={styles.successTitle}
+          id="repair-activity-signup-title"
+          ref={headingRef}
+          tabIndex={-1}
+        >
+          {page.detail.signupSuccessTitle}
+        </h2>
         <p className={styles.successLead}>{copy.successLead}</p>
       </div>
 

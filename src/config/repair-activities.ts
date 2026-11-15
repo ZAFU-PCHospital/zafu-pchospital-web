@@ -67,6 +67,8 @@ export const repairActivitiesPage = {
     signupTitle: "报名参加",
     /** 报名卡抬头，与活动标题、时间地点一起构成单列报名区。 */
     flowKicker: "活动报名",
+    /** 终态徽章：已有本场有效报名时不再显示活动的「报名中」等状态。 */
+    registeredBadge: "已报名",
     /** 三步报名向导（issue #393）：第 1 步确认活动，第 2 步阅读须知，第 3 步填写信息。 */
     steps: ["确认活动", "阅读须知", "填写信息"] as const,
     stepTitles: ["确认活动与时间", "阅读报名须知与免责声明", "填写报名信息"] as const,

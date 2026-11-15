@@ -460,6 +460,22 @@
   line-height: 1.7;
 }
 
+/* 第三步只补时间与地点，不重复第一步的整张活动信息表。 */
+.stepSummary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-1) var(--s-4);
+  margin: 0;
+  color: var(--ink-3);
+  font-size: var(--t-sm);
+  line-height: 1.6;
+}
+
+/* 字段错误统一用 danger 语义，和普通说明 / 提示区分。 */
+.fieldError {
+  color: var(--status-danger-deep);
+}
+
 .detailList {
   margin: 0;
   padding: 0 var(--s-4);
@@ -632,16 +648,6 @@
 .textLink:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 4px;
-}
-
-.fullHint {
-  display: grid;
-  gap: var(--s-2);
-  font-size: var(--t-sm);
-}
-
-.fullHint p {
-  margin: 0;
 }
 
 .lookupResult {
@@ -906,6 +912,11 @@
   font-size: calc(var(--t-base) * 1.3125);
   font-weight: 700;
   line-height: 1.25;
+}
+
+.successTitle:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 4px;
 }
 
 .successLead {

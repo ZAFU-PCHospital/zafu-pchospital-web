@@ -428,6 +428,38 @@ async function mount(
     },
     activeElement: () => document.activeElement,
     signupNameNode: () => signupNameNode,
+    /** 把标题的 ref 换成一个可记录焦点的节点；tick(0) 后断言 activeElement。 */
+    focusTarget(id: string) {
+      const element = findElement(view(), (item) => item.props.id === id);
+      assert.ok(element, `找不到可聚焦标题 ${id}`);
+      const node = {
+        focus() {
+          document.activeElement = node;
+        },
+      };
+      (element.props.ref as { current: unknown }).current = node;
+      return node;
+    },
+    submitLookupUpdate(issueType: string) {
+      const section = findElement(
+        view(),
+        (element) => element.props["aria-labelledby"] === "repair-activity-lookup-title",
+      );
+      assert.ok(section, "查询视图未打开");
+      const form = findElement(
+        section,
+        (element) =>
+          element.type === "form" &&
+          element.props["aria-label"] === undefined &&
+          typeof element.props.onSubmit === "function",
+      );
+      assert.ok(form, "查询结果里没有改类型表单");
+      formValues = new Map([["issueType", issueType]]);
+      (form.props.onSubmit as (event: unknown) => void)({
+        preventDefault() {},
+        currentTarget: {},
+      });
+    },
     storedDraft,
     requestLookup(phone: string) {
       openLookupView();
@@ -695,13 +727,25 @@ test("三步向导先确认活动、再阅读须知，勾选同意后才进入�
   );
 
   assert.equal(ui.visibleStep(), 1);
+  assert.ok(
+    findElement(
+      ui.view(),
+      (element) => element.type === "h2" && text(element) === copy.signupTitle,
+    ),
+    "步骤标题是 h3，前面要有报名区 h2",
+  );
   const step1 = ui.stepElement(1)!;
   assert.ok(text(step1).includes(copy.stepTitles[0]));
+  assert.ok(
+    findElement(step1, (element) => element.type === "h3" && text(element) === copy.stepTitles[0]),
+    "步骤标题保持 h3",
+  );
   assert.ok(text(step1).includes(activity.location!), "第一步摘要带地点");
+  assert.equal(text(step1).split("2026/10/24 18:00").length - 1, 1, "第一步内活动时间只出现一次");
   assert.equal(
-    text(ui.view()).split("2026/10/24 18:00").length - 1,
-    1,
-    "活动时间只在第一步出现一次",
+    text(ui.stepElement(2)!).includes("2026/10/24 18:00"),
+    false,
+    "须知步不重复活动时间",
   );
   assert.equal(ui.requests.length, 1, "尚未开始填写时不发送报名请求");
 
@@ -734,6 +778,15 @@ test("三步向导先确认活动、再阅读须知，勾选同意后才进入�
   );
   ui.clickInStep(2, copy.nextStep);
   assert.equal(ui.visibleStep(), 3);
+  const step3Content = text(ui.stepElement(3)!);
+  assert.ok(
+    step3Content.includes(`${repairActivitiesPage.activityAt}：2026/10/24 18:00`),
+    "第三步补活动时间摘要",
+  );
+  assert.ok(
+    step3Content.includes(`${repairActivitiesPage.location}：${activity.location}`),
+    "第三步补活动地点摘要",
+  );
 
   const { index, request } = ui.submitSignup();
   assert.deepEqual(JSON.parse(request.init.body as string), {
@@ -755,10 +808,18 @@ test("三步向导先确认活动、再阅读须知，勾选同意后才进入�
   const { RepairActivityReceipt } =
     await import("../../src/components/repair-activities/RepairActivityReceipt");
   const content = text(ui.view());
-  assert.ok(content.includes(copy.resultTitle), "终态标题换成报名结果");
+  assert.ok(content.includes(copy.signupSuccessTitle), "终态标题换成可见的报名成功");
   const receipt = findElement(ui.view(), (element) => element.type === RepairActivityReceipt);
   assert.ok(receipt, "直接展示成功凭条");
   const receiptContent = text(RepairActivityReceipt(receipt.props as never));
+  assert.ok(
+    findElement(
+      RepairActivityReceipt(receipt.props as never),
+      (element) => element.type === "h2" && text(element) === copy.signupSuccessTitle,
+    ),
+    "成功态可见的「报名成功」是标题而不是普通段落",
+  );
+  assert.ok(content.includes(copy.registeredBadge), "成功终态徽章改为已报名");
   assert.ok(receiptContent.includes(registration.phoneMasked));
   assert.ok(receiptContent.includes(repairActivityIssueTypeLabels.CLEAN_PASTE));
   assert.equal(ui.visibleStep(), null, "结果不占步骤条");
@@ -971,6 +1032,125 @@ test("报名成功后凭条保留活动与报名信息，四件到场准备只�
     ),
     undefined,
     "凭条里不展开完整须知",
+  );
+});
+
+test("成功凭条进入卡内查询后取消，旧凭条不能留在终态", async (t) => {
+  const copy = repairActivitiesPage.detail;
+  const ui = await mount(t);
+  await ui.finish(0, { ...activity, status: "OPEN" });
+  ui.submitSignup();
+  const postIndex = ui.requests.findLastIndex((request) => request.init.method === "POST");
+  ui.requests[postIndex].finish(Response.json({ success: true, data: registration }));
+  await setImmediate();
+
+  const { RepairActivityReceipt } =
+    await import("../../src/components/repair-activities/RepairActivityReceipt");
+  assert.ok(
+    findElement(ui.view(), (element) => element.type === RepairActivityReceipt),
+    "成功报名后先显示凭条",
+  );
+  const refreshIndex = ui.requests.findLastIndex(
+    (request) => request.url === "/api/v1/repair-activities/a",
+  );
+  await ui.finish(refreshIndex, { ...activity, status: "OPEN" });
+
+  ui.openLookup();
+  ui.requestLookup("13800000000");
+  const lookupIndex = ui.requests.findLastIndex((request) =>
+    request.url.endsWith("/registrations/lookup"),
+  );
+  ui.requests[lookupIndex].finish(Response.json({ success: true, data: lookupRegistration }));
+  await setImmediate();
+
+  const cancelButton = findElement(
+    ui.view(),
+    (element) =>
+      element.props.children === copy.cancelSignup && typeof element.props.onClick === "function",
+  );
+  assert.ok(cancelButton, "查询命中后提供取消入口");
+  (cancelButton.props.onClick as () => void)();
+  const dialog = findElement(
+    ui.view(),
+    (element) =>
+      element.props.title === copy.cancelConfirmTitle &&
+      typeof element.props.onConfirm === "function",
+  );
+  assert.ok(dialog);
+  (dialog.props.onConfirm as () => void)();
+  const cancelIndex = ui.requests.findLastIndex((request) => request.url.endsWith("/cancel"));
+  ui.requests[cancelIndex].finish(Response.json({ success: true, data: { cancelled: true } }));
+  await setImmediate();
+
+  assert.equal(
+    findElement(ui.view(), (element) => element.type === RepairActivityReceipt),
+    undefined,
+    "取消成功后旧成功凭条必须收起",
+  );
+  assert.equal(text(ui.view()).includes(copy.lookupRegisteredTitle), false);
+  assert.equal(ui.visibleStep(), 1, "取消后回到第一步");
+  assert.ok(text(ui.view()).includes(copy.stepTitles[0]));
+
+  const heading = ui.focusTarget("repair-activity-signup-step-1");
+  t.mock.timers.tick(0);
+  assert.equal(ui.activeElement(), heading, "取消成功后焦点回到第一步标题");
+});
+
+test("成功凭条进入卡内查询后改类型，关闭查询时凭条同步新类型", async (t) => {
+  const copy = repairActivitiesPage.detail;
+  const ui = await mount(t);
+  await ui.finish(0, { ...activity, status: "OPEN" });
+  ui.submitSignup();
+  const postIndex = ui.requests.findLastIndex((request) => request.init.method === "POST");
+  ui.requests[postIndex].finish(Response.json({ success: true, data: registration }));
+  await setImmediate();
+  const refreshIndex = ui.requests.findLastIndex(
+    (request) => request.url === "/api/v1/repair-activities/a",
+  );
+  await ui.finish(refreshIndex, { ...activity, status: "OPEN" });
+
+  ui.openLookup();
+  ui.requestLookup("13800000000");
+  const lookupIndex = ui.requests.findLastIndex((request) =>
+    request.url.endsWith("/registrations/lookup"),
+  );
+  ui.requests[lookupIndex].finish(Response.json({ success: true, data: lookupRegistration }));
+  await setImmediate();
+
+  ui.submitLookupUpdate("CLEAN_ONLY");
+  const patchIndex = ui.requests.findLastIndex((request) => request.init.method === "PATCH");
+  assert.equal(ui.requests[patchIndex].url, "/api/v1/repair-activities/a/registrations/r1");
+  ui.requests[patchIndex].finish(
+    Response.json({
+      success: true,
+      data: { ...lookupRegistration, issueType: "CLEAN_ONLY", status: "REGISTERED" },
+    }),
+  );
+  await setImmediate();
+  ui.view();
+
+  const back = findElement(
+    ui.view(),
+    (element) =>
+      element.props.children === copy.lookupBack && typeof element.props.onClick === "function",
+  );
+  assert.ok(back, "查询视图提供返回");
+  (back.props.onClick as () => void)();
+  ui.view();
+
+  const { RepairActivityReceipt } =
+    await import("../../src/components/repair-activities/RepairActivityReceipt");
+  const receipt = findElement(ui.view(), (element) => element.type === RepairActivityReceipt);
+  assert.ok(receipt, "改类型后仍显示成功凭条");
+  const receiptContent = text(RepairActivityReceipt(receipt.props as never));
+  assert.equal(
+    receiptContent.includes(repairActivityIssueTypeLabels.CLEAN_PASTE),
+    false,
+    "凭条不能残留旧故障类型",
+  );
+  assert.ok(
+    receiptContent.includes(repairActivityIssueTypeLabels.CLEAN_ONLY),
+    "凭条同步为新的故障类型",
   );
 });
 
@@ -1277,7 +1457,8 @@ test("待确认时主查询到本人记录会清除待确认并展示凭条", as
   );
 });
 
-test("满额页保留查询本人记录入口", async (t) => {
+test("满额页只保留一个查询本人记录入口", async (t) => {
+  const copy = repairActivitiesPage.detail;
   const ui = await mount(t);
   await ui.finish(0, {
     ...activity,
@@ -1285,9 +1466,16 @@ test("满额页保留查询本人记录入口", async (t) => {
     registeredCount: 10,
     remaining: 0,
   });
-  assert.ok(text(ui.view()).includes(repairActivitiesPage.detail.fullDisabled));
-  assert.ok(text(ui.view()).includes(repairActivitiesPage.detail.fullLookupHint));
-  assert.ok(text(ui.view()).includes(repairActivitiesPage.detail.lookupMine));
+  assert.ok(text(ui.view()).includes(copy.fullDisabled));
+  assert.ok(text(ui.view()).includes(copy.fullLookupHint));
+  const entries = findElements(
+    ui.stepElement(1)!,
+    (element) =>
+      (element.props.children === copy.lookupEntry || element.props.children === copy.lookupMine) &&
+      typeof element.props.onClick === "function",
+  );
+  assert.equal(entries.length, 1, "满额状态不能同时出现两套查询入口");
+  assert.equal(entries[0].props.children, copy.lookupEntry);
 });
 
 test("查询到本人有效报名时突出你已报名成功并保留改类型", async (t) => {
@@ -1703,6 +1891,9 @@ test("提交撞上设备 409 时直接切到已提交面板", async (t) => {
     undefined,
     "命中 409 后收起报名表单",
   );
+  const heading = ui.focusTarget("repair-activity-signup-title");
+  t.mock.timers.tick(0);
+  assert.equal(ui.activeElement(), heading, "设备 409 终态的焦点移到结果标题");
 });
 
 test("已提交面板可重新检查：报名被删除后恢复表单", async (t) => {
