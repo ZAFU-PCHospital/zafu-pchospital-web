@@ -185,6 +185,14 @@ export function RepairActivityRegistrationsPanel({
   const activeRegistrations = matching.filter((registration) => !registration.deletedAt);
   const deletedRegistrations = matching.filter((registration) => registration.deletedAt);
 
+  function removalUnavailableHint(registration: RegistrationAdminView): string | null {
+    if (registration.deletedAt || registration.canRemoveRegistration) return null;
+    if (registration.status === "CHECKED_IN") return copy.registrations.deleteCheckedInHint;
+    if (registration.status === "SERVED") return copy.registrations.deleteServedHint;
+    if (registration.status === "REGISTERED") return copy.registrations.deleteEndedHint;
+    return copy.registrations.deleteUnavailableHint;
+  }
+
   function renderRegistrationTable(rows: RegistrationAdminView[]) {
     return (
       <div className="admin-table-wrap">
@@ -244,6 +252,11 @@ export function RepairActivityRegistrationsPanel({
                     <Button
                       variant="ghost"
                       disabled={busy || !registration.canRemoveRegistration}
+                      aria-describedby={
+                        removalUnavailableHint(registration)
+                          ? `removal-hint-${registration.id}`
+                          : undefined
+                      }
                       onClick={() => {
                         setRegistrationMutationProblem("");
                         setRemovalReason("");
@@ -253,6 +266,11 @@ export function RepairActivityRegistrationsPanel({
                       {copy.registrations.delete}
                     </Button>
                   </div>
+                  {removalUnavailableHint(registration) ? (
+                    <p className="admin-note" id={`removal-hint-${registration.id}`}>
+                      {removalUnavailableHint(registration)}
+                    </p>
+                  ) : null}
                 </td>
               </tr>
             ))}
