@@ -83,6 +83,7 @@ function board(attended = true): StaffBoardView {
     attended,
     attendanceCheckedInAt: attended ? "2026-10-23T05:00:00Z" : null,
     canAdmin: true,
+    canRemoveRegistration: true,
     canAttend: true,
     attendanceMembers: [],
     eligible: [row],
@@ -362,6 +363,18 @@ test("管理员当天可确认删除待签到报名，失败保留弹窗", async
     .elements()
     .find((element) => element.props.title === copy.removeRegistrationTitle);
   assert.ok(dialog);
+  assert.equal(dialog.props.confirmDisabled, true);
+  const reason = ui
+    .elements()
+    .find(
+      (element) =>
+        typeof element.type === "function" && element.type.name === "RegistrationRemovalReason",
+    );
+  assert.ok(reason);
+  (reason.props.onChange as unknown as (value: string) => void)("联系确认无法到场");
+  dialog = ui.elements().find((element) => element.props.title === copy.removeRegistrationTitle);
+  assert.ok(dialog);
+  assert.equal(dialog.props.confirmDisabled, false);
   ui.replyToPost(async () =>
     Response.json(
       {
@@ -377,13 +390,15 @@ test("管理员当天可确认删除待签到报名，失败保留弹窗", async
   assert.ok(dialog);
   assert.ok(text(dialog.props.children).includes("状态已变化"));
   assert.match(ui.posts[0], /cancel-registration$/);
-  assert.deepEqual(JSON.parse(ui.postBodies[0]), { registrationId: row.id });
+  assert.deepEqual(JSON.parse(ui.postBodies[0]), {
+    registrationId: row.id,
+    reason: "联系确认无法到场",
+  });
 });
 
 test("普通成员不显示删除报名", async (t) => {
   const member = board();
   member.canAdmin = false;
-  member.eligible = [];
   const ui = await mount(t, member, new Date("2026-10-23T12:00:00Z"));
   assert.equal(
     ui.elements().some((element) => element.props.children === copy.removeRegistration),
@@ -392,10 +407,47 @@ test("普通成员不显示删除报名", async (t) => {
 });
 
 test("活动次日不显示删除报名", async (t) => {
-  const ui = await mount(t, board(), new Date("2026-10-24T01:00:00Z"));
+  const data = board();
+  data.canRemoveRegistration = false;
+  const ui = await mount(t, data, new Date("2026-10-24T01:00:00Z"));
   assert.equal(
     ui.elements().some((element) => element.props.children === copy.removeRegistration),
     false,
+  );
+});
+
+test("删除成功后移除报名，刷新失败时保留成功结果并提示", async (t) => {
+  const ui = await mount(t, board(), new Date("2026-10-23T12:00:00Z"));
+  ui.button(copy.removeRegistration).onClick!();
+  const reason = ui
+    .elements()
+    .find(
+      (element) =>
+        typeof element.type === "function" && element.type.name === "RegistrationRemovalReason",
+    );
+  assert.ok(reason);
+  (reason.props.onChange as unknown as (value: string) => void)("客户主动取消");
+  ui.replyToPost(async () => {
+    ui.failReads(true);
+    return Response.json({ success: true, data: { deleted: true } });
+  });
+  const dialog = ui
+    .elements()
+    .find((element) => element.props.title === copy.removeRegistrationTitle);
+  assert.ok(dialog);
+  dialog.props.onConfirm!();
+  await setImmediate();
+  await setImmediate();
+  assert.equal(
+    ui.elements().some((element) => element.props.title === copy.removeRegistrationTitle),
+    false,
+  );
+  assert.equal(
+    ui.elements().some((element) => element.props.children === copy.removeRegistration),
+    false,
+  );
+  assert.ok(
+    ui.elements().some((element) => element.props.message === copy.removeRegistrationRefreshFailed),
   );
 });
 

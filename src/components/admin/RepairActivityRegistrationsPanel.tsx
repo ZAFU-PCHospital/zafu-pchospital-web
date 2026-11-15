@@ -4,6 +4,8 @@ import { AdminModal } from "@/components/admin/AdminModal";
 import { AdminToast, type AdminToastMessage } from "@/components/admin/AdminToast";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { RegistrationRemovalReason } from "@/components/repair-activities/RegistrationRemovalReason";
+import { registrationRemovalCopy } from "@/config/repair-activities";
 import { adminCopy, adminShared } from "@/config/admin";
 import { adminFetch, clearAdminCache, type AdminApiResult } from "@/features/admin/admin-client";
 import {
@@ -37,6 +39,7 @@ export function RepairActivityRegistrationsPanel({
   const [removingRegistration, setRemovingRegistration] = useState<RegistrationAdminView | null>(
     null,
   );
+  const [removalReason, setRemovalReason] = useState("");
   const registrationRequestRef = useRef(0);
 
   const loadRegistrations = useCallback(async (activityId: string, showLoading: boolean) => {
@@ -113,7 +116,7 @@ export function RepairActivityRegistrationsPanel({
   }
 
   async function confirmRegistrationRemove() {
-    if (!removingRegistration || registrationWriteRef.current) return;
+    if (!removingRegistration || !removalReason || registrationWriteRef.current) return;
     const registrationId = removingRegistration.id;
     registrationWriteRef.current = true;
     setBusy(true);
@@ -121,7 +124,7 @@ export function RepairActivityRegistrationsPanel({
     try {
       const result = await adminFetch<{ deleted: boolean }>(
         `/api/v1/admin/repair-activities/${activityId}/registrations/${registrationId}`,
-        { method: "DELETE", signal: AbortSignal.timeout(15_000) },
+        { method: "DELETE", body: { reason: removalReason }, signal: AbortSignal.timeout(15_000) },
       );
       let deleted = result.ok && result.data.deleted;
       if (
@@ -144,7 +147,11 @@ export function RepairActivityRegistrationsPanel({
       setRegistrations((items) =>
         items.map((item) =>
           item.id === registrationId
-            ? { ...item, deletedAt: item.deletedAt ?? new Date().toISOString() }
+            ? {
+                ...item,
+                deletedAt: item.deletedAt ?? new Date().toISOString(),
+                canRemoveRegistration: false,
+              }
             : item,
         ),
       );
@@ -236,9 +243,10 @@ export function RepairActivityRegistrationsPanel({
                     </Button>
                     <Button
                       variant="ghost"
-                      disabled={busy || Boolean(registration.deletedAt)}
+                      disabled={busy || !registration.canRemoveRegistration}
                       onClick={() => {
                         setRegistrationMutationProblem("");
+                        setRemovalReason("");
                         setRemovingRegistration(registration);
                       }}
                     >
@@ -384,10 +392,12 @@ export function RepairActivityRegistrationsPanel({
 
       {removingRegistration ? (
         <ConfirmDialog
+          size="compact"
           title={copy.registrations.delete}
           cancelLabel={copy.registrations.cancel}
           confirmLabel={busy ? adminShared.submitting : copy.registrations.delete}
           busy={busy}
+          confirmDisabled={!removalReason}
           onClose={() => {
             if (!busy) setRemovingRegistration(null);
           }}
@@ -399,12 +409,17 @@ export function RepairActivityRegistrationsPanel({
           >
             {registrationMutationProblem}
           </p>
-          <p>{copy.registrations.deleteHint}</p>
+          <p>{registrationRemovalCopy.hint}</p>
           <p>
             <strong>
               {removingRegistration.name} · {removingRegistration.phone}
             </strong>
           </p>
+          <RegistrationRemovalReason
+            value={removalReason}
+            onChange={setRemovalReason}
+            disabled={busy}
+          />
         </ConfirmDialog>
       ) : null}
     </>

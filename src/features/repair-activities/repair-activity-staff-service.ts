@@ -7,6 +7,7 @@ import {
   assertActivityStaffOpen,
   canServeRegistration,
   canWithdrawRegistration,
+  canRemoveActivityRegistration,
   deriveRepairActivityStatus,
   EFFECTIVE_REGISTRATION_STATUSES,
   mapIssueTypeToCategoryCode,
@@ -118,6 +119,7 @@ export type StaffBoardView = {
    * 决定「待签到」区与「撤回」按钮的可见性；签到 / 撤回接口同样只对管理员开放。
    */
   canAdmin: boolean;
+  canRemoveRegistration: boolean;
   /** 无成员档案的管理员只管理现场，不产生个人出勤与维修归属。 */
   canAttend: boolean;
   /**
@@ -423,53 +425,6 @@ function toListItem(
 }
 
 export const repairActivityStaffService = {
-  async cancelUnattendedRegistration(
-    activityId: string,
-    registrationId: string,
-    actor: AuthorizedActor,
-  ): Promise<{ deleted: true }> {
-    requirePermission(actor, "activity:admin");
-    return inSerializableTransaction(async (tx) => {
-      await tx.$queryRaw`SELECT id FROM repair_activities WHERE id = ${activityId} FOR UPDATE`;
-      const activity = await tx.repairActivity.findUnique({ where: { id: activityId } });
-      if (!activity || activity.deletedAt) throw new AppError("ACTIVITY_NOT_FOUND", "活动不存在");
-      const now = new Date();
-      if (shanghaiCalendarDay(now) !== shanghaiCalendarDay(activity.activityAt)) {
-        throw new AppError("ACTIVITY_REGISTRATION_STATE_INVALID", "只能在活动当天处理未到场报名");
-      }
-      const registration = await tx.repairActivityRegistration.findFirst({
-        where: { id: registrationId, activityId, deletedAt: null },
-      });
-      if (!registration) {
-        throw new AppError("ACTIVITY_REGISTRATION_NOT_FOUND", "报名记录不存在或已删除");
-      }
-      if (registration.status !== "REGISTERED") {
-        throw new AppError("ACTIVITY_REGISTRATION_STATE_INVALID", "只能删除尚未签到的报名");
-      }
-      await tx.repairActivityRegistration.update({
-        where: { id: registrationId },
-        data: { deletedAt: now },
-      });
-      await appendAuditLog(tx, {
-        actor,
-        actorType: "USER",
-        actorUserId: actor.userId,
-        action: "repair_activity.registration_deleted",
-        targetType: "RepairActivityRegistration",
-        targetId: registrationId,
-        result: "SUCCESS",
-        before: {
-          activityId,
-          name: registration.name,
-          phoneMasked: maskActivityPhone(registration.phone),
-          issueType: registration.issueType,
-          status: registration.status,
-        },
-        after: { deletedAt: now.toISOString(), source: "activity_board" },
-      });
-      return { deleted: true };
-    });
-  },
   async getRegistrationPhone(
     activityId: string,
     registrationId: string,
@@ -616,6 +571,8 @@ export const repairActivityStaffService = {
       attended: Boolean(attendance),
       attendanceCheckedInAt: attendance?.checkedInAt.toISOString() ?? null,
       canAdmin,
+      canRemoveRegistration:
+        canAdmin && canRemoveActivityRegistration(activity.activityAt, new Date()),
       canAttend: Boolean(member),
       attendanceCount,
       servedCount: canAdmin
@@ -775,6 +732,8 @@ export const repairActivityStaffService = {
       attended: Boolean(ownAttendance),
       attendanceCheckedInAt: ownAttendance?.checkedInAt.toISOString() ?? null,
       canAdmin,
+      canRemoveRegistration:
+        canAdmin && canRemoveActivityRegistration(activity.activityAt, new Date()),
       canAttend: Boolean(member),
       attendanceMembers,
       eligible,

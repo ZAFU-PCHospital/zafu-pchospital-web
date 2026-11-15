@@ -957,9 +957,13 @@ DELETE     /api/v1/admin/comments/:id
 ### 工作台按角色分区与签到 / 撤回权限收紧（issue #108）
 
 活动工作台提供 `POST /api/v1/member/repair-activities/:id/cancel-registration`，
-请求 `{ registrationId }`，仅 `activity:admin` 可操作。活动上海自然日当天，
-管理员可软删仍为 `REGISTERED` 的报名，释放名额并写入脱敏审计；已签到或已接待不可删除。
-本次删除不计未到场；次日之后仍通过黑名单管理中的单次豁免处理。成功返回 `{ deleted: true }`。
+请求 `{ registrationId, reason }`。管理端 `DELETE /api/v1/admin/repair-activities/:id/registrations/:regId`
+请求 `{ reason }`，原集合 DELETE 请求 `{ registrationId, reason }`。三个入口均要求
+`activity:admin`，且仅可在活动上海自然日结束前软删 `REGISTERED` 报名。原因必选：
+`客户主动取消`、`联系确认无法到场`、`报名信息有误`、`其他原因`；缺失或不在选项内返回 400。
+已签到、已接待及活动日结束后的报名返回 409；次日之后通过黑名单中的单次豁免处理。
+成功释放名额、不计未到场，返回 `{ deleted: true }`；脱敏审计记录入口、原状态和原因。
+工作台返回 `canRemoveRegistration`，管理端名单逐行返回同名字段，供界面展示操作资格。
 
 `GET /api/v1/member/repair-activities/:id/board` 返回结构新增：
 
@@ -1397,7 +1401,7 @@ body `{ name, phone, editToken }`，同源、统一信封 / requestId，沿用�
   用于取消响应丢失后的安全重试。token 失败统一提示「查询凭证无效或已过期，请重新查询」。
 - 该设备签名 cookie 指向的报名被软删后，设备状态接口返回 `submitted=false`，可重新报名；
   取消后同一手机号也按正常名额规则重新校验。
-- 管理员既有删除报名入口不变；本端点不处理维修记录、照片或 no-show 事件。无 Schema /
+- 管理员删除报名规则见上文工作台删除接口；本端点不处理维修记录、照片或 no-show 事件。无 Schema /
   Migration 变更。
 
 ## 前端遥测（issue #380）

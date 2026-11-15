@@ -8,6 +8,8 @@ import { POST as POST_ATTENDANCE } from "../../src/app/api/v1/member/repair-acti
 import { POST as POST_SERVE } from "../../src/app/api/v1/member/repair-activities/[id]/serve/route";
 import { POST as POST_WITHDRAW } from "../../src/app/api/v1/member/repair-activities/[id]/withdraw/route";
 import { POST as POST_CANCEL_REGISTRATION } from "../../src/app/api/v1/member/repair-activities/[id]/cancel-registration/route";
+import { DELETE as DELETE_MANAGED_REGISTRATION } from "../../src/app/api/v1/admin/repair-activities/[id]/registrations/[regId]/route";
+import { DELETE as DELETE_MANAGED_REGISTRATION_LEGACY } from "../../src/app/api/v1/admin/repair-activities/[id]/registrations/route";
 import { GET as GET_PHONE } from "../../src/app/api/v1/member/repair-activities/[id]/registrations/[registrationId]/phone/route";
 import { POST as POST_REGISTRATION } from "../../src/app/api/v1/repair-activities/[id]/registrations/route";
 import { repairActivityStaffService } from "../../src/features/repair-activities/repair-activity-staff-service";
@@ -349,23 +351,53 @@ async function checkInFixture(
   });
 }
 
-dbTest("工作台删除当天未签到报名：权限、状态、名额和未到场", async () => {
+dbTest("两个入口统一删除规则：权限、原因、状态、时间和审计", async () => {
   const db = getDb();
   const row = await checkInFixture();
   const queued = await checkInFixture({ status: "CHECKED_IN" });
-  const call = (id: string, cookie: string) =>
+  const call = (id: string, cookie: string, reason: unknown = "联系确认无法到场") =>
     callRoute(
       POST_CANCEL_REGISTRATION,
       `http://localhost/api/v1/member/repair-activities/${ACTIVITY_ID}/cancel-registration`,
       {
         method: "POST",
-        body: { registrationId: id },
+        body: { registrationId: id, reason },
         params: { id: ACTIVITY_ID },
         headers: { cookie },
       },
     );
+  const managed = (id: string, reason?: string) =>
+    callRoute(
+      DELETE_MANAGED_REGISTRATION,
+      `http://localhost/api/v1/admin/repair-activities/${ACTIVITY_ID}/registrations/${id}`,
+      {
+        method: "DELETE",
+        body: reason ? { reason } : {},
+        params: { id: ACTIVITY_ID, regId: id },
+        headers: { cookie: staffCookie },
+      },
+    );
+  const legacy = (id: string, reason?: string) =>
+    callRoute(
+      DELETE_MANAGED_REGISTRATION_LEGACY,
+      `http://localhost/api/v1/admin/repair-activities/${ACTIVITY_ID}/registrations`,
+      {
+        method: "DELETE",
+        body: { registrationId: id, reason },
+        params: { id: ACTIVITY_ID },
+        headers: { cookie: staffCookie },
+      },
+    );
   assert.equal((await call(row.id, absentCookie)).status, 403);
+  assert.equal((await call(row.id, staffCookie, "")).status, 400);
+  assert.equal((await managed(row.id)).status, 400);
+  assert.equal((await legacy(row.id)).status, 400);
   assert.equal((await call(queued.id, staffCookie)).status, 409);
+  assert.equal((await managed(queued.id, "客户主动取消")).status, 409);
+  assert.equal((await legacy(queued.id, "客户主动取消")).status, 409);
+  assert.equal((await call(row.id, staffCookie, "电话 13900000000")).status, 400);
+  const served = await checkInFixture({ status: "SERVED" });
+  assert.equal((await managed(served.id, "客户主动取消")).status, 409);
   const before = await repairActivityStaffService.getBoard(ACTIVITY_ID, staffActor);
   const result = await call(row.id, absentAdminCookie);
   assert.equal(result.status, 200);
@@ -387,18 +419,62 @@ dbTest("工作台删除当天未签到报名：权限、状态、名额和未到
     where: { targetId: row.id, action: "repair_activity.registration_deleted" },
   });
   assert.equal(JSON.stringify(audit).includes(row.phone), false);
+  assert.deepEqual(audit.afterSummary, {
+    deletedAt: saved.deletedAt?.toISOString(),
+    source: "activity_board",
+    previousStatus: "REGISTERED",
+    reason: "联系确认无法到场",
+  });
   assert.equal((await call(row.id, staffCookie)).status, 404);
 
   const future = await checkInFixture();
+  const futureLegacy = await checkInFixture();
+  const past = await checkInFixture();
   try {
     await db.repairActivity.update({
       where: { id: ACTIVITY_ID },
       data: { activityAt: new Date(Date.now() + 2 * 86400000) },
     });
-    assert.equal((await call(future.id, staffCookie)).status, 409);
     assert.equal(
-      (await db.repairActivityRegistration.findUniqueOrThrow({ where: { id: future.id } }))
-        .deletedAt,
+      (await repairActivityStaffService.getLiveBoard(ACTIVITY_ID, staffActor))
+        .canRemoveRegistration,
+      true,
+    );
+    assert.equal(
+      (await repairActivityService.listRegistrations(ACTIVITY_ID, staffActor)).find(
+        (item) => item.id === future.id,
+      )?.canRemoveRegistration,
+      true,
+    );
+    assert.equal((await managed(future.id, "报名信息有误")).status, 200);
+    assert.equal((await legacy(futureLegacy.id, "客户主动取消")).status, 200);
+    const managedAudit = await db.auditLog.findFirstOrThrow({
+      where: { targetId: future.id, action: "repair_activity.registration_deleted" },
+    });
+    assert.equal(
+      (managedAudit.afterSummary as { source: string }).source,
+      "registration_management",
+    );
+    await db.repairActivity.update({
+      where: { id: ACTIVITY_ID },
+      data: { activityAt: new Date(Date.now() - 2 * 86400000) },
+    });
+    assert.equal(
+      (await repairActivityStaffService.getLiveBoard(ACTIVITY_ID, staffActor))
+        .canRemoveRegistration,
+      false,
+    );
+    assert.equal(
+      (await repairActivityService.listRegistrations(ACTIVITY_ID, staffActor)).find(
+        (item) => item.id === past.id,
+      )?.canRemoveRegistration,
+      false,
+    );
+    assert.equal((await call(past.id, staffCookie)).status, 409);
+    assert.equal((await managed(past.id, "其他原因")).status, 409);
+    assert.equal((await legacy(past.id, "其他原因")).status, 409);
+    assert.equal(
+      (await db.repairActivityRegistration.findUniqueOrThrow({ where: { id: past.id } })).deletedAt,
       null,
     );
   } finally {

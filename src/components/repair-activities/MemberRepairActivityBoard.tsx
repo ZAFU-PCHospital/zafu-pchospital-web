@@ -25,6 +25,7 @@ import {
 import { BoardSyncStatus } from "./BoardSyncStatus";
 import { useBoardResource } from "./useBoardResource";
 import { RegistrationPhone } from "@/components/repair-activities/RegistrationPhone";
+import { RegistrationRemovalReason } from "@/components/repair-activities/RegistrationRemovalReason";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -40,6 +41,7 @@ import { repairStatusLabels } from "@/config/repairs";
 import {
   memberRepairActivitiesCopy,
   memberRepairActivityStatusLabels,
+  registrationRemovalCopy,
   repairActivitiesPage,
 } from "@/config/repair-activities";
 import {
@@ -47,7 +49,6 @@ import {
   canOperateActivityStaff,
   checkInOpensAt,
   sortQueueByCheckedInAt,
-  shanghaiCalendarDay,
   type RepairActivityIssueType,
   type RepairActivityStatus,
 } from "@/features/repair-activities/repair-activity-validation";
@@ -108,6 +109,7 @@ export function MemberRepairActivityBoard({ activityId, active = true, embedded 
   const [withdrawTarget, setWithdrawTarget] = useState<StaffRegistrationView | null>(null);
   const [removeTarget, setRemoveTarget] = useState<StaffRegistrationView | null>(null);
   const [removeError, setRemoveError] = useState("");
+  const [removeReason, setRemoveReason] = useState("");
   /** 撤销接待：确认弹层目标与在途标记。 */
   const [revertTarget, setRevertTarget] = useState<StaffServedRow | null>(null);
   const [revertBusy, setRevertBusy] = useState(false);
@@ -230,6 +232,7 @@ export function MemberRepairActivityBoard({ activityId, active = true, embedded 
     setWithdrawTarget(null);
     setRemoveTarget(null);
     setRemoveError("");
+    setRemoveReason("");
     setRevertTarget(null);
     setRevertBusy(false);
     setPendingNotice(null);
@@ -473,12 +476,12 @@ export function MemberRepairActivityBoard({ activityId, active = true, embedded 
   }
 
   async function confirmRemoveRegistration() {
-    if (!removeTarget || !beginWrite(`remove:${removeTarget.id}`)) return;
+    if (!removeTarget || !removeReason || !beginWrite(`remove:${removeTarget.id}`)) return;
     const registrationId = removeTarget.id;
     setRemoveError("");
     const result = await postJson<{ deleted: boolean }>(
       `/api/v1/member/repair-activities/${activityId}/cancel-registration`,
-      { registrationId },
+      { registrationId, reason: removeReason },
     );
     if (currentActivity.current !== activityTarget) return;
     if (!result.ok) {
@@ -639,10 +642,7 @@ export function MemberRepairActivityBoard({ activityId, active = true, embedded 
   const opsDisabled = !staffOpen || !canManage || busy !== null;
   const withdrawBusy = withdrawTarget ? busy === `withdraw:${withdrawTarget.id}` : false;
   const removeBusy = removeTarget ? busy === `remove:${removeTarget.id}` : false;
-  const canRemoveRegistration =
-    board.canAdmin &&
-    shanghaiCalendarDay(new Date(clock)) ===
-      shanghaiCalendarDay(new Date(board.activity.activityAt));
+  const canRemoveRegistration = board.canAdmin && board.canRemoveRegistration;
   const checkInBusy = busy === "check-in";
   const matches = createBoardSearch(search);
   const eligibleRows = matches ? board.eligible.filter(matches) : board.eligible;
@@ -902,6 +902,7 @@ export function MemberRepairActivityBoard({ activityId, active = true, embedded 
                             className="activity-board__withdraw-btn ms-auto shrink-0"
                             onClick={() => {
                               setRemoveError("");
+                              setRemoveReason("");
                               setRemoveTarget(row);
                             }}
                             disabled={busy !== null}
@@ -1261,17 +1262,23 @@ export function MemberRepairActivityBoard({ activityId, active = true, embedded 
           cancelLabel={copy.withdrawCancel}
           confirmLabel={removeBusy ? copy.removingRegistration : copy.removeRegistration}
           busy={removeBusy}
+          confirmDisabled={!removeReason}
           onClose={() => {
             if (!removeBusy) setRemoveTarget(null);
           }}
           onConfirm={() => void confirmRemoveRegistration()}
         >
-          <p>{copy.removeRegistrationHint}</p>
+          <p>{registrationRemovalCopy.hint}</p>
           <p>
             <strong>
               {removeTarget.name} · {removeTarget.phoneMasked}
             </strong>
           </p>
+          <RegistrationRemovalReason
+            value={removeReason}
+            onChange={setRemoveReason}
+            disabled={removeBusy}
+          />
           {removeError ? (
             <p className="admin-status" role="alert">
               {removeError}
