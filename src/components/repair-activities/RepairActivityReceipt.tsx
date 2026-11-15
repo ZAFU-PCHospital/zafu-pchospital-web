@@ -1,8 +1,9 @@
+import type { Ref } from "react";
+
 import {
   formatShanghaiDateTime,
   formatShanghaiTimeRange,
 } from "@/components/repair-activities/activity-format";
-import { RepairActivityPreparation } from "@/components/repair-activities/RepairActivityPreparation";
 import { Icon } from "@/components/ui/Icon";
 import { repairActivitiesPage } from "@/config/repair-activities";
 import {
@@ -22,19 +23,22 @@ const copy = repairActivitiesPage.detail.receipt;
 type Props = {
   activity: RepairActivityPublicView;
   registration: RegistrationPublicView;
+  /** 报名成功标题即终态焦点目标，避免再放一个只有读屏可见的结果标题。 */
+  headingRef?: Ref<HTMLHeadingElement>;
 };
 
 /**
- * 报名成功凭条（issue #363）：成功提示区 + 票根卡片 + 到场准备。
+ * 报名成功凭条（issue #363）：成功提示区 + 票根卡片。
  *
  * 卡片分两段：活动信息（抬头 / 名称 / 时间 / 地点）─ 打孔撕票线 ─ 核验信息
  * （姓名·手机号两列；报名时间·故障类型两列，机型独占一行）。`endsAt` / `location` /
- * `deviceModel` 为空时对应行不渲染，不编造。
+ * `deviceModel` 为空时对应行不渲染，不编造。到场准备由卡片下方的说明区承载，
+ * 凭条内不重复。
  *
  * 动效：图标描边 + 四块错峰淡入（40–70ms 间隔），只动 transform / opacity；
  * 减弱动效时只保留淡入。
  */
-export function RepairActivityReceipt({ activity, registration }: Props) {
+export function RepairActivityReceipt({ activity, registration, headingRef }: Props) {
   const timeRange = formatShanghaiTimeRange(activity.activityAt, activity.endsAt);
   const issueTypeLabel =
     repairActivityIssueTypeLabels[registration.issueType as RepairActivityIssueType] ??
@@ -55,7 +59,14 @@ export function RepairActivityReceipt({ activity, registration }: Props) {
             <path className={styles.successCheck} pathLength={1} d="M5 13l4 4L19 7" />
           </svg>
         </span>
-        <p className={styles.successTitle}>{page.detail.signupSuccessTitle}</p>
+        <h2
+          className={styles.successTitle}
+          id="repair-activity-signup-title"
+          ref={headingRef}
+          tabIndex={-1}
+        >
+          {page.detail.signupSuccessTitle}
+        </h2>
         <p className={styles.successLead}>{copy.successLead}</p>
       </div>
 
@@ -115,11 +126,6 @@ export function RepairActivityReceipt({ activity, registration }: Props) {
           <p className={styles.receiptHint}>{copy.screenshotHint}</p>
         </div>
       </article>
-
-      <div className={styles.receiptPrep}>
-        <p className={styles.receiptPrepLabel}>{copy.preparationLabel}</p>
-        <RepairActivityPreparation layout="compact" />
-      </div>
     </div>
   );
 }
