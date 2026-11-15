@@ -355,6 +355,50 @@ test("无成员档案管理员可管理签到和撤回，个人出勤与接待�
   );
 });
 
+test("管理员当天可确认删除待签到报名，失败保留弹窗", async (t) => {
+  const ui = await mount(t, board(), new Date("2026-10-23T12:00:00Z"));
+  ui.button(copy.removeRegistration).onClick!();
+  let dialog = ui
+    .elements()
+    .find((element) => element.props.title === copy.removeRegistrationTitle);
+  assert.ok(dialog);
+  ui.replyToPost(async () =>
+    Response.json(
+      {
+        success: false,
+        error: { code: "ACTIVITY_REGISTRATION_STATE_INVALID", message: "状态已变化" },
+      },
+      { status: 409 },
+    ),
+  );
+  dialog.props.onConfirm!();
+  await setImmediate();
+  dialog = ui.elements().find((element) => element.props.title === copy.removeRegistrationTitle);
+  assert.ok(dialog);
+  assert.ok(text(dialog.props.children).includes("状态已变化"));
+  assert.match(ui.posts[0], /cancel-registration$/);
+  assert.deepEqual(JSON.parse(ui.postBodies[0]), { registrationId: row.id });
+});
+
+test("普通成员不显示删除报名", async (t) => {
+  const member = board();
+  member.canAdmin = false;
+  member.eligible = [];
+  const ui = await mount(t, member, new Date("2026-10-23T12:00:00Z"));
+  assert.equal(
+    ui.elements().some((element) => element.props.children === copy.removeRegistration),
+    false,
+  );
+});
+
+test("活动次日不显示删除报名", async (t) => {
+  const ui = await mount(t, board(), new Date("2026-10-24T01:00:00Z"));
+  assert.equal(
+    ui.elements().some((element) => element.props.children === copy.removeRegistration),
+    false,
+  );
+});
+
 test("无成员管理员打开历史活动仍显示活动已结束", async (t) => {
   const data = board(false);
   data.canAttend = false;

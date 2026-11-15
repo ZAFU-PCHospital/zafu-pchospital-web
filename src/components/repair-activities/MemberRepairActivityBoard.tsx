@@ -47,6 +47,7 @@ import {
   canOperateActivityStaff,
   checkInOpensAt,
   sortQueueByCheckedInAt,
+  shanghaiCalendarDay,
   type RepairActivityIssueType,
   type RepairActivityStatus,
 } from "@/features/repair-activities/repair-activity-validation";
@@ -105,6 +106,8 @@ export function MemberRepairActivityBoard({ activityId, active = true, embedded 
     return () => scope.invalidate();
   }, [activityTarget]);
   const [withdrawTarget, setWithdrawTarget] = useState<StaffRegistrationView | null>(null);
+  const [removeTarget, setRemoveTarget] = useState<StaffRegistrationView | null>(null);
+  const [removeError, setRemoveError] = useState("");
   /** 撤销接待：确认弹层目标与在途标记。 */
   const [revertTarget, setRevertTarget] = useState<StaffServedRow | null>(null);
   const [revertBusy, setRevertBusy] = useState(false);
@@ -131,6 +134,7 @@ export function MemberRepairActivityBoard({ activityId, active = true, embedded 
     busy !== null ||
     checkInConfirmOpen ||
     withdrawTarget !== null ||
+    removeTarget !== null ||
     revertTarget !== null ||
     pendingNotice !== null ||
     attendanceOpen;
@@ -161,7 +165,11 @@ export function MemberRepairActivityBoard({ activityId, active = true, embedded 
       preserveMobileHeight();
       setClock(Date.now());
       setMessage((current) =>
-        current === copy.checkInRefreshFailed || current === copy.refreshFailed ? "" : current,
+        current === copy.checkInRefreshFailed ||
+        current === copy.removeRegistrationRefreshFailed ||
+        current === copy.refreshFailed
+          ? ""
+          : current,
       );
       setServerEnded((ended) => ended || next.activity.status === "ENDED");
       setMobilePane(
@@ -220,6 +228,8 @@ export function MemberRepairActivityBoard({ activityId, active = true, embedded 
     setToast(null);
     setBusy(null);
     setWithdrawTarget(null);
+    setRemoveTarget(null);
+    setRemoveError("");
     setRevertTarget(null);
     setRevertBusy(false);
     setPendingNotice(null);
@@ -462,6 +472,36 @@ export function MemberRepairActivityBoard({ activityId, active = true, embedded 
     await refreshAfterWrite();
   }
 
+  async function confirmRemoveRegistration() {
+    if (!removeTarget || !beginWrite(`remove:${removeTarget.id}`)) return;
+    const registrationId = removeTarget.id;
+    setRemoveError("");
+    const result = await postJson<{ deleted: boolean }>(
+      `/api/v1/member/repair-activities/${activityId}/cancel-registration`,
+      { registrationId },
+    );
+    if (currentActivity.current !== activityTarget) return;
+    if (!result.ok) {
+      setRemoveError(result.message);
+      return;
+    }
+    setRemoveTarget(null);
+    setSelected((current) => {
+      const next = new Set(current);
+      next.delete(registrationId);
+      return next;
+    });
+    live.update((current) =>
+      current
+        ? { ...current, eligible: current.eligible.filter((row) => row.id !== registrationId) }
+        : current,
+    );
+    setToast({ text: copy.removeRegistrationSuccess, tone: "success" });
+    if (!(await load()) && currentActivity.current === activityTarget) {
+      setMessage(copy.removeRegistrationRefreshFailed);
+    }
+  }
+
   async function serve(registrationId: string) {
     if (busy !== null || !allowStaffAction() || !beginWrite(`serve:${registrationId}`)) return;
     setMessage("");
@@ -598,6 +638,11 @@ export function MemberRepairActivityBoard({ activityId, active = true, embedded 
   const floatingMessage = message || (ended && !showAttendBanner ? copy.activityEnded : "");
   const opsDisabled = !staffOpen || !canManage || busy !== null;
   const withdrawBusy = withdrawTarget ? busy === `withdraw:${withdrawTarget.id}` : false;
+  const removeBusy = removeTarget ? busy === `remove:${removeTarget.id}` : false;
+  const canRemoveRegistration =
+    board.canAdmin &&
+    shanghaiCalendarDay(new Date(clock)) ===
+      shanghaiCalendarDay(new Date(board.activity.activityAt));
   const checkInBusy = busy === "check-in";
   const matches = createBoardSearch(search);
   const eligibleRows = matches ? board.eligible.filter(matches) : board.eligible;
@@ -851,6 +896,20 @@ export function MemberRepairActivityBoard({ activityId, active = true, embedded 
                             {row.deviceModel ? ` · ${row.deviceModel}` : null}
                           </p>
                         </div>
+                        {canRemoveRegistration ? (
+                          <Button
+                            variant="ghost"
+                            className="activity-board__withdraw-btn ms-auto shrink-0"
+                            onClick={() => {
+                              setRemoveError("");
+                              setRemoveTarget(row);
+                            }}
+                            disabled={busy !== null}
+                            aria-label={`${copy.removeRegistration}：${row.name} ${row.phoneMasked}`}
+                          >
+                            {copy.removeRegistration}
+                          </Button>
+                        ) : null}
                       </div>
                     </li>
                   ))}
@@ -1192,6 +1251,32 @@ export function MemberRepairActivityBoard({ activityId, active = true, embedded 
               {withdrawTarget.name} · {withdrawTarget.phoneMasked}
             </strong>
           </p>
+        </ConfirmDialog>
+      ) : null}
+
+      {removeTarget ? (
+        <ConfirmDialog
+          size="compact"
+          title={copy.removeRegistrationTitle}
+          cancelLabel={copy.withdrawCancel}
+          confirmLabel={removeBusy ? copy.removingRegistration : copy.removeRegistration}
+          busy={removeBusy}
+          onClose={() => {
+            if (!removeBusy) setRemoveTarget(null);
+          }}
+          onConfirm={() => void confirmRemoveRegistration()}
+        >
+          <p>{copy.removeRegistrationHint}</p>
+          <p>
+            <strong>
+              {removeTarget.name} · {removeTarget.phoneMasked}
+            </strong>
+          </p>
+          {removeError ? (
+            <p className="admin-status" role="alert">
+              {removeError}
+            </p>
+          ) : null}
         </ConfirmDialog>
       ) : null}
 

@@ -7,10 +7,13 @@ import { GET as GET_BOARD } from "../../src/app/api/v1/member/repair-activities/
 import { POST as POST_ATTENDANCE } from "../../src/app/api/v1/member/repair-activities/[id]/attendance/route";
 import { POST as POST_SERVE } from "../../src/app/api/v1/member/repair-activities/[id]/serve/route";
 import { POST as POST_WITHDRAW } from "../../src/app/api/v1/member/repair-activities/[id]/withdraw/route";
+import { POST as POST_CANCEL_REGISTRATION } from "../../src/app/api/v1/member/repair-activities/[id]/cancel-registration/route";
 import { GET as GET_PHONE } from "../../src/app/api/v1/member/repair-activities/[id]/registrations/[registrationId]/phone/route";
 import { POST as POST_REGISTRATION } from "../../src/app/api/v1/repair-activities/[id]/registrations/route";
 import { repairActivityStaffService } from "../../src/features/repair-activities/repair-activity-staff-service";
 import { repairActivityService } from "../../src/features/repair-activities/repair-activity-service";
+import { isNoShowCandidate } from "../../src/features/repair-activities/repair-activity-no-show";
+import { activityEndExclusive } from "../../src/features/repair-activities/repair-activity-validation";
 import { resetRateLimitsForTests } from "../../src/lib/api/rate-limit";
 import { shanghaiToday } from "../../src/lib/shanghai-date";
 import { permissionsForRoles } from "../../src/lib/auth/permissions";
@@ -345,6 +348,66 @@ async function checkInFixture(
     },
   });
 }
+
+dbTest("工作台删除当天未签到报名：权限、状态、名额和未到场", async () => {
+  const db = getDb();
+  const row = await checkInFixture();
+  const queued = await checkInFixture({ status: "CHECKED_IN" });
+  const call = (id: string, cookie: string) =>
+    callRoute(
+      POST_CANCEL_REGISTRATION,
+      `http://localhost/api/v1/member/repair-activities/${ACTIVITY_ID}/cancel-registration`,
+      {
+        method: "POST",
+        body: { registrationId: id },
+        params: { id: ACTIVITY_ID },
+        headers: { cookie },
+      },
+    );
+  assert.equal((await call(row.id, absentCookie)).status, 403);
+  assert.equal((await call(queued.id, staffCookie)).status, 409);
+  const before = await repairActivityStaffService.getBoard(ACTIVITY_ID, staffActor);
+  const result = await call(row.id, absentAdminCookie);
+  assert.equal(result.status, 200);
+  assert.deepEqual(result.json.data, { deleted: true });
+  const saved = await db.repairActivityRegistration.findUniqueOrThrow({ where: { id: row.id } });
+  assert.ok(saved.deletedAt);
+  const activity = await db.repairActivity.findUniqueOrThrow({ where: { id: ACTIVITY_ID } });
+  assert.equal(
+    isNoShowCandidate({ ...saved, activityEnd: activityEndExclusive(activity.activityAt) }),
+    false,
+  );
+  const afterBoard = await repairActivityStaffService.getBoard(ACTIVITY_ID, staffActor);
+  assert.equal(afterBoard.activity.remaining, before.activity.remaining + 1);
+  assert.equal(
+    afterBoard.eligible.some((item) => item.id === row.id),
+    false,
+  );
+  const audit = await db.auditLog.findFirstOrThrow({
+    where: { targetId: row.id, action: "repair_activity.registration_deleted" },
+  });
+  assert.equal(JSON.stringify(audit).includes(row.phone), false);
+  assert.equal((await call(row.id, staffCookie)).status, 404);
+
+  const future = await checkInFixture();
+  try {
+    await db.repairActivity.update({
+      where: { id: ACTIVITY_ID },
+      data: { activityAt: new Date(Date.now() + 2 * 86400000) },
+    });
+    assert.equal((await call(future.id, staffCookie)).status, 409);
+    assert.equal(
+      (await db.repairActivityRegistration.findUniqueOrThrow({ where: { id: future.id } }))
+        .deletedAt,
+      null,
+    );
+  } finally {
+    await db.repairActivity.update({
+      where: { id: ACTIVITY_ID },
+      data: { activityAt: activity.activityAt },
+    });
+  }
+});
 
 dbTest("电话按需读取：普通成员未出勤可查看，默认看板脱敏，明文不进审计", async () => {
   const db = getDb();

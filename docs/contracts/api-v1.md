@@ -956,6 +956,11 @@ DELETE     /api/v1/admin/comments/:id
 
 ### 工作台按角色分区与签到 / 撤回权限收紧（issue #108）
 
+活动工作台提供 `POST /api/v1/member/repair-activities/:id/cancel-registration`，
+请求 `{ registrationId }`，仅 `activity:admin` 可操作。活动上海自然日当天，
+管理员可软删仍为 `REGISTERED` 的报名，释放名额并写入脱敏审计；已签到或已接待不可删除。
+本次删除不计未到场；次日之后仍通过黑名单管理中的单次豁免处理。成功返回 `{ deleted: true }`。
+
 `GET /api/v1/member/repair-activities/:id/board` 返回结构新增：
 
 - `canAdmin: boolean` —— 当前账号是否具备 `activity:admin`；看板据此渲染「待签到」区与「撤回」按钮；
