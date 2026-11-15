@@ -102,6 +102,7 @@ async function mount(t: TestContext, activityMode = false) {
     status: "REGISTERED",
     deletedAt: null as string | null,
     hasSameNameActive: false,
+    canRemoveRegistration: true,
   };
   let mutation: () => Promise<client.AdminApiResult<unknown>> = async () => ok({ deleted: true });
   let readFailure: client.AdminApiResult<never> | undefined;
@@ -242,7 +243,18 @@ async function mount(t: TestContext, activityMode = false) {
       (button(copy.delete).props.onClick as () => void)();
       const node = dialog(copy.delete);
       assert.ok(node);
-      return node;
+      assert.equal(node.props.confirmDisabled, true);
+      const reason = find(
+        node,
+        (element) =>
+          typeof element.type === "function" && element.type.name === "RegistrationRemovalReason",
+      );
+      assert.ok(reason);
+      (reason.props.onChange as (value: string) => void)("联系确认无法到场");
+      const ready = dialog(copy.delete);
+      assert.ok(ready);
+      assert.equal(ready.props.confirmDisabled, false);
+      return ready;
     },
     edit() {
       (button(copy.edit).props.onClick as () => void)();
@@ -283,6 +295,22 @@ async function mount(t: TestContext, activityMode = false) {
     },
   };
 }
+
+test("报名名单说明不可删除的原因", async (t) => {
+  const app = await mount(t);
+  for (const [status, hint] of [
+    ["REGISTERED", copy.deleteEndedHint],
+    ["CHECKED_IN", copy.deleteCheckedInHint],
+    ["SERVED", copy.deleteServedHint],
+  ] as const) {
+    app.registration.status = status;
+    app.registration.canRemoveRegistration = false;
+    app.reopen();
+    await setImmediate();
+    assert.equal(app.button(copy.delete).props.disabled, true);
+    assert.ok(text(app.view()).includes(hint));
+  }
+});
 
 test("活动编辑异常在窗口内报错，finally 解除提交禁用并允许重试", async (t) => {
   const ui = await mount(t, true);

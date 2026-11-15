@@ -8,6 +8,18 @@ import type { RepairActivityStatus } from "@/features/repair-activities/repair-a
  */
 export const repairActivityConsentVersion = "2026-10-25";
 
+export const registrationRemovalReasons = [
+  "客户主动取消",
+  "联系确认无法到场",
+  "报名信息有误",
+  "其他原因",
+] as const;
+export const registrationRemovalCopy = {
+  label: "删除原因",
+  placeholder: "请选择删除原因",
+  hint: "删除后释放名额，无法恢复，本次不计未到场",
+};
+
 /**
  * 公开维修活动页文案（M1）。
  */
@@ -297,6 +309,11 @@ export const memberRepairActivitiesCopy = {
     selectedCount: "已选 {count} 人",
     selectedHidden: "（含未显示的 {count} 人）",
     selectNone: "请先勾选至少一条报名",
+    removeRegistration: "删除报名",
+    removingRegistration: "删除中…",
+    removeRegistrationTitle: "确认删除报名？",
+    removeRegistrationSuccess: "已删除报名",
+    removeRegistrationRefreshFailed: "报名已删除，但工作台刷新失败，将自动重试",
     serve: "接待",
     serving: "落单中…",
     serveSuccess: "已接待，请继续填写维修记录",

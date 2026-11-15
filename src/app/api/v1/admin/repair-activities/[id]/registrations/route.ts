@@ -45,11 +45,13 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     assertSameOrigin(request);
     const { actor } = await authenticateRequest(request, requestId);
     const { id } = await params;
-    const body = (await request.json()) as Record<string, unknown>;
+    const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
     await repairActivityService.softDeleteRegistration(
       id,
       String(body.registrationId ?? ""),
+      body.reason,
       actor,
+      "registration_management",
     );
     return apiSuccess({ deleted: true }, requestId);
   } catch (error) {

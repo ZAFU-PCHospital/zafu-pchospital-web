@@ -431,6 +431,10 @@ export function activityEndExclusive(activityAt: Date): Date {
   return new Date(startOfShanghaiDay(activityAt).getTime() + ONE_DAY_MS);
 }
 
+export function canRemoveActivityRegistration(activityAt: Date, now: Date): boolean {
+  return now.getTime() < activityEndExclusive(activityAt).getTime();
+}
+
 /**
  * 公开排队只在活动开始后、活动结束前展示。
  * 结束上界与 ENDED 判定同源（`activityEndBoundary`），避免公开页同时出现

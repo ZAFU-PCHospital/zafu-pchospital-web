@@ -2,7 +2,10 @@ import type { Prisma } from "@/generated/prisma/client";
 import { integrationAudit } from "@/lib/auth/machine";
 import { randomUUID } from "node:crypto";
 
-import { repairActivityConsentVersion } from "@/config/repair-activities";
+import {
+  repairActivityConsentVersion,
+  registrationRemovalReasons,
+} from "@/config/repair-activities";
 import {
   issueRegistrationEditToken,
   verifyRegistrationEditToken,
@@ -20,6 +23,7 @@ import {
   assertValidTitle,
   canCancelRegistration,
   canEditIssueType,
+  canRemoveActivityRegistration,
   deriveRepairActivityStatus,
   EFFECTIVE_REGISTRATION_STATUSES,
   remainingCapacity,
@@ -136,6 +140,7 @@ export type RegistrationAdminView = {
   deletedAt: string | null;
   /** 本场还有其他同名有效报名，供管理员人工核对；不参与唯一性。 */
   hasSameNameActive: boolean;
+  canRemoveRegistration: boolean;
 };
 
 export type UpdateRegistrationInput = {
@@ -260,7 +265,7 @@ function toRegistrationAdminView(row: {
   status: string;
   createdAt: Date;
   deletedAt: Date | null;
-}): Omit<RegistrationAdminView, "hasSameNameActive"> {
+}): Omit<RegistrationAdminView, "hasSameNameActive" | "canRemoveRegistration"> {
   return {
     id: row.id,
     activityId: row.activityId,
@@ -485,9 +490,11 @@ export const repairActivityService = {
       if (row.deletedAt) continue;
       activeNameCounts.set(row.name, (activeNameCounts.get(row.name) ?? 0) + 1);
     }
+    const removalOpen = canRemoveActivityRegistration(activity.activityAt, new Date());
     return rows.map((row) => ({
       ...toRegistrationAdminView(row),
       hasSameNameActive: !row.deletedAt && (activeNameCounts.get(row.name) ?? 0) > 1,
+      canRemoveRegistration: !row.deletedAt && row.status === "REGISTERED" && removalOpen,
     }));
   },
 
@@ -553,6 +560,9 @@ export const repairActivityService = {
       return {
         ...toRegistrationAdminView(updated),
         hasSameNameActive: sameNameActiveCount > 1,
+        canRemoveRegistration:
+          updated.status === "REGISTERED" &&
+          canRemoveActivityRegistration(activity.activityAt, new Date()),
       };
     });
   },
@@ -560,9 +570,16 @@ export const repairActivityService = {
   async softDeleteRegistration(
     activityId: string,
     registrationId: string,
+    reason: unknown,
     actor: AuthorizedActor,
+    source: "activity_board" | "registration_management",
   ): Promise<void> {
     requirePermission(actor, "activity:admin");
+    if (typeof reason !== "string" || !registrationRemovalReasons.some((item) => item === reason)) {
+      throw new AppError("VALIDATION_FAILED", "请选择删除原因", {
+        fieldErrors: { reason: ["请选择删除原因"] },
+      });
+    }
     await inSerializableTransaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM repair_activities WHERE id = ${activityId} FOR UPDATE`;
       const activity = await tx.repairActivity.findUnique({ where: { id: activityId } });
@@ -575,7 +592,16 @@ export const repairActivityService = {
       if (!current || current.deletedAt) {
         throw new AppError("ACTIVITY_REGISTRATION_NOT_FOUND", "报名记录不存在或已删除");
       }
+      if (current.status !== "REGISTERED") {
+        throw new AppError("ACTIVITY_REGISTRATION_STATE_INVALID", "只能删除尚未签到的报名");
+      }
       const now = new Date();
+      if (!canRemoveActivityRegistration(activity.activityAt, now)) {
+        throw new AppError(
+          "ACTIVITY_REGISTRATION_STATE_INVALID",
+          "活动日已结束，请在黑名单中处理未到场记录",
+        );
+      }
       await tx.repairActivityRegistration.update({
         where: { id: registrationId },
         data: { deletedAt: now },
@@ -595,7 +621,7 @@ export const repairActivityService = {
           issueType: current.issueType,
           status: current.status,
         },
-        after: { deletedAt: now.toISOString() },
+        after: { deletedAt: now.toISOString(), source, previousStatus: current.status, reason },
       });
     });
   },

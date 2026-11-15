@@ -7,6 +7,7 @@ import {
   assertActivityStaffOpen,
   canServeRegistration,
   canWithdrawRegistration,
+  canRemoveActivityRegistration,
   deriveRepairActivityStatus,
   EFFECTIVE_REGISTRATION_STATUSES,
   mapIssueTypeToCategoryCode,
@@ -118,6 +119,7 @@ export type StaffBoardView = {
    * 决定「待签到」区与「撤回」按钮的可见性；签到 / 撤回接口同样只对管理员开放。
    */
   canAdmin: boolean;
+  canRemoveRegistration: boolean;
   /** 无成员档案的管理员只管理现场，不产生个人出勤与维修归属。 */
   canAttend: boolean;
   /**
@@ -569,6 +571,8 @@ export const repairActivityStaffService = {
       attended: Boolean(attendance),
       attendanceCheckedInAt: attendance?.checkedInAt.toISOString() ?? null,
       canAdmin,
+      canRemoveRegistration:
+        canAdmin && canRemoveActivityRegistration(activity.activityAt, new Date()),
       canAttend: Boolean(member),
       attendanceCount,
       servedCount: canAdmin
@@ -728,6 +732,8 @@ export const repairActivityStaffService = {
       attended: Boolean(ownAttendance),
       attendanceCheckedInAt: ownAttendance?.checkedInAt.toISOString() ?? null,
       canAdmin,
+      canRemoveRegistration:
+        canAdmin && canRemoveActivityRegistration(activity.activityAt, new Date()),
       canAttend: Boolean(member),
       attendanceMembers,
       eligible,
