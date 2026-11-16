@@ -4,6 +4,7 @@ import { setImmediate } from "node:timers/promises";
 import test, { type TestContext } from "node:test";
 import type { ReactElement, ReactNode } from "react";
 
+import type { PageAlert } from "../../src/components/ui/PageAlert";
 import { repairActivitiesPage } from "../../src/config/repair-activities";
 import type { RepairActivityPublicView } from "../../src/features/repair-activities/repair-activity-service";
 
@@ -41,6 +42,19 @@ function findButton(
     return node as ReactElement<{ disabled?: boolean; onClick?: () => void }>;
   }
   return findButton(node.props.children, label);
+}
+
+function findPageAlert(node: ReactNode): ReactElement<Parameters<typeof PageAlert>[0]> | undefined {
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      const found = findPageAlert(child);
+      if (found) return found;
+    }
+  }
+  if (!React.isValidElement<Props>(node)) return undefined;
+  if (node.type === require("../../src/components/ui/PageAlert").PageAlert)
+    return node as ReactElement<Parameters<typeof PageAlert>[0]>;
+  return findPageAlert(node.props.children);
 }
 
 function activity(id: string, title: string): RepairActivityPublicView {
@@ -194,7 +208,7 @@ test("翻页时保留上一页、禁用按钮并显示加载文案，成功后�
   assert.equal(text(next).includes("活动 a"), false);
 });
 
-test("翻页失败保留当前页并就地提示，按钮恢复可用", async (t) => {
+test("翻页失败保留当前页并显示可关闭的错误浮条，按钮恢复可用", async (t) => {
   const ui = await mount(t);
   ui.view();
   await ui.finish(0, payload(["a", "b", "c", "d"], 1, 10, 3));
@@ -204,9 +218,12 @@ test("翻页失败保留当前页并就地提示，按钮恢复可用", async (t
   await ui.finish(1, { success: false, error: { message: "第 2 页加载失败" } }, 500);
   const page = ui.view();
   assert.ok(text(page).includes("活动 a"), "失败后应保留当前页");
-  assert.ok(text(page).includes("第 2 页加载失败"));
+  const alert = findPageAlert(page);
+  assert.equal(alert?.props.message, "第 2 页加载失败");
   assert.ok(text(page).includes("1 / 3"));
   assert.equal(findButton(page, repairActivitiesPage.nextPage)?.props.disabled, false);
+  alert?.props.onClose?.();
+  assert.equal(findPageAlert(ui.view()), undefined);
 });
 
 test("翻页中再次点击不会叠加第二个请求", async (t) => {
@@ -294,7 +311,7 @@ test("活动翻页超时保留旧页、恢复按钮，迟到响应不覆盖重�
   t.mock.timers.tick(15_000);
   await setImmediate();
   assert.equal(ui.requests[1].init.signal?.aborted, true);
-  assert.ok(text(ui.view()).includes("请求超时"));
+  assert.ok(findPageAlert(ui.view())?.props.message.includes("请求超时"));
   assert.ok(text(ui.view()).includes("活动 a"));
   assert.equal(findButton(ui.view(), repairActivitiesPage.nextPage)?.props.disabled, false);
   findButton(ui.view(), repairActivitiesPage.nextPage)?.props.onClick?.();

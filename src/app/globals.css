@@ -8874,6 +8874,9 @@ html[data-theme="black-yellow"] {
   flex-direction: column;
   min-inline-size: 0;
 }
+.activity-list--paged {
+  align-content: start;
+}
 @media (min-width: 760px) {
   .activity-list:not(.activity-list--paged):not(.activity-list--home-preview) {
     display: grid;

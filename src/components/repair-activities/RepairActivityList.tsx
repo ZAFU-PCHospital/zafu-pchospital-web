@@ -10,6 +10,7 @@ import { ActivityListSkeleton } from "@/components/repair-activities/ActivityLis
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { LoadFailure } from "@/components/ui/LoadFailure";
+import { PageAlert } from "@/components/ui/PageAlert";
 import { repairActivitiesPage } from "@/config/repair-activities";
 import type { RepairActivityPublicView } from "@/features/repair-activities/repair-activity-service";
 import { createLatestRequest } from "@/lib/client/latest-request";
@@ -49,6 +50,9 @@ export function RepairActivityList() {
       setState("loading");
       setMessage("");
     } else {
+      // 末页较少或卡片较矮时，保留当前高度，避免分页和下方内容上移。
+      const list = listRef.current;
+      if (list) list.style.minHeight = `${list.getBoundingClientRect().height}px`;
       setLoadingPage(requestedPage);
       setPageMessage("");
     }
@@ -72,12 +76,6 @@ export function RepairActivityList() {
           setPage(targetPage);
           setState("ready");
           setPageMessage("");
-          if (mode === "page" && typeof requestAnimationFrame === "function") {
-            requestAnimationFrame(() => {
-              if (request.isCurrent())
-                listRef.current?.scrollIntoView?.({ behavior: "smooth", block: "start" });
-            });
-          }
           return;
         }
         targetPage = nextTotalPages;
@@ -118,8 +116,17 @@ export function RepairActivityList() {
   useEffect(() => {
     const scope = requests.current;
     void loadPage(1, "initial");
+    // 宽度改变后按新的卡片列数重新布局。
+    let width = typeof window === "undefined" ? 0 : window.innerWidth;
+    const resetListHeight = () => {
+      if (window.innerWidth === width) return;
+      width = window.innerWidth;
+      if (listRef.current) listRef.current.style.minHeight = "";
+    };
+    if (typeof window !== "undefined") window.addEventListener("resize", resetListHeight);
     return () => {
       scope.invalidate();
+      if (typeof window !== "undefined") window.removeEventListener("resize", resetListHeight);
     };
   }, [loadPage]);
 
@@ -169,15 +176,15 @@ export function RepairActivityList() {
           </li>
         ))}
       </ul>
-      {busy ? (
-        <p className="muted" role="status" aria-live="polite">
-          {formatPageCopy(repairActivitiesPage.loadingPage, loadingPage ?? safePage)}
-        </p>
-      ) : null}
+      <p className="sr-only" role="status" aria-live="polite">
+        {busy ? formatPageCopy(repairActivitiesPage.loadingPage, loadingPage ?? safePage) : ""}
+      </p>
       {pageMessage ? (
-        <p className="admin-status admin-status--error" role="alert">
-          {pageMessage}
-        </p>
+        <PageAlert
+          message={pageMessage}
+          closeLabel={repairActivitiesPage.detail.dismissError}
+          onClose={() => setPageMessage("")}
+        />
       ) : null}
       {totalPages > 1 ? (
         <nav className="repair-pagination" aria-label={repairActivitiesPage.paginationLabel}>
