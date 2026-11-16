@@ -1,9 +1,9 @@
-# 夜间 E2E 冒烟与无障碍基线
+# E2E 冒烟与无障碍基线
 #
-# 为什么不在每个 PR 跑：整套流程要构建生产包、起 MySQL、跑真实浏览器，
-# 单轮约 5–10 分钟，且与 `ci.yml` 的 lint/build 高度重叠。本 workflow 按
-# **夜间 + 手动**运行，覆盖 issue #380 要求的 3–5 条关键路径冒烟与 axe 基线；
-# PR 仍由 ci.yml 拦截类型、lint、构建与文档产物。
+# 全套流程要构建生产包、起 MySQL、跑真实浏览器，单轮约 5 分钟；夜间每日跑一次，
+# 并对涉及活动报名、成员/管理端看板、公共壳层与 E2E 自身的前端 PR 按路径触发，
+# 避免 UI 流程变更后测试脚本过期却直到部署后才暴露。其他 PR 仍由 ci.yml 拦截
+# 类型、lint、构建与文档产物。
 #
 # 数据只写独立测试库：MySQL service 的库名以 `_test` 结尾，Playwright 配置与
 # 夹具脚本都会过 `tests/integration/db-guard.ts` 的闸门。夹具带随机前缀，
@@ -11,6 +11,30 @@
 name: E2E
 
 on:
+  pull_request:
+    paths:
+      - "src/app/repair-activities/**"
+      - "src/app/member/repair-activities/**"
+      - "src/app/admin/**"
+      - "src/app/login/**"
+      - "src/components/repair-activities/**"
+      - "src/components/admin/**"
+      - "src/components/auth/**"
+      - "src/features/repair-activities/**"
+      - "src/config/repair-activities.ts"
+      - "src/components/home/**"
+      - "src/components/layout/**"
+      - "src/components/ui/**"
+      - "src/components/telemetry/**"
+      - "src/app/page.tsx"
+      - "src/app/globals.css"
+      - "src/lib/telemetry/**"
+      - "src/app/api/v1/telemetry/**"
+      - "tests/e2e/**"
+      - "playwright.config.ts"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/e2e.yml"
   schedule:
     # 03:00（北京时间）—— 每日一次，避开白天 PR 高峰
     - cron: "0 19 * * *"
@@ -25,7 +49,7 @@ permissions:
 
 jobs:
   e2e:
-    name: 夜间冒烟与无障碍
+    name: E2E 冒烟与无障碍
     runs-on: ubuntu-latest
     timeout-minutes: 30
     services:
@@ -84,4 +108,5 @@ jobs:
           path: |
             tests/e2e/.report
             tests/e2e/.artifacts
+          include-hidden-files: true
           retention-days: 7

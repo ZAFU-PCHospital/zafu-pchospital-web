@@ -36,11 +36,14 @@ test("成员报名 → 管理员签到入队 → 成员接待", async ({ browser
     await memberPage.goto(`/repair-activities/${seed.activity.id}`);
     await expect(memberPage.getByRole("heading", { name: seed.activity.title })).toBeVisible();
 
+    // issue #393：报名是三段向导；先进入须知，再同意，最后才出现姓名/手机号表单。
+    await memberPage.getByRole("button", { name: /立即报名|继续报名/ }).click();
+    await memberPage.getByRole("checkbox", { name: /我已阅读并同意/ }).check();
+    await memberPage.getByRole("button", { name: "下一步", exact: true }).click();
     await memberPage.locator("#repair-activity-signup-name").fill(customerName);
     await memberPage.locator("#repair-activity-signup-phone").fill(customerPhone);
     await memberPage.locator('select[name="issueType"]').selectOption("CLEAN_PASTE");
     await memberPage.getByRole("button", { name: "提交报名", exact: true }).click();
-    await memberPage.getByRole("button", { name: "我已阅读并同意", exact: true }).click();
     await expect(memberPage.getByText("报名信息已确认，请按时到场", { exact: true })).toBeVisible();
 
     // 前端遥测必须真的走通浏览器 → 端点：202、无查询串、带 release。
