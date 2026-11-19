@@ -38,7 +38,9 @@ export function useTableQuery<F extends Record<string, string>>(
     } else if (
       `${window.location.pathname}${window.location.search}${window.location.hash}` !== url
     ) {
-      window.history.pushState(window.history.state, "", url);
+      // 筛选/排序是同一张列表的局部状态，替换当前历史项即可；
+      // 连续改条件不应要求用户按多次 Back 才离开页面。深链与刷新仍从 URL 恢复。
+      window.history.replaceState(window.history.state, "", url);
     }
   }, [value, options, ready]);
   const setFixed = useCallback((fixed: F) => setValue((current) => ({ ...current, fixed })), []);

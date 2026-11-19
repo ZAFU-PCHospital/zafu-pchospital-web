@@ -7235,7 +7235,7 @@ html[data-theme="black-yellow"] {
     gap: 2px;
     padding-block: 0.45rem;
     color: var(--ink-3);
-    font-size: var(--t-micro);
+    font-size: var(--t-xs);
     font-weight: 650;
     cursor: pointer;
   }
@@ -8797,6 +8797,16 @@ html[data-theme="black-yellow"] {
   }
 
   @media (max-width: 759px) {
+    /* 窄屏优先把首屏留给内容：品牌英文 eyebrow 在顶部壳层只重复一遍站点身份，
+       隐藏后侧栏品牌行更紧凑；中文标题保留。 */
+    .admin-nav__brand-en,
+    .member-nav__brand-en {
+      display: none;
+    }
+    .admin-nav__brand,
+    .member-nav__brand {
+      gap: 0;
+    }
     .admin-workspace__header > .btn {
       width: 100%;
       justify-content: center;
@@ -9016,7 +9026,7 @@ html[data-theme="black-yellow"] {
 }
 .activity-list--ticket .activity-card--stub .activity-card__stub-weekday {
   font-size: 11px;
-  color: var(--ink-4);
+  color: var(--ink-3);
 }
 .activity-list--ticket .activity-card--stub .activity-card__body {
   display: flex;
