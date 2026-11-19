@@ -7165,6 +7165,16 @@ html[data-theme="black-yellow"] {
     }
   }
   @media (max-width: 1099px) {
+    /* 与移动壳层/底部标签栏同断点：窄屏优先把首屏留给内容，品牌英文 eyebrow
+       只重复一遍站点身份；中文标题保留。 */
+    .admin-nav__brand-en,
+    .member-nav__brand-en {
+      display: none;
+    }
+    .admin-nav__brand,
+    .member-nav__brand {
+      gap: 0;
+    }
     .member-nav {
       /* 窄屏：侧栏收成顶部一条（品牌 + 账号菜单），导航交给底部标签栏 `.shell-tabbar`。 */
       display: flex;
@@ -8797,16 +8807,6 @@ html[data-theme="black-yellow"] {
   }
 
   @media (max-width: 759px) {
-    /* 窄屏优先把首屏留给内容：品牌英文 eyebrow 在顶部壳层只重复一遍站点身份，
-       隐藏后侧栏品牌行更紧凑；中文标题保留。 */
-    .admin-nav__brand-en,
-    .member-nav__brand-en {
-      display: none;
-    }
-    .admin-nav__brand,
-    .member-nav__brand {
-      gap: 0;
-    }
     .admin-workspace__header > .btn {
       width: 100%;
       justify-content: center;

@@ -30,24 +30,38 @@ test("管理员成员列表按姓名筛选并加载完整分页", async ({ page 
   await expect(page).toHaveURL(/\/admin$/);
 });
 
-test("窄屏底部标签可读且品牌英文 eyebrow 收起", async ({ page }) => {
+test("窄屏壳层底部标签可读、品牌 eyebrow 收起且键盘可达", async ({ page }) => {
   const seed = loadSeed();
   await login(page, seed.admin.qq, seed.admin.password);
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/admin/members");
-  await expect(page.getByRole("heading", { name: "成员管理" })).toBeVisible();
 
-  const tab = await page
-    .locator(".shell-tabbar__tab")
-    .first()
-    .evaluate((element) => {
-      const style = getComputedStyle(element);
-      return {
-        fontSize: Number.parseFloat(style.fontSize),
-        height: element.getBoundingClientRect().height,
-      };
-    });
-  expect(tab.fontSize).toBeGreaterThanOrEqual(12);
-  expect(tab.height).toBeGreaterThanOrEqual(44);
-  await expect(page.locator(".admin-nav__brand-en")).toBeHidden();
+  for (const width of [390, 768]) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto("/admin/members");
+    await expect(page.getByRole("heading", { name: "成员管理" })).toBeVisible();
+
+    const tab = await page
+      .locator(".shell-tabbar__tab")
+      .first()
+      .evaluate((element) => {
+        const style = getComputedStyle(element);
+        return {
+          fontSize: Number.parseFloat(style.fontSize),
+          height: element.getBoundingClientRect().height,
+        };
+      });
+    expect(tab.fontSize).toBeGreaterThanOrEqual(12);
+    expect(tab.height).toBeGreaterThanOrEqual(44);
+    await expect(page.locator(".admin-nav__brand-en")).toBeHidden();
+
+    // 底部标签栏保持可键盘到达，且 Tab 顺序连续。
+    const tabs = page.locator(".shell-tabbar__tab");
+    await tabs.first().focus();
+    await expect(tabs.first()).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(tabs.nth(1)).toBeFocused();
+
+    await page.goto("/member");
+    await page.locator(".member-nav").waitFor();
+    await expect(page.locator(".member-nav__brand-en")).toBeHidden();
+  }
 });
