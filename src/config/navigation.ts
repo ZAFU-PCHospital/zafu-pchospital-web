@@ -38,7 +38,7 @@ export const mainNav: readonly NavItem[] = [
   },
   { index: "03", label: "关于我们", shortLabel: "关于", labelEn: "About", href: "/about" },
   { index: "04", label: "加入我们", shortLabel: "加入", labelEn: "Join", href: "/join" },
-  { index: "05", label: "技术文档", shortLabel: "文档", labelEn: "Docs", href: "/docs" },
+  { index: "05", label: "实用工具", shortLabel: "工具", labelEn: "Tools", href: "/docs" },
 ] as const;
 
 /**

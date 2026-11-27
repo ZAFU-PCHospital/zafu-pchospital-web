@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
 
-import { Button } from "@/components/ui/Button";
-import { Reveal } from "@/components/ui/Reveal";
-import { Section } from "@/components/ui/Section";
-import { SectionHead } from "@/components/ui/SectionHead";
-import { SectionTitle } from "@/components/ui/SectionTitle";
+import { DocBanner } from "@/components/docs/DocBanner";
+import { ToolDirectory } from "@/components/docs/ToolDirectory";
 import { docsPage } from "@/config/docs";
+import { docMeta, formatGeneratedAt } from "@/lib/docs";
+
+import "./tools.css";
 
 export const metadata: Metadata = {
   title: docsPage.title,
@@ -13,34 +13,34 @@ export const metadata: Metadata = {
 };
 
 /**
- * /docs 技术文档入口
+ * /docs 工具索引页
  *
- * 技术文档由独立仓库维护，并在官网构建时生成到同域 /handbook/，
- * 本页只保留文档站主入口与 GitHub 源文件仓库入口。
+ * 结构：面包屑 → 标题导语 → 技术文档知识库横幅卡 → 工具网址目录 → 页脚说明行。
+ * 技术文档正文由独立仓库生成到同域 /handbook/，本页只保留入口；
+ * 工具数据来自 src/config/tools.ts，交互在 ToolDirectory 组件内。
+ *
+ * 版式按设计稿逐像素复刻（色值取自设计稿采样，见 tools.css 顶部注释），
+ * 因此不使用 Section / SectionHead 等沿用主题令牌的版式组件。
  */
 export default function DocsPage() {
   return (
-    <Section variant="page-head" labelledBy="docs-page-title">
-      <div className="mb-s-5 gap-x-s-5 gap-y-s-2 flex flex-wrap items-center">
-        <SectionHead className="mb-0 min-w-0 flex-1" index="05" label={docsPage.label} />
-        <Reveal className="ml-auto" index={1}>
-          <Button variant="ghost" icon="github" href={docsPage.repositoryAction.href} external>
-            {docsPage.repositoryAction.label}
-          </Button>
-        </Reveal>
-      </div>
+    <div className="tp">
+      <p className="tp-crumb">
+        <b>{docsPage.index} / {docsPage.label}</b> · {docsPage.crumbLabel}
+      </p>
 
-      <SectionTitle id="docs-page-title" as="h1" index={1}>
-        {docsPage.title}
-      </SectionTitle>
-      <Reveal as="p" className="lead" index={2}>
-        {docsPage.lead}
-      </Reveal>
-      <Reveal className="mt-s-6" index={3}>
-        <Button variant="solid" icon="book" href={docsPage.handbookAction.href}>
-          {docsPage.handbookAction.label}
-        </Button>
-      </Reveal>
-    </Section>
+      <h1 className="tp-title">{docsPage.title}</h1>
+      <p className="tp-lead">{docsPage.lead}</p>
+
+      <DocBanner />
+      <ToolDirectory />
+
+      <div className="tp-foot">
+        <span>外链均为官方网站，新窗口打开。</span>
+        <span>
+          文档读数来自 doc-manifest.json · 生成于 {formatGeneratedAt(docMeta.generatedAt)}
+        </span>
+      </div>
+    </div>
   );
 }

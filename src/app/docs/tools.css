@@ -1,0 +1,501 @@
+/* ============================================================================
+   工具索引页 · 按设计稿复刻
+   ----------------------------------------------------------------------------
+   色值全部取自设计稿截图的像素采样，不复用主题令牌：
+     页面底色 #F5F5F2 / 正文字色 #171717 / 次级 #6D6F6C / 弱化 #9A9A95
+     卡片白 #FFFFFF / 卡片描边 #EBEBE7 / 控件描边 #D8D8D4
+     钴蓝 #2457FF / 横幅描边 #9EB6E7 / 横幅底部渐变起点 #EFF3FF
+   深色模式下整体换成主题令牌，避免出现一块亮色孤岛。
+   ========================================================================== */
+
+.tp {
+  --tp-ink: #171717;
+  --tp-ink-2: #6d6f6c;
+  --tp-ink-3: #9a9a95;
+  --tp-ink-4: #b6b6b0;
+  --tp-line: #ebebe7;
+  --tp-line-2: #d8d8d4;
+  --tp-chip: #efefea;
+  --tp-surface: #ffffff;
+  --tp-accent: #2457ff;
+  --tp-accent-line: #9eb6e7;
+  --tp-accent-wash: #eff3ff;
+  --tp-radius: 4px;
+
+  width: 100%;
+  max-width: 1120px;
+  margin-inline: auto;
+  padding: 4.5rem clamp(1.25rem, 4vw, 2rem) 3.5rem;
+  color: var(--tp-ink);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* 窄屏顶栏是 fixed 的，正文要让出它的高度，否则面包屑被压在栏下面。 */
+@media (max-width: 1099px) {
+  .tp {
+    padding-top: 5.25rem;
+  }
+}
+
+/* ---------------------------------------------------------------- 页面头 */
+.tp-crumb {
+  margin: 0;
+  font-family: var(--font-mono, ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace);
+  font-size: 11px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--tp-ink-3);
+}
+
+.tp-crumb b {
+  font-weight: 500;
+  color: var(--tp-ink-2);
+}
+
+.tp-title {
+  margin: 9px 0 0;
+  font-size: 30px;
+  line-height: 1.22;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--tp-ink);
+}
+
+.tp-lead {
+  margin: 5px 0 0;
+  font-size: 14px;
+  color: var(--tp-ink-2);
+}
+
+/* ------------------------------------------------- 技术文档知识库横幅卡 */
+.tp-banner {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 16px 36px;
+  margin-top: 22px;
+  padding: 17px 22px 19px;
+  border: 1px solid var(--tp-accent-line);
+  border-left: 3px solid var(--tp-accent);
+  border-radius: 6px;
+  background: linear-gradient(
+    100deg,
+    var(--tp-accent-wash) 0%,
+    color-mix(in srgb, var(--tp-accent-wash) 45%, var(--tp-surface)) 42%,
+    var(--tp-surface) 78%
+  );
+}
+
+.tp-banner__title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--tp-ink);
+}
+
+.tp-banner__desc {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  color: var(--tp-ink-2);
+}
+
+.tp-banner__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin-top: 13px;
+}
+
+.tp-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 14px;
+  border: 1px solid transparent;
+  border-radius: var(--tp-radius);
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
+  transition:
+    background-color 0.16s ease,
+    border-color 0.16s ease,
+    color 0.16s ease;
+}
+
+.tp-btn svg {
+  flex: none;
+  width: 12px;
+  height: 12px;
+}
+
+.tp-btn--solid {
+  background: var(--tp-accent);
+  color: #fff;
+}
+
+.tp-btn--solid:hover {
+  background: color-mix(in srgb, var(--tp-accent) 88%, #000);
+  color: #fff;
+}
+
+.tp-btn--ghost {
+  background: var(--tp-surface);
+  border-color: var(--tp-line-2);
+  color: var(--tp-ink);
+}
+
+.tp-btn--ghost:hover {
+  border-color: var(--tp-ink-3);
+  color: var(--tp-ink);
+}
+
+/* 右侧文档读数：数字在上、标签在下，中间一项用强调色 */
+.tp-stats {
+  display: flex;
+  gap: 34px;
+  margin: 0;
+  padding-top: 4px;
+}
+
+.tp-stats > div {
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: center;
+  gap: 2px;
+}
+
+.tp-stats dd {
+  margin: 0;
+  font-size: 27px;
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--tp-ink);
+}
+
+.tp-stats .is-accent dd {
+  color: var(--tp-accent);
+}
+
+.tp-stats dt {
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--tp-ink-3);
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------- 工具目录 */
+.tp-dir {
+  margin-top: 32px;
+}
+
+.tp-dir__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.tp-dir__head h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--tp-ink);
+}
+
+.tp-dir__head span {
+  font-size: 11.5px;
+  color: var(--tp-ink-3);
+}
+
+.tp-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  margin-top: 14px;
+  padding: 0 12px;
+  border: 1px solid var(--tp-line-2);
+  border-radius: var(--tp-radius);
+  background: var(--tp-surface);
+}
+
+.tp-search svg {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  color: var(--tp-ink-3);
+}
+
+.tp-search input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--tp-ink);
+}
+
+.tp-search input::placeholder {
+  color: var(--tp-ink-3);
+}
+
+.tp-search input::-webkit-search-cancel-button {
+  cursor: pointer;
+}
+
+.tp-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin-top: 14px;
+}
+
+.tp-filter {
+  height: 44px;
+  padding: 0 16px;
+  border: 1px solid var(--tp-line-2);
+  border-radius: var(--tp-radius);
+  background: var(--tp-surface);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--tp-ink);
+  cursor: pointer;
+  transition:
+    background-color 0.16s ease,
+    border-color 0.16s ease,
+    color 0.16s ease;
+}
+
+.tp-filter:hover {
+  border-color: var(--tp-accent);
+  color: var(--tp-accent);
+}
+
+.tp-filter.is-on {
+  background: var(--tp-accent);
+  border-color: var(--tp-accent);
+  color: #fff;
+}
+
+.tp-empty {
+  margin: 0;
+  padding: 28px 0;
+  font-size: 12.5px;
+  color: var(--tp-ink-3);
+}
+
+/* ---------------------------------------------------------------- 分组 */
+.tp-group {
+  margin-top: 26px;
+}
+
+.tp-group__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.tp-group__name {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--tp-ink);
+}
+
+.tp-group__name em {
+  margin-left: 5px;
+  font-style: normal;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--tp-ink-3);
+}
+
+.tp-group__en {
+  font-family: var(--font-mono, ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--tp-ink-4);
+}
+
+.tp-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tp-grid > li {
+  min-width: 0;
+}
+
+/* ---------------------------------------------------------------- 工具卡 */
+.tp-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 100%;
+  min-height: 66px;
+  padding: 10px 12px;
+  border: 1px solid var(--tp-line);
+  border-radius: var(--tp-radius);
+  background: var(--tp-surface);
+  text-decoration: none;
+  color: inherit;
+  transition:
+    border-color 0.16s ease,
+    box-shadow 0.16s ease;
+}
+
+.tp-card:hover {
+  border-color: var(--tp-accent-line);
+  box-shadow: 0 1px 0 0 color-mix(in srgb, var(--tp-accent) 8%, transparent);
+}
+
+.tp-card__icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--tp-radius);
+  background: var(--tp-chip);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  color: #4a4b47;
+}
+
+.tp-card__body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 0;
+  min-width: 0;
+}
+
+.tp-card__name {
+  overflow: hidden;
+  font-size: 12.5px;
+  font-weight: 650;
+  line-height: 1.5;
+  color: var(--tp-ink);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tp-card__desc {
+  overflow: hidden;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--tp-ink-3);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tp-card__arrow {
+  flex: none;
+  width: 13px;
+  height: 13px;
+  color: var(--tp-ink-4);
+  transition: color 0.16s ease;
+}
+
+.tp-card:hover .tp-card__arrow {
+  color: var(--tp-accent);
+}
+
+/* ---------------------------------------------------------------- 页脚行 */
+.tp-foot {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 6px 18px;
+  margin-top: 30px;
+  padding-top: 13px;
+  border-top: 1px solid var(--tp-line);
+  font-size: 11.5px;
+  color: var(--tp-ink-3);
+}
+
+/* ---------------------------------------------------------------- 响应式 */
+@media (max-width: 880px) {
+  .tp-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  .tp-banner {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
+
+  .tp-stats {
+    gap: 28px;
+    padding-top: 0;
+  }
+
+  .tp-stats > div {
+    align-items: flex-start;
+  }
+
+  .tp-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 520px) {
+  .tp-title {
+    font-size: 25px;
+  }
+
+  .tp-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .tp-stats dd {
+    font-size: 23px;
+  }
+}
+
+/* ---------------------------------------------------------------- 深色模式 */
+/* 只换变量，不改结构：深色下沿用主题令牌，避免整页发白。 */
+html[data-theme="black-yellow"] .tp {
+  --tp-ink: var(--ink);
+  --tp-ink-2: var(--ink-2);
+  --tp-ink-3: var(--ink-3);
+  --tp-ink-4: var(--ink-4);
+  --tp-line: var(--line);
+  --tp-line-2: var(--line-strong);
+  --tp-chip: var(--surface-2);
+  --tp-surface: var(--surface-1);
+  --tp-accent: var(--accent);
+  --tp-accent-line: var(--accent-line);
+  --tp-accent-wash: var(--accent-wash);
+}
+
+html[data-theme="black-yellow"] .tp-card__icon {
+  color: var(--ink-2);
+}
+
+html[data-theme="black-yellow"] .tp-btn--solid,
+html[data-theme="black-yellow"] .tp-filter.is-on {
+  color: var(--accent-on);
+}
