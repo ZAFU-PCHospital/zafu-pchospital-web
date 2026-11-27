@@ -12,9 +12,9 @@ export const docsPage = {
   title: "实用工具",
   label: "Tools",
   crumbLabel: "工具索引",
-  lead: "装机、驱动、解压、游戏、办公……常用官网与排障文档，都归在这里。",
+  lead: "装机、驱动、解压、游戏、校园……常用官网与排障文档，都归在这里。",
   metadataDescription:
-    "浙江农林大学电脑医院实用工具导航，收录装机、驱动、解压、游戏等常用官方网址，以及维修与排障技术文档入口。",
+    "浙江农林大学电脑医院实用工具导航，收录装机、驱动、解压、游戏、校园等常用官方网址，以及维修与排障技术文档入口。",
   handbookAction: {
     label: "进入技术文档",
     href: "/handbook/Intro.html",

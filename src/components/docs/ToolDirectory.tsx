@@ -15,14 +15,22 @@ import { cn } from "@/lib/utils";
  * 样式见 ../app/docs/tools.css 的 .tp-* 系列，按设计稿复刻。
  */
 
-function ToolCard({ name, description, href }: { name: string; description: string; href: string }) {
+function ToolCard({
+  name,
+  description,
+  href,
+}: {
+  name: string;
+  description: string;
+  href: string;
+}) {
   return (
     <a
       className="tp-card"
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      title={`${name} · 官方网站`}
+      title={`${name} · ${description}`}
     >
       <span className="tp-card__icon" aria-hidden="true">
         {name.slice(0, 1)}
@@ -58,11 +66,15 @@ function ToolGroup({ category }: { category: ToolCategory }) {
   );
 }
 
+function normalize(value: string) {
+  return value.toLowerCase().replace(/\s+/g, "");
+}
+
 export function ToolDirectory() {
   const [query, setQuery] = useState("");
   const [active, setActive] = useState<string>(allCategoryId);
 
-  const keyword = query.trim().toLowerCase();
+  const keyword = normalize(query);
   const filtered = Boolean(keyword) || active !== allCategoryId;
 
   const visibleCategories = useMemo(() => {
@@ -72,17 +84,29 @@ export function ToolDirectory() {
     if (!keyword) return categories;
 
     return categories
-      .map((cat) => ({
-        ...cat,
-        tools: cat.tools.filter(
-          (t) =>
-            t.name.toLowerCase().includes(keyword) || t.description.toLowerCase().includes(keyword),
-        ),
-      }))
+      .map((cat) => {
+        const categoryMatches = normalize(
+          `${cat.label}${cat.labelEn}${(cat.keywords ?? []).join("")}`,
+        ).includes(keyword);
+
+        return {
+          ...cat,
+          tools: categoryMatches
+            ? cat.tools
+            : cat.tools.filter((tool) =>
+                normalize(
+                  `${tool.name}${tool.description}${(tool.keywords ?? []).join("")}`,
+                ).includes(keyword),
+              ),
+        };
+      })
       .filter((cat) => cat.tools.length > 0);
   }, [active, keyword]);
 
   const visibleCount = visibleCategories.reduce((sum, cat) => sum + cat.tools.length, 0);
+  let statusText = `共 ${toolCount} 个工具`;
+  if (filtered) statusText = `找到 ${visibleCount} 个工具`;
+  if (visibleCount === 0) statusText = "没有匹配的工具";
 
   return (
     <div className="tp-dir">
@@ -90,6 +114,10 @@ export function ToolDirectory() {
         <h2>工具目录</h2>
         <span>{filtered ? `${visibleCount} 个` : `${toolCount} 个工具`}</span>
       </div>
+
+      <span className="sr-only" aria-live="polite" aria-atomic="true">
+        {statusText}
+      </span>
 
       <div className="tp-search">
         <Icon name="zoomIn" />
@@ -99,6 +127,7 @@ export function ToolDirectory() {
           onChange={(e) => setQuery(e.target.value)}
           placeholder="搜索工具名称，例如「驱动」「解压」……（Esc 清空）"
           aria-label="搜索工具"
+          enterKeyHint="search"
           onKeyDown={(e) => {
             if (e.key === "Escape") setQuery("");
           }}
@@ -132,7 +161,7 @@ export function ToolDirectory() {
       ))}
 
       {visibleCategories.length === 0 ? (
-        <p className="tp-empty">没有匹配的工具，换个关键词试试。</p>
+        <p className="tp-empty">没有匹配的工具，换个关键词或分类试试。</p>
       ) : null}
     </div>
   );

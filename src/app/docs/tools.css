@@ -1,27 +1,30 @@
 /* ============================================================================
-   工具索引页 · 按设计稿复刻
+   工具索引页 · 版式按设计稿复刻，颜色统一映射语义令牌
    ----------------------------------------------------------------------------
-   色值全部取自设计稿截图的像素采样，不复用主题令牌：
-     页面底色 #F5F5F2 / 正文字色 #171717 / 次级 #6D6F6C / 弱化 #9A9A95
-     卡片白 #FFFFFF / 卡片描边 #EBEBE7 / 控件描边 #D8D8D4
-     钴蓝 #2457FF / 横幅描边 #9EB6E7 / 横幅底部渐变起点 #EFF3FF
-   深色模式下整体换成主题令牌，避免出现一块亮色孤岛。
+   工具页保留自己的 1120px 容器、紧凑字号与 4 列网格；颜色不另造一套：
+     正文 / 次级 / 辅助   --ink / --ink-2 / --ink-3 / --ink-4
+     表面 / 描边          --surface-1 / --surface-2 / --line / --line-strong
+     强调                 --accent / --accent-deep / --accent-on
+                          --accent-line / --accent-wash
+   深色模式由 html[data-theme] 上的令牌自动接管，不需要第二套覆盖。
    ========================================================================== */
 
 .tp {
-  --tp-ink: #171717;
-  --tp-ink-2: #6d6f6c;
-  --tp-ink-3: #9a9a95;
-  --tp-ink-4: #b6b6b0;
-  --tp-line: #ebebe7;
-  --tp-line-2: #d8d8d4;
-  --tp-chip: #efefea;
-  --tp-surface: #ffffff;
-  --tp-accent: #2457ff;
-  --tp-accent-line: #9eb6e7;
-  --tp-accent-wash: #eff3ff;
-  --tp-radius: 4px;
+  --tp-ink: var(--ink);
+  --tp-ink-2: var(--ink-2);
+  --tp-ink-3: var(--ink-3);
+  --tp-ink-4: var(--ink-4);
+  --tp-line: var(--line);
+  --tp-line-2: var(--line-strong);
+  --tp-chip: var(--surface-2);
+  --tp-surface: var(--surface-1);
+  --tp-accent: var(--accent);
+  --tp-accent-line: var(--accent-line);
+  --tp-accent-wash: var(--accent-wash);
+  --tp-radius: var(--r-mid);
 
+  position: relative;
+  z-index: 2;
   width: 100%;
   max-width: 1120px;
   margin-inline: auto;
@@ -135,12 +138,12 @@
 
 .tp-btn--solid {
   background: var(--tp-accent);
-  color: #fff;
+  color: var(--accent-on);
 }
 
 .tp-btn--solid:hover {
-  background: color-mix(in srgb, var(--tp-accent) 88%, #000);
-  color: #fff;
+  background: var(--accent-deep);
+  color: var(--accent-on);
 }
 
 .tp-btn--ghost {
@@ -239,11 +242,18 @@
   min-width: 0;
   height: 100%;
   border: 0;
-  outline: 0;
+  outline: none;
   background: transparent;
   font: inherit;
   font-size: 12.5px;
   color: var(--tp-ink);
+}
+
+/* 输入框自身不画焦点环，由整个搜索框承担，保证键盘焦点可见。 */
+.tp-search:focus-within {
+  border-color: var(--tp-accent);
+  outline: 2px solid var(--tp-accent);
+  outline-offset: 3px;
 }
 
 .tp-search input::placeholder {
@@ -286,7 +296,7 @@
 .tp-filter.is-on {
   background: var(--tp-accent);
   border-color: var(--tp-accent);
-  color: #fff;
+  color: var(--accent-on);
 }
 
 .tp-empty {
@@ -379,7 +389,7 @@
   font-size: 13px;
   font-weight: 600;
   line-height: 1;
-  color: #4a4b47;
+  color: var(--tp-ink-2);
 }
 
 .tp-card__body {
@@ -475,27 +485,14 @@
   }
 }
 
-/* ---------------------------------------------------------------- 深色模式 */
-/* 只换变量，不改结构：深色下沿用主题令牌，避免整页发白。 */
-html[data-theme="black-yellow"] .tp {
-  --tp-ink: var(--ink);
-  --tp-ink-2: var(--ink-2);
-  --tp-ink-3: var(--ink-3);
-  --tp-ink-4: var(--ink-4);
-  --tp-line: var(--line);
-  --tp-line-2: var(--line-strong);
-  --tp-chip: var(--surface-2);
-  --tp-surface: var(--surface-1);
-  --tp-accent: var(--accent);
-  --tp-accent-line: var(--accent-line);
-  --tp-accent-wash: var(--accent-wash);
-}
+/* 桌面 fine pointer 保留紧凑按钮；触屏 / 窄屏保证 46px 可点面积。 */
+@media (pointer: coarse), (max-width: 700px) {
+  .tp-btn,
+  .tp-filter {
+    min-height: 46px;
+  }
 
-html[data-theme="black-yellow"] .tp-card__icon {
-  color: var(--ink-2);
-}
-
-html[data-theme="black-yellow"] .tp-btn--solid,
-html[data-theme="black-yellow"] .tp-filter.is-on {
-  color: var(--accent-on);
+  .tp-search input {
+    font-size: 16px;
+  }
 }

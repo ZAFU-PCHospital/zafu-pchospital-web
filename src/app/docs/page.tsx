@@ -19,14 +19,17 @@ export const metadata: Metadata = {
  * 技术文档正文由独立仓库生成到同域 /handbook/，本页只保留入口；
  * 工具数据来自 src/config/tools.ts，交互在 ToolDirectory 组件内。
  *
- * 版式按设计稿逐像素复刻（色值取自设计稿采样，见 tools.css 顶部注释），
- * 因此不使用 Section / SectionHead 等沿用主题令牌的版式组件。
+ * 版式按设计稿复刻（字号 / 间距 / 密度）；颜色统一映射语义令牌（见 tools.css 顶部注释），
+ * 因此不使用 Section / SectionHead 等展示页版式组件。
  */
 export default function DocsPage() {
   return (
     <div className="tp">
       <p className="tp-crumb">
-        <b>{docsPage.index} / {docsPage.label}</b> · {docsPage.crumbLabel}
+        <b>
+          {docsPage.index} / {docsPage.label}
+        </b>{" "}
+        · {docsPage.crumbLabel}
       </p>
 
       <h1 className="tp-title">{docsPage.title}</h1>
