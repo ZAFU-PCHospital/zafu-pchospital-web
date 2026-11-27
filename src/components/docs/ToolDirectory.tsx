@@ -125,12 +125,9 @@ export function ToolDirectory() {
           type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="搜索工具名称，例如「驱动」「解压」……（Esc 清空）"
+          placeholder="搜索工具，例如「驱动」「解压」……"
           aria-label="搜索工具"
           enterKeyHint="search"
-          onKeyDown={(e) => {
-            if (e.key === "Escape") setQuery("");
-          }}
         />
       </div>
 
@@ -161,7 +158,7 @@ export function ToolDirectory() {
       ))}
 
       {visibleCategories.length === 0 ? (
-        <p className="tp-empty">没有匹配的工具，换个关键词或分类试试。</p>
+        <p className="tp-empty">没有匹配的工具，换个关键词或分类试试</p>
       ) : null}
     </div>
   );

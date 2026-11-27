@@ -39,9 +39,9 @@ export default function DocsPage() {
       <ToolDirectory />
 
       <div className="tp-foot">
-        <span>外链均为官方网站，新窗口打开。</span>
+        <span>外链均为官方网站，在新窗口打开</span>
         <span>
-          文档读数来自 doc-manifest.json · 生成于 {formatGeneratedAt(docMeta.generatedAt)}
+          文档统计数据更新于 {formatGeneratedAt(docMeta.generatedAt)}
         </span>
       </div>
     </div>
