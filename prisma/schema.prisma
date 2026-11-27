@@ -32,6 +32,8 @@ model User {
   repairTimeline     RepairTimelineEvent[]
   repairCategories   RepairCategory[]        @relation("RepairCategoryCreator")
   skillsCreated      Skill[]                 @relation("SkillCreator")
+  toolCategoriesCreated ToolCategory[]      @relation("ToolCategoryCreator")
+  toolSitesCreated   ToolSite[]              @relation("ToolSiteCreator")
   publicSettings     PublicContentSetting[]  @relation("PublicContentSettingUpdater")
   repairActivities   RepairActivity[]        @relation("RepairActivityCreator")
   noShowEventsExcused RepairActivityNoShowEvent[] @relation("RepairActivityNoShowExcusedBy")
@@ -916,4 +918,52 @@ model BotOperation {
   @@id([principalId, operationId])
   @@index([createdAt], map: "bot_operations_created_idx")
   @@map("bot_operations")
+}
+
+/// 工具导航分类（公开 `/docs` 页的分组）。
+///
+/// 与故障分类、技能标签同构：**只停用不物理删除**，`deletedAt` 保留给历史审计追溯。
+/// `code` 是稳定机器码（博客 / 外链 / 迁移脚本按它检索），改名不影响它。
+model ToolCategory {
+  id          String     @id @db.Char(36)
+  code        String     @unique(map: "tool_categories_code_uq") @db.VarChar(64)
+  name        String     @db.VarChar(80)
+  /// 分组标题右侧的等宽英文小标（如 SYSTEM / DRIVERS），可空。
+  labelEn     String?    @map("label_en") @db.VarChar(64)
+  description String?    @db.VarChar(500)
+  sortOrder   Int        @default(0) @map("sort_order")
+  isActive    Boolean    @default(true) @map("is_active")
+  createdBy   String?    @map("created_by") @db.Char(36)
+  createdAt   DateTime   @map("created_at") @db.DateTime(3)
+  updatedAt   DateTime   @updatedAt @map("updated_at") @db.DateTime(3)
+  deletedAt   DateTime?  @map("deleted_at") @db.DateTime(3)
+  creator     User?      @relation("ToolCategoryCreator", fields: [createdBy], references: [id], onDelete: Restrict)
+  sites       ToolSite[]
+
+  @@index([isActive, deletedAt, sortOrder], map: "tool_categories_active_deleted_sort_idx")
+  @@map("tool_categories")
+}
+
+/// 工具导航收录的网站。
+///
+/// 一个网站属于一个分类；`url` 存绝对地址（`https://` 开头），渲染时直接 `target="_blank"` 外链。
+/// 停用后公开页不再展示，但行保留 —— 后台可以再启用，历史也能追。
+model ToolSite {
+  id          String       @id @db.Char(36)
+  categoryId  String       @map("category_id") @db.Char(36)
+  name        String       @db.VarChar(80)
+  url         String       @db.VarChar(500)
+  /// 卡片上那行灰色小字：这个网站用来干什么。
+  description String?      @db.VarChar(200)
+  sortOrder   Int          @default(0) @map("sort_order")
+  isActive    Boolean      @default(true) @map("is_active")
+  createdBy   String?      @map("created_by") @db.Char(36)
+  createdAt   DateTime     @map("created_at") @db.DateTime(3)
+  updatedAt   DateTime     @updatedAt @map("updated_at") @db.DateTime(3)
+  deletedAt   DateTime?    @map("deleted_at") @db.DateTime(3)
+  category    ToolCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  creator     User?        @relation("ToolSiteCreator", fields: [createdBy], references: [id], onDelete: Restrict)
+
+  @@index([categoryId, isActive, deletedAt, sortOrder], map: "tool_sites_category_active_deleted_sort_idx")
+  @@map("tool_sites")
 }

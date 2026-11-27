@@ -45,6 +45,8 @@ export const rolePermissions: Readonly<Record<RoleCode, readonly Permission[]>> 
     "data:export",
     // M6 批次 2
     "skill:manage",
+    // 工具导航维护（/docs 页的分组与网站），内容对外公开但只有管理员能改。
+    "tool:manage",
     "settings:manage",
     "activity:admin",
     "activity:staff",
