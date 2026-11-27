@@ -4,7 +4,7 @@
  * 公开站主索引。Header（桌面左侧索引栏 / 移动端索引浮层）
  * 全部从这里读取，新增页面时只改这里。
  *
- * UX R3 / N1：公开顺序写死为 首页 → 维修活动 → 关于 → 加入 → 文档（01–05）。
+ * UX R3 / N1：公开顺序写死为 首页 → 维修活动 → 关于 → 加入 → 工具（01–05）。
  */
 
 import type { IconName } from "@/components/ui/Icon";
@@ -38,7 +38,7 @@ export const mainNav: readonly NavItem[] = [
   },
   { index: "03", label: "关于我们", shortLabel: "关于", labelEn: "About", href: "/about" },
   { index: "04", label: "加入我们", shortLabel: "加入", labelEn: "Join", href: "/join" },
-  { index: "05", label: "技术文档", shortLabel: "文档", labelEn: "Docs", href: "/docs" },
+  { index: "05", label: "实用工具", shortLabel: "工具", labelEn: "Tools", href: "/docs" },
 ] as const;
 
 /**
