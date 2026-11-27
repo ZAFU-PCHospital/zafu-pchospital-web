@@ -1,0 +1,295 @@
+/* ============================================================================
+   后台「工具导航」· 卡片式管理
+   ----------------------------------------------------------------------------
+   前台的卡片视觉全部来自 `src/app/docs/tools.css`（`.tp-*` + `--tp-*` 变量），
+   这个文件只补三件前台不需要的事：
+
+     1. 把 `.tp` 的页面级留白收掉 —— 后台已经有 `admin-workspace` 的边距；
+     2. 卡片上叠一层「改 / 停 / 删」小按钮，悬停时才出现；
+     3. 拖动时的落点提示与分组标题上的管理按钮。
+
+   刻意**不复制**任何色值：两套颜色一旦各写一份，改主题时必然漂移，
+   「前台后台长得一样」也就不成立了。
+   ========================================================================== */
+
+.tpa.tp {
+  max-width: none;
+  margin-inline: 0;
+  padding: 0;
+  font-size: inherit;
+  line-height: inherit;
+}
+
+/* ------------------------------------------------------------------ 顶部 */
+
+.tpa-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+/* ------------------------------------------------------------------ 分组标题 */
+
+/* 前台是「名称靠左、英文标靠右」，这里在两者之间插一排管理按钮。
+   默认只显示一行淡淡的提示，鼠标进到分组才亮起来，避免 6 个分组各挂 5 个按钮。 */
+.tpa-group__tools {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+  opacity: 0;
+  transition: opacity 0.14s ease;
+}
+
+.tpa-group__head:hover .tpa-group__tools,
+.tpa-group__head:focus-within .tpa-group__tools {
+  opacity: 1;
+}
+
+.tpa-group__tools button {
+  padding: 2px 6px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: transparent;
+  font: inherit;
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--tp-ink-3);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.tpa-group__tools button:hover {
+  border-color: var(--tp-line-2);
+  background: var(--tp-surface);
+  color: var(--tp-ink);
+}
+
+.tpa-group__tools button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.tpa-group__tools button.is-danger:hover {
+  border-color: #e3c3bd;
+  background: #fdf4f2;
+  color: #c93b2b;
+}
+
+/* 分组之间的顺序调整按钮：靠在一起，一眼能看出是一组 */
+.tpa-group__tools .tpa-step {
+  padding: 2px 5px;
+  font-size: 11px;
+}
+
+/* 英文标要留在最右边，管理按钮用 margin-left:auto 顶过去 */
+.tpa-group__head .tp-group__en {
+  margin-left: 10px;
+}
+
+/* 停用分组的标记：整组不会出现在公开页，后台要能一眼看出来 */
+.tpa-off-flag {
+  margin-left: 7px;
+  padding: 1px 6px;
+  border: 1px solid var(--tp-line-2);
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--tp-ink-3);
+  vertical-align: 2px;
+}
+
+/* ------------------------------------------------------------------ 卡片 */
+
+.tpa-slot {
+  position: relative;
+  min-width: 0;
+}
+
+.tpa-card {
+  position: relative;
+  cursor: grab;
+  user-select: none;
+}
+
+.tpa-card:active {
+  cursor: grabbing;
+}
+
+/* 停用的卡片仍然留在网格里（后台要看得到它），只是明显变淡 + 描边改虚线 */
+.tpa-card--off {
+  border-style: dashed;
+  opacity: 0.55;
+}
+
+/* 悬停时右边那排小按钮。用渐变垫底把下面的文字遮住，按钮自己不带底色 */
+.tpa-tools {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  display: flex;
+  gap: 3px;
+  padding-left: 14px;
+  background: linear-gradient(90deg, transparent, var(--tp-surface) 34%);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-50%);
+  transition: opacity 0.14s ease;
+}
+
+.tpa-card:hover .tpa-tools,
+.tpa-card:focus-within .tpa-tools {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.tpa-tools button {
+  padding: 3px 6px;
+  border: 1px solid var(--tp-line-2);
+  border-radius: 3px;
+  background: var(--tp-surface);
+  font: inherit;
+  font-size: 10.5px;
+  line-height: 1.2;
+  color: var(--tp-ink-2);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.tpa-tools button:hover {
+  border-color: var(--tp-ink-4);
+  color: var(--tp-ink);
+}
+
+.tpa-tools button.is-danger:hover {
+  border-color: #e3c3bd;
+  background: #fdf4f2;
+  color: #c93b2b;
+}
+
+/* 按钮出现时把箭头让出去，两者重叠会显得很挤 */
+.tpa-card:hover .tp-card__arrow,
+.tpa-card:focus-within .tp-card__arrow {
+  opacity: 0;
+}
+
+.tpa-open {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  color: var(--tp-ink-4);
+  transition: opacity 0.14s ease;
+}
+
+.tpa-open:hover {
+  color: var(--tp-accent);
+}
+
+.tpa-open svg {
+  width: 13px;
+  height: 13px;
+}
+
+/* ------------------------------------------------------------------ 空分组 */
+
+.tpa-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 66px;
+  border: 1px dashed var(--tp-line-2);
+  border-radius: var(--tp-radius);
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  color: var(--tp-ink-3);
+  cursor: pointer;
+  transition:
+    border-color 0.16s ease,
+    color 0.16s ease;
+}
+
+.tpa-empty:hover {
+  border-color: var(--tp-accent);
+  color: var(--tp-accent);
+}
+
+.tpa-empty svg {
+  width: 13px;
+  height: 13px;
+}
+
+/* ------------------------------------------------------------------ 拖动反馈 */
+
+.tpa-slot.is-dragging .tpa-card {
+  opacity: 0.4;
+}
+
+/* 落点用一条 2px 的竖线标出来：位置在卡片左侧 = 插到它前面，右侧 = 插到它后面 */
+.tpa-slot.is-drop-before::before,
+.tpa-slot.is-drop-after::after {
+  content: "";
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  z-index: 2;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--tp-accent);
+}
+
+.tpa-slot.is-drop-before::before {
+  left: -6px;
+}
+
+.tpa-slot.is-drop-after::after {
+  right: -6px;
+}
+
+/* 拖到整组的空白处（列表下方）时给个更宽的目标 */
+.tpa-grid-drop {
+  min-height: 8px;
+  border-radius: var(--tp-radius);
+  transition: background-color 0.16s ease;
+}
+
+.tpa-grid-drop.is-over {
+  min-height: 66px;
+  background: var(--tp-accent-wash);
+}
+
+/* 刚添加的卡片闪一下，省得用户在一屏 28 张卡里找自己刚加的那张 */
+.tpa-new {
+  animation: tpa-flash 1.4s ease;
+}
+
+@keyframes tpa-flash {
+  0% {
+    border-color: var(--tp-accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--tp-accent) 18%, transparent);
+  }
+  100% {
+    border-color: var(--tp-line);
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+/* ------------------------------------------------------------------ 提示 */
+
+.tpa-note {
+  margin: 10px 0 0;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--tp-ink-3);
+}
+
+.tpa-note strong {
+  font-weight: 600;
+  color: var(--tp-ink-2);
+}

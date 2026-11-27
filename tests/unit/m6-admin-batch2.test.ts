@@ -191,7 +191,7 @@ test("报名 CSV 复用同一套转义：BOM、CRLF、公式注入防护", () =>
 
 /* ------------------------------------------------------------------ 导航 */
 
-test("后台导航按 5 组平铺全部 10 个模块，不再有足部设置菜单", () => {
+test("后台导航按 5 组平铺全部 11 个模块，不再有足部设置菜单", () => {
   // 工作台重构：入口并回分组，不再收进侧栏足部「设置」菜单。
   assert.deepEqual(
     adminNavGroups.map((group) => group.title),
@@ -207,6 +207,7 @@ test("后台导航按 5 组平铺全部 10 个模块，不再有足部设置菜�
       "/admin/invite-codes",
       "/admin/categories",
       "/admin/skills",
+      "/admin/tools",
       "/admin/export",
       "/admin/audit",
       "/admin/settings",
