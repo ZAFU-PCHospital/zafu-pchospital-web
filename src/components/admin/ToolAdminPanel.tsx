@@ -17,7 +17,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Icon } from "@/components/ui/Icon";
 import { adminCopy, adminShared } from "@/config/admin";
-import { adminFetch } from "@/features/admin/admin-client";
+import { adminFetch, clearAdminCache } from "@/features/admin/admin-client";
 import { categoryAlias, keywordOf, siteAlias } from "@/features/tools/tool-aliases";
 import { cn } from "@/lib/utils";
 import {
@@ -150,6 +150,18 @@ export function ToolAdminPanel() {
 
   useEffect(() => {
     void load();
+  }, [load]);
+
+  // 别的管理员可能刚改过数据：切回这个标签页时丢掉 GET 缓存再拉一次，避免长时间看着旧清单。
+  // 真正的并发写入仍以服务端事务为准，这里只解决“看不见别人的改动”。
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      clearAdminCache();
+      void load();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
   }, [load]);
 
   // 新增后把新卡片滚进视野。
@@ -523,6 +535,17 @@ export function ToolAdminPanel() {
           <p className="admin-workspace__lead">{copy.lead}</p>
         </div>
         <div className="tpa-actions">
+          <Button
+            variant="ghost"
+            icon="undo"
+            disabled={busy || status === "loading"}
+            onClick={() => {
+              clearAdminCache();
+              void load();
+            }}
+          >
+            {copy.refresh}
+          </Button>
           <Button variant="ghost" icon="plus" onClick={() => setCategoryModal({ mode: "create" })}>
             {copy.categories.add}
           </Button>
@@ -765,7 +788,7 @@ export function ToolAdminPanel() {
                             <span className="tpa-tools">
                               <button
                                 type="button"
-                                aria-disabled={dragDisabled || position === 0}
+                                disabled={dragDisabled || position === 0}
                                 aria-label={fill(copy.controlLabel, {
                                   action: copy.groupTools.up,
                                   name: site.name,
@@ -779,7 +802,7 @@ export function ToolAdminPanel() {
                               </button>
                               <button
                                 type="button"
-                                aria-disabled={dragDisabled || position === all.length - 1}
+                                disabled={dragDisabled || position === all.length - 1}
                                 aria-label={fill(copy.controlLabel, {
                                   action: copy.groupTools.down,
                                   name: site.name,

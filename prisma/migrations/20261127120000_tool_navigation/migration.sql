@@ -1,10 +1,10 @@
--- 工具导航：公开 `/docs` 页的分组与网站由后台维护，不再写死在 src/config/tools.ts。
+-- 工具导航：公开 `/tools` 页的分组与网站由后台维护，不再写死在 src/config/tools.ts。
 --
 -- 两张表都沿用既有约定：
 --   * 软删除（`deleted_at`）—— 停用/删除后历史仍可追溯，不做物理删除；
 --   * `sort_order` 稠密序号 —— 后台「上移 / 下移」与拖动排序都按它重排；
 --   * `created_by` 指向 users，审计日志记录操作人。
--- 初始数据（6 个分类 / 28 个网站）由 `pnpm db:seed` 补齐，重复执行不覆盖管理员修改。
+-- 初始数据（6 个分类 / 31 个网站）由 `pnpm db:seed` 补齐，重复执行不覆盖管理员修改。
 
 CREATE TABLE `tool_categories` (
   `id` CHAR(36) NOT NULL,

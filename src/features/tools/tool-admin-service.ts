@@ -65,22 +65,54 @@ export const toolCategoryAdminService: ToolCategoryAdminServiceContract = {
     }
     const fields = categoryText(input);
     return inSerializableTransaction(async (tx) => {
-      const duplicate = await tx.toolCategory.findFirst({
-        where: { OR: [{ deletedAt: null, name }, { code }] },
-        select: { code: true },
-      });
-      if (duplicate) {
-        throw new AppError(
-          "TOOL_CATEGORY_CONFLICT",
-          duplicate.code === code ? "该分类标识已被占用" : "该分类名称已存在",
-        );
+      // `code` 在数据库里全局唯一，软删除的行仍然占着它。同名重建时复活那一行，
+      // 否则删掉一个分类后就再也没法用同一个名字建回来，只能去改库。
+      const sameCode = await tx.toolCategory.findUnique({ where: { code } });
+      if (sameCode && !sameCode.deletedAt) {
+        throw new AppError("TOOL_CATEGORY_CONFLICT", "该分类标识已被占用");
       }
+      const sameName = await tx.toolCategory.findFirst({
+        where: {
+          deletedAt: null,
+          name,
+          ...(sameCode ? { id: { not: sameCode.id } } : {}),
+        },
+        select: { id: true },
+      });
+      if (sameName) {
+        throw new AppError("TOOL_CATEGORY_CONFLICT", "该分类名称已存在");
+      }
+      await lockCategoryOrder(tx);
       const rows = await orderedCategories(tx);
       await writeCategoryOrder(
         tx,
         rows.map((row) => row.id),
         rows,
       );
+      if (sameCode) {
+        const revived = await tx.toolCategory.update({
+          where: { id: sameCode.id },
+          data: {
+            deletedAt: null,
+            isActive: true,
+            name,
+            ...fields,
+            sortOrder: rows.length,
+          },
+        });
+        await appendAuditLog(tx, {
+          actor,
+          actorType: "USER",
+          actorUserId: actor.userId,
+          action: "tool_category.restored",
+          targetType: "ToolCategory",
+          targetId: revived.id,
+          result: "SUCCESS",
+          before: { code: sameCode.code, name: sameCode.name },
+          after: { code, name },
+        });
+        return toCategoryView(revived);
+      }
       const created = await tx.toolCategory
         .create({
           data: {
@@ -636,6 +668,18 @@ async function lockCategory(tx: Tx, categoryId: string) {
   const rows = await tx.$queryRaw<{ id: string }[]>`SELECT id FROM tool_categories
     WHERE id = ${categoryId} AND deleted_at IS NULL FOR UPDATE`;
   if (rows.length === 0) throw new AppError("VALIDATION_FAILED", "请选择有效的分类");
+}
+
+/**
+ * 并发新建分类时的序号区间锁。
+ *
+ * 两个事务会同时读到同一个 `rows.length` 并写成重复序号（站点侧靠分类行锁避免，
+ * 分类没有更外层的“组”可锁）。锁住全部非删除行后，第二个事务会等第一个提交，
+ * 再读到新长度。
+ */
+async function lockCategoryOrder(tx: Tx) {
+  await tx.$queryRaw`SELECT id FROM tool_categories
+    WHERE deleted_at IS NULL ORDER BY sort_order FOR UPDATE`;
 }
 
 async function lockSiteCategories(tx: Tx, source: string, target: string) {

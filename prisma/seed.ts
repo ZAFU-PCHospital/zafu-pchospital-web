@@ -346,8 +346,10 @@ async function main(): Promise<void> {
           const categories = await tx.$queryRaw<{ id: string }[]>`SELECT id FROM tool_categories
           WHERE id = ${categoryId} AND deleted_at IS NULL FOR UPDATE`;
           if (categories.length === 0) return;
+          // `id` 覆盖内置行（即使它已被软删，也不复活）；同分组同 URL 的任何行都算已收录，
+          // 避免管理员删掉自建网址后重新 seed 又把它加回来。
           const existing = await tx.toolSite.findFirst({
-            where: { OR: [{ id }, { categoryId, url, deletedAt: null }] },
+            where: { OR: [{ id }, { categoryId, url }] },
             select: { id: true },
           });
           if (existing) return;

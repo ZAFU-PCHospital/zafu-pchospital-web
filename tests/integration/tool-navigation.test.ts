@@ -137,9 +137,20 @@ test("工具导航的权限、并发去重、排序和软删除", { skip: !run }
   assert.ok((await toolService.listPublicGroups()).every((group) => group.id !== target.id));
   await sites.remove(third.id, actor);
   await categories.remove(target.id, actor);
-  await assert.rejects(categories.create({ name: target.name }, actor), {
-    code: "TOOL_CATEGORY_CONFLICT",
-  });
+  // 软删除后同名重建应复活原分类（code 全局唯一，删掉不代表要让标识永久占用）。
+  const revived = await categories.create({ name: target.name }, actor);
+  assert.equal(revived.id, target.id);
+  assert.equal(revived.code, target.code);
+  assert.equal(
+    (await db.toolCategory.findUniqueOrThrow({ where: { id: target.id } })).deletedAt,
+    null,
+  );
+  assert.equal(
+    await db.auditLog.count({
+      where: { actorUserId: userId, action: "tool_category.restored", targetId: target.id },
+    }),
+    1,
+  );
   assert.equal(
     await db.auditLog.count({
       where: { actorUserId: userId, action: "tool_site.moved", targetId: third.id },

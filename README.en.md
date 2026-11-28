@@ -22,7 +22,7 @@
 <p align="center">
   <a href="https://pczafu.cn/">Website</a> ·
   <a href="https://pczafu.cn/repair-activities">Repair events</a> ·
-  <a href="https://pczafu.cn/docs">Technical handbook</a> ·
+  <a href="https://pczafu.cn/tools">Technical handbook</a> ·
   <a href="#quick-start">Run locally</a> ·
   <a href="CONTRIBUTING.en.md">Contribute</a>
 </p>
@@ -118,15 +118,15 @@ See the [maintenance document index](docs/README.md) for the full list of guides
 
 The engineering documents below are currently in Chinese; the English contribution guide explains the main entry points.
 
-| Topic                                                          | Start here                                                                                                                |
-| -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| Environment, commands, validation, and CI                      | [Engineering handbook: AGENTS.md](AGENTS.md)                                                                              |
-| Layout, themes, and reusable components                        | [Design system](docs/design-system.md)                                                                                    |
-| Directory responsibilities and Service / Repository boundaries | [Architecture](docs/architecture.md)                                                                                      |
-| Local databases, migrations, and isolated tests                | [Database guide](docs/database.md) · [Windows setup](docs/database-windows.md)                                            |
-| API, data, and cross-module agreements                         | [Public contracts](docs/contracts/)                                                                                       |
-| Branches, commits, and PRs                                     | [Git workflow](docs/git-workflow.md)                                                                                      |
-| Computer repair reference material                             | [Online handbook](https://pczafu.cn/docs) · [Handbook repository](https://github.com/ZAFU-PCHospital/ZAFU-PCHospital-Doc) |
+| Topic                                                          | Start here                                                                                                                 |
+| -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Environment, commands, validation, and CI                      | [Engineering handbook: AGENTS.md](AGENTS.md)                                                                               |
+| Layout, themes, and reusable components                        | [Design system](docs/design-system.md)                                                                                     |
+| Directory responsibilities and Service / Repository boundaries | [Architecture](docs/architecture.md)                                                                                       |
+| Local databases, migrations, and isolated tests                | [Database guide](docs/database.md) · [Windows setup](docs/database-windows.md)                                             |
+| API, data, and cross-module agreements                         | [Public contracts](docs/contracts/)                                                                                        |
+| Branches, commits, and PRs                                     | [Git workflow](docs/git-workflow.md)                                                                                       |
+| Computer repair reference material                             | [Online handbook](https://pczafu.cn/tools) · [Handbook repository](https://github.com/ZAFU-PCHospital/ZAFU-PCHospital-Doc) |
 
 ## Deployment and maintenance
 

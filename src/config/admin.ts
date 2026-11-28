@@ -838,6 +838,7 @@ export const adminCopy = {
     all: "全部",
     dirTitle: "工具目录",
     noMatch: "没有匹配的工具，换个关键词试试。",
+    refresh: "刷新",
     countTotal: "{count} 个工具",
     countFiltered: "筛出 {shown} 个 / 共 {total} 个",
     dragOn: "用上下箭头排序，在编辑中更换分类",
