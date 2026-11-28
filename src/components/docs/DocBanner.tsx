@@ -9,7 +9,7 @@ import { pad2 } from "@/lib/utils";
  * 左栏是标题、说明与两个入口，右栏是文档清单读数（目录条目 / 已就绪 / 待撰写）。
  * 读数来自 src/data/doc-manifest.json，是真实统计而非装饰。
  *
- * 样式见 ../app/docs/tools.css 的 .tp-banner*：主题表面、左侧 3px 强调条、
+ * 样式见 ../app/tools/tools.css 的 .tp-banner*：主题表面、左侧 3px 强调条、
  * 横向由强调底色渐变到表面，按设计稿复刻。
  */
 export function DocBanner() {

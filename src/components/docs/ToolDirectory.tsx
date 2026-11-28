@@ -11,11 +11,11 @@ import type { PublicToolGroup } from "@/types/contracts";
 /**
  * ToolDirectory —— 工具网址目录
  *
- * 对应 /docs 工具索引页下半部分：标题 + 搜索框 + 分类筛选 + 分组卡片网格。
+ * 对应 /tools 工具索引页下半部分：标题 + 搜索框 + 分类筛选 + 分组卡片网格。
  * 搜索与筛选是客户端状态，**数据由服务端传入**（数据库优先，见 `features/tools/tool-service`），
  * 后台 `/admin/tools` 的改动因此不需要动这个组件。
  *
- * 样式见 ../app/docs/tools.css 的 .tp-* 系列，按设计稿复刻。
+ * 样式见 ../app/tools/tools.css 的 .tp-* 系列，按设计稿复刻。
  */
 
 type ToolEntry = PublicToolGroup["sites"][number];

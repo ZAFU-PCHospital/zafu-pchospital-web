@@ -1,9 +1,9 @@
 import { siteConfig } from "@/config/site";
 
 /**
- * 工具索引页（/docs 路由）
+ * 工具索引页（/tools 路由）
  *
- * /docs 现在承载「实用工具 · 网址导航」：上半部分是技术文档知识库入口，
+ * /tools 现在承载「实用工具 · 网址导航」：上半部分是技术文档知识库入口，
  * 下半部分是常用网址目录。技术文档正文仍由同域 mdBook 承载。
  */
 export const docsPage = {

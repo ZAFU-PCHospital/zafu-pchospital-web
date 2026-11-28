@@ -1,4 +1,4 @@
-import { bodyOptionalInt, bodyOptionalString } from "@/features/admin/admin-http";
+import { bodyOptionalString } from "@/features/admin/admin-http";
 import { toolSiteAdminService } from "@/features/tools/tool-admin-service";
 import { apiFailure, apiSuccess } from "@/lib/api/response";
 import { getRequestId } from "@/lib/api/request-id";
@@ -20,7 +20,6 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         name: bodyOptionalString(body, "name") ?? undefined,
         url: bodyOptionalString(body, "url") ?? undefined,
         description: bodyOptionalString(body, "description"),
-        sortOrder: bodyOptionalInt(body, "sortOrder", { min: 0, max: 1_000_000 }),
       },
       actor,
     );

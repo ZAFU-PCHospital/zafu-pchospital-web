@@ -17,8 +17,8 @@ import type { ReorderDirection } from "@/types/contracts";
  *    用户点了一个不会改变任何东西的按钮，不该收到一条错误。
  */
 
-/** 支持排序的表判别键。工具网站（`tool_sites`）按分类分组排序，序号在服务层按 `categoryId` 现算。 */
-export type SortableTable = "skills" | "repair_categories" | "tool_categories";
+/** 两张支持排序的表的判别键。 */
+export type SortableTable = "skills" | "repair_categories";
 
 /** 取下一个可用序号（追加到末尾）。 */
 export async function nextSortOrder(
@@ -29,19 +29,12 @@ export async function nextSortOrder(
     table === "skills"
       ? (await tx.skill.aggregate({ where: { deletedAt: null }, _max: { sortOrder: true } }))._max
           .sortOrder
-      : table === "tool_categories"
-        ? (
-            await tx.toolCategory.aggregate({
-              where: { deletedAt: null },
-              _max: { sortOrder: true },
-            })
-          )._max.sortOrder
-        : (
-            await tx.repairCategory.aggregate({
-              where: { deletedAt: null },
-              _max: { sortOrder: true },
-            })
-          )._max.sortOrder;
+      : (
+          await tx.repairCategory.aggregate({
+            where: { deletedAt: null },
+            _max: { sortOrder: true },
+          })
+        )._max.sortOrder;
   return (max ?? -1) + 1;
 }
 

@@ -54,7 +54,7 @@
 │   │   ├── page.tsx           # /
 │   │   ├── about/page.tsx     # /about
 │   │   ├── join/page.tsx      # /join
-│   │   ├── docs/page.tsx      # /docs
+│   │   ├── tools/page.tsx      # /tools
 │   │   ├── member/            # 登录后成员页（工作台 / 案例库 / 维修 / 活动 / 通知 / 个人主页）
 │   │   ├── admin/             # 管理后台页面（含 loading.tsx 骨架）
 │   │   ├── not-found.tsx      # 404
@@ -71,7 +71,7 @@
 │   │   │                      #   PageHead / SiteEffects / ThemeSwitcher）
 │   │   ├── ui/                # 通用 UI 原语
 │   │   ├── home/              # 仅首页使用的区块
-│   │   ├── docs/              # 文档相关区块（首页与 /docs 共用）
+│   │   ├── docs/              # 文档相关区块（首页与 /tools 共用）
 │   │   ├── join/              # /join 的登记表区块（客户端组件）
 │   │   ├── member/            # 成员工作台区块
 │   │   ├── repairs/           # 维修列表 / 详情 / 表单
@@ -287,7 +287,7 @@ Schema、前向 Migration、生成客户端、Service、Route、调用方、测�
 #### 站内技术文档（mdBook）
 
 技术文档的正文维护在独立仓库 `ZAFU-PCHospital-Doc`，在**官网构建期**生成到同域
-`public/handbook/`，`/docs` 页只指向站内路径，不再外链 GitHub。
+`public/handbook/`，`/tools` 页只指向站内路径，不再外链 GitHub。
 
 ```text
 ZAFU-PCHospital-Doc ──► .docs-source/ ──► mdbook build ──► public/handbook/

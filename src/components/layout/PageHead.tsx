@@ -6,7 +6,7 @@ import { SectionTitle } from "@/components/ui/SectionTitle";
 /**
  * PageHead —— 内页页面头
  *
- * 内页（/about、/join、/docs）共用同一套头部：章节头 + H1 + 引导语。
+ * 内页（/about、/join、/tools）共用同一套头部：章节头 + H1 + 引导语。
  * 结构来自首页的 `.sec-head` + `.sec-title` + `.lead`，不引入新的视觉语言。
  */
 

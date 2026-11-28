@@ -91,70 +91,284 @@ async function main(): Promise<void> {
       ["30000000-0000-4000-8000-000000000005", "GAMING", "游戏娱乐", "Gaming"],
       ["30000000-0000-4000-8000-000000000006", "NETWORK", "网络与安全", "Network"],
     ] as const;
-    for (const [index, [id, code, name, labelEn]] of toolCategories.entries()) {
-      await prisma.toolCategory.upsert({
-        where: { code },
-        update: {},
-        create: { id, code, name, labelEn, sortOrder: index + 1, isActive: true, createdAt: now },
+    for (const [id, code, name, labelEn] of toolCategories) {
+      await prisma.$transaction(async (tx) => {
+        const max = await tx.toolCategory.aggregate({
+          where: { deletedAt: null },
+          _max: { sortOrder: true },
+        });
+        await tx.toolCategory.upsert({
+          where: { code },
+          update: {},
+          create: {
+            id,
+            code,
+            name,
+            labelEn,
+            sortOrder: (max._max.sortOrder ?? -1) + 1,
+            createdAt: now,
+          },
+        });
       });
     }
-    const toolSites: readonly (readonly [string, string, number, string, string, string])[] = [
-      ["40000000-0000-4000-8000-000000000001", "SYSTEM", 1, "图吧工具箱", "https://www.tbtool.cn/", "硬件检测与装机工具合集"],
-      ["40000000-0000-4000-8000-000000000002", "SYSTEM", 2, "微软官方 ISO", "https://www.microsoft.com/zh-cn/software-download/windows11", "Windows 官方镜像下载"],
-      ["40000000-0000-4000-8000-000000000003", "SYSTEM", 3, "Rufus", "https://rufus.ie/zh/", "U 盘启动盘制作工具"],
-      ["40000000-0000-4000-8000-000000000004", "SYSTEM", 4, "微 PE 工具箱", "https://www.wepe.com.cn/", "纯净的 WinPE 维护系统"],
-      ["40000000-0000-4000-8000-000000000005", "SYSTEM", 5, "Ventoy", "https://www.ventoy.net/cn/", "多系统启动 U 盘制作"],
-      ["40000000-0000-4000-8000-000000000006", "SYSTEM", 6, "MSDN 我告诉你", "https://msdn.itellyou.cn/", "原版系统镜像下载站"],
-      ["40000000-0000-4000-8000-000000000007", "SYSTEM", 7, "IT 天空", "https://www.itsk.com/", "万能驱动与装机工具"],
-      ["40000000-0000-4000-8000-000000000008", "SYSTEM", 8, "Dism++", "https://github.com/Chuyu-Team/Dism-Multi-language", "系统精简与维护工具"],
-      ["40000000-0000-4000-8000-000000000009", "DRIVER", 1, "NVIDIA 显卡驱动", "https://www.nvidia.cn/geforce/drivers/", "英伟达 GeForce 驱动下载"],
-      ["40000000-0000-4000-8000-000000000010", "DRIVER", 2, "AMD 显卡驱动", "https://www.amd.com/zh-cn/support", "AMD 显卡驱动与软件"],
-      ["40000000-0000-4000-8000-000000000011", "DRIVER", 3, "Intel 驱动中心", "https://www.intel.cn/content/www/cn/zh/support/intel-driver-support-assistant.html", "英特尔核显与驱动"],
-      ["40000000-0000-4000-8000-000000000012", "DRIVER", 4, "联想官网驱动", "https://support.lenovo.com.cn/", "联想笔记本驱动下载"],
-      ["40000000-0000-4000-8000-000000000029", "DRIVER", 5, "华硕官网驱动", "https://www.asus.com.cn/support/", "华硕笔记本驱动下载"],
-      ["40000000-0000-4000-8000-000000000030", "DRIVER", 6, "戴尔官网驱动", "https://www.dell.com/support/home/zh-cn", "戴尔笔记本驱动下载"],
-      ["40000000-0000-4000-8000-000000000031", "DRIVER", 7, "惠普官网驱动", "https://support.hp.com/cn-zh/drivers", "惠普笔记本驱动下载"],
-      ["40000000-0000-4000-8000-000000000013", "ARCHIVE", 1, "7-Zip 官方", "https://www.7-zip.org/", "免费开源的压缩软件"],
-      ["40000000-0000-4000-8000-000000000014", "ARCHIVE", 2, "Bandizip", "https://www.bandisoft.com/bandizip/", "轻量美观的解压软件"],
-      ["40000000-0000-4000-8000-000000000015", "ARCHIVE", 3, "WinRAR 中文版", "https://www.winrar.com.cn/", "经典压缩软件官方站"],
-      ["40000000-0000-4000-8000-000000000016", "ARCHIVE", 4, "PeaZip", "https://peazip.github.io/", "开源多格式压缩工具"],
-      ["40000000-0000-4000-8000-000000000017", "CAMPUS", 1, "浙江农林大学官网", "https://www.zafu.edu.cn/", "学校主页与通知公告"],
-      ["40000000-0000-4000-8000-000000000018", "CAMPUS", 2, "教务系统", "https://jw.zafu.edu.cn/", "选课、成绩与教学安排"],
-      ["40000000-0000-4000-8000-000000000019", "CAMPUS", 3, "校园网自助服务", "https://zfw.zafu.edu.cn/home", "自助下线设备（需校园网）"],
-      ["40000000-0000-4000-8000-000000000020", "CAMPUS", 4, "图书馆", "https://lib.zafu.edu.cn/", "馆藏查询与数字资源"],
-      ["40000000-0000-4000-8000-000000000021", "GAMING", 1, "Steam 官网", "https://store.steampowered.com/", "全球最大游戏平台"],
-      ["40000000-0000-4000-8000-000000000022", "GAMING", 2, "Epic Games", "https://store.epicgames.com/zh-CN/", "每周免费游戏"],
-      ["40000000-0000-4000-8000-000000000023", "GAMING", 3, "WeGame", "https://www.wegame.com.cn/", "腾讯游戏平台"],
-      ["40000000-0000-4000-8000-000000000024", "GAMING", 4, "网易暴雪", "https://www.blizzardgames.cn/", "暴雪游戏国服"],
-      ["40000000-0000-4000-8000-000000000025", "NETWORK", 1, "Speedtest 测速", "https://www.speedtest.net/zh-Hans", "网络速度测试"],
-      ["40000000-0000-4000-8000-000000000026", "NETWORK", 2, "火绒安全", "https://www.huorong.cn/", "轻量免费杀毒软件"],
-      ["40000000-0000-4000-8000-000000000027", "NETWORK", 3, "腾讯电脑管家", "https://guanjia.qq.com/", "安全与清理工具"],
-      ["40000000-0000-4000-8000-000000000028", "NETWORK", 4, "VirtualBox", "https://www.virtualbox.org/", "免费虚拟机软件"],
+    const toolSites: readonly (readonly [string, string, string, string, string])[] = [
+      [
+        "40000000-0000-4000-8000-000000000001",
+        "SYSTEM",
+        "图吧工具箱",
+        "https://www.tbtool.cn/",
+        "硬件检测与装机工具合集",
+      ],
+      [
+        "40000000-0000-4000-8000-000000000002",
+        "SYSTEM",
+        "微软官方 ISO",
+        "https://www.microsoft.com/zh-cn/software-download/windows11",
+        "Windows 官方镜像下载",
+      ],
+      [
+        "40000000-0000-4000-8000-000000000003",
+        "SYSTEM",
+        "Rufus",
+        "https://rufus.ie/zh/",
+        "U 盘启动盘制作工具",
+      ],
+      [
+        "40000000-0000-4000-8000-000000000004",
+        "SYSTEM",
+        "微 PE 工具箱",
+        "https://www.wepe.com.cn/",
+        "纯净的 WinPE 维护系统",
+      ],
+      [
+        "40000000-0000-4000-8000-000000000005",
+        "SYSTEM",
+        "Ventoy",
+        "https://www.ventoy.net/cn/",
+        "多系统启动 U 盘制作",
+      ],
+      [
+        "40000000-0000-4000-8000-000000000006",
+        "SYSTEM",
+        "MSDN 我告诉你",
+        "https://msdn.itellyou.cn/",
+        "原版系统镜像下载站",
+      ],
+      [
+        "40000000-0000-4000-8000-000000000007",
+        "SYSTEM",
+        "IT 天空",
+        "https://www.itsk.com/",
+        "万能驱动与装机工具",
+      ],
+      [
+        "40000000-0000-4000-8000-000000000008",
+        "SYSTEM",
+        "Dism++",
+        "https://github.com/Chuyu-Team/Dism-Multi-language",
+        "系统精简与维护工具",
+      ],
+      [
+        "40000000-0000-4000-8000-000000000009",
+        "DRIVER",
+        "NVIDIA 显卡驱动",
+        "https://www.nvidia.cn/geforce/drivers/",
+        "英伟达 GeForce 驱动下载",
+      ],
+      [
+        "40000000-0000-4000-8000-000000000010",
+        "DRIVER",
+        "AMD 显卡驱动",
+        "https://www.amd.com/zh-cn/support",
+        "AMD 显卡驱动与软件",
+      ],
+      [
+        "40000000-0000-4000-8000-000000000011",
+        "DRIVER",
+        "Intel 驱动中心",
+        "https://www.intel.cn/content/www/cn/zh/support/intel-driver-support-assistant.html",
+        "英特尔核显与驱动",
+      ],
+      [
+        "40000000-0000-4000-8000-000000000012",
+        "DRIVER",
+        "联想官网驱动",
+        "https://support.lenovo.com.cn/",
+        "联想笔记本驱动下载",
+      ],
+      [
+        "40000000-0000-4000-8000-000000000029",
+        "DRIVER",
+        "华硕官网驱动",
+        "https://www.asus.com.cn/support/",
+        "华硕笔记本驱动下载",
+      ],
+      [
+        "40000000-0000-4000-8000-000000000030",
+        "DRIVER",
+        "戴尔官网驱动",
+        "https://www.dell.com/support/home/zh-cn",
+        "戴尔笔记本驱动下载",
+      ],
+      [
+        "40000000-0000-4000-8000-000000000031",
+        "DRIVER",
+        "惠普官网驱动",
+        "https://support.hp.com/cn-zh/drivers",
+        "惠普笔记本驱动下载",
+      ],
+      [
+        "40000000-0000-4000-8000-000000000013",
+        "ARCHIVE",
+        "7-Zip 官方",
+        "https://www.7-zip.org/",
+        "免费开源的压缩软件",
+      ],
+      [
+        "40000000-0000-4000-8000-000000000014",
+        "ARCHIVE",
+        "Bandizip",
+        "https://www.bandisoft.com/bandizip/",
+        "轻量美观的解压软件",
+      ],
+      [
+        "40000000-0000-4000-8000-000000000015",
+        "ARCHIVE",
+        "WinRAR 中文版",
+        "https://www.winrar.com.cn/",
+        "经典压缩软件官方站",
+      ],
+      [
+        "40000000-0000-4000-8000-000000000016",
+        "ARCHIVE",
+        "PeaZip",
+        "https://peazip.github.io/",
+        "开源多格式压缩工具",
+      ],
+      [
+        "40000000-0000-4000-8000-000000000017",
+        "CAMPUS",
+        "浙江农林大学官网",
+        "https://www.zafu.edu.cn/",
+        "学校主页与通知公告",
+      ],
+      [
+        "40000000-0000-4000-8000-000000000018",
+        "CAMPUS",
+        "教务系统",
+        "https://jw.zafu.edu.cn/",
+        "选课、成绩与教学安排",
+      ],
+      [
+        "40000000-0000-4000-8000-000000000019",
+        "CAMPUS",
+        "校园网自助服务",
+        "https://zfw.zafu.edu.cn/home",
+        "自助下线设备（需校园网）",
+      ],
+      [
+        "40000000-0000-4000-8000-000000000020",
+        "CAMPUS",
+        "图书馆",
+        "https://lib.zafu.edu.cn/",
+        "馆藏查询与数字资源",
+      ],
+      [
+        "40000000-0000-4000-8000-000000000021",
+        "GAMING",
+        "Steam 官网",
+        "https://store.steampowered.com/",
+        "全球最大游戏平台",
+      ],
+      [
+        "40000000-0000-4000-8000-000000000022",
+        "GAMING",
+        "Epic Games",
+        "https://store.epicgames.com/zh-CN/",
+        "每周免费游戏",
+      ],
+      [
+        "40000000-0000-4000-8000-000000000023",
+        "GAMING",
+        "WeGame",
+        "https://www.wegame.com.cn/",
+        "腾讯游戏平台",
+      ],
+      [
+        "40000000-0000-4000-8000-000000000024",
+        "GAMING",
+        "网易暴雪",
+        "https://www.blizzardgames.cn/",
+        "暴雪游戏国服",
+      ],
+      [
+        "40000000-0000-4000-8000-000000000025",
+        "NETWORK",
+        "Speedtest 测速",
+        "https://www.speedtest.net/zh-Hans",
+        "网络速度测试",
+      ],
+      [
+        "40000000-0000-4000-8000-000000000026",
+        "NETWORK",
+        "火绒安全",
+        "https://www.huorong.cn/",
+        "轻量免费杀毒软件",
+      ],
+      [
+        "40000000-0000-4000-8000-000000000027",
+        "NETWORK",
+        "腾讯电脑管家",
+        "https://guanjia.qq.com/",
+        "安全与清理工具",
+      ],
+      [
+        "40000000-0000-4000-8000-000000000028",
+        "NETWORK",
+        "VirtualBox",
+        "https://www.virtualbox.org/",
+        "免费虚拟机软件",
+      ],
     ];
     const categoryIdByCode = new Map(
-      (await prisma.toolCategory.findMany({ select: { id: true, code: true } })).map((row) => [
-        row.code,
-        row.id,
-      ]),
+      (
+        await prisma.toolCategory.findMany({
+          where: { deletedAt: null },
+          select: { id: true, code: true },
+        })
+      ).map((row) => [row.code, row.id]),
     );
-    for (const [id, categoryCode, sortOrder, name, url, description] of toolSites) {
+    for (const [id, categoryCode, name, url, description] of toolSites) {
       const categoryId = categoryIdByCode.get(categoryCode);
-      // 分类被管理员删掉时跳过而不是造一条「孤儿网站」——外键也会拒绝这种写入。
       if (!categoryId) continue;
-      await prisma.toolSite.upsert({
-        where: { id },
-        update: {},
-        create: {
-          id,
-          categoryId,
-          name,
-          url,
-          description,
-          sortOrder,
-          isActive: true,
-          createdAt: now,
+      await prisma.$transaction(
+        async (tx) => {
+          const categories = await tx.$queryRaw<{ id: string }[]>`SELECT id FROM tool_categories
+          WHERE id = ${categoryId} AND deleted_at IS NULL FOR UPDATE`;
+          if (categories.length === 0) return;
+          const existing = await tx.toolSite.findFirst({
+            where: { OR: [{ id }, { categoryId, url, deletedAt: null }] },
+            select: { id: true },
+          });
+          if (existing) return;
+          const max = await tx.toolSite.aggregate({
+            where: { categoryId, deletedAt: null },
+            _max: { sortOrder: true },
+          });
+          await tx.toolSite.create({
+            data: {
+              id,
+              categoryId,
+              name,
+              url,
+              description,
+              sortOrder: (max._max.sortOrder ?? -1) + 1,
+              createdAt: now,
+            },
+          });
         },
-      });
+        { isolationLevel: "ReadCommitted" },
+      );
     }
   } finally {
     await prisma.$disconnect();

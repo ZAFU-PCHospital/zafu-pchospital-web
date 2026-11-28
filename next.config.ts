@@ -34,6 +34,11 @@ const nextConfig: NextConfig = {
   async redirects() {
     return [
       {
+        source: "/docs",
+        destination: "/tools",
+        permanent: true,
+      },
+      {
         source: "/handbook",
         destination: "/handbook/index.html",
         permanent: false,

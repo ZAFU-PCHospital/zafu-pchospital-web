@@ -1442,68 +1442,37 @@ IP、User-Agent、Cookie 与错误内容都不写入日志。实现见
 
 ## 工具导航后台（`/admin/tools`）
 
-`/docs` 上的「实用工具」索引原先写死在 `src/config/tools.ts`，加一个网站要改代码、提 PR、等一次部署。
-这一批把它搬进数据库，管理员在 `/admin/tools` 增删改之后**刷新公开页即可生效**，
-不再经过任何构建步骤。
-
-公开页不新增匿名 HTTP 接口：`src/app/docs/page.tsx` 直接调用 `toolService.listPublicGroups()`，
-并已声明 `export const dynamic = "force-dynamic"` —— 静态预渲染会把结果冻在构建时刻，
-而「改完就生效」正是本需求要解决的事。
+公开目录位于 `/tools`，旧链接 `/docs` 永久跳转。页面每次请求读取数据库，后台改动在下次访问时生效。
 
 ### 端点
 
-| 端点                                                                 | 权限          | 说明                                                                                          |
-| -------------------------------------------------------------------- | ------------- | --------------------------------------------------------------------------------------------- |
-| `GET /api/v1/admin/tools/categories`                                 | `tool:manage` | 分类列表：**含已停用**，每条带 `siteCount`（该分类下启用中的网站数）                          |
-| `POST /api/v1/admin/tools/categories`                                | `tool:manage` | `{name, code?, labelEn?, description?, sortOrder?}`；名称或 code 撞车 409 `TOOL_CATEGORY_CONFLICT` |
-| `PATCH /api/v1/admin/tools/categories/:id`                           | `tool:manage` | 改 `name` / `labelEn` / `description` / `sortOrder`；`code` 不可改                            |
-| `DELETE /api/v1/admin/tools/categories/:id`                          | `tool:manage` | 软删除；**分类下还有网站时 409**，提示先移走或删除                                           |
-| `POST /api/v1/admin/tools/categories/:id/activate`（或 `deactivate`） | `tool:manage` | 启用 / 停用。停用后整组从公开页消失，数据不删                                                |
-| `POST /api/v1/admin/tools/categories/:id/reorder`                    | `tool:manage` | `{direction:"UP"\|"DOWN"}`；已在首末位时幂等成功，不写审计                                    |
-| `POST /api/v1/admin/tools/categories/:id/move`                       | `tool:manage` | `{beforeId: string \| null}`（`null` = 拖到末尾）；落点没变时幂等成功                         |
-| `GET /api/v1/admin/tools/sites`                                      | `tool:manage` | 全部网站：**含已停用**，按组内序号排序；界面自己按 `categoryId` 分组                          |
-| `POST /api/v1/admin/tools/sites`                                     | `tool:manage` | `{categoryId, name, url, description?, sortOrder?}`；网址非法 400，组内重复 409               |
-| `PATCH /api/v1/admin/tools/sites/:id`                                | `tool:manage` | 改字段；改 `categoryId` 等于「换分组」                                                        |
-| `DELETE /api/v1/admin/tools/sites/:id`                               | `tool:manage` | 软删除，公开页立即不再显示                                                                    |
-| `POST /api/v1/admin/tools/sites/:id/activate`（或 `deactivate`）      | `tool:manage` | 启用 / 停用单条                                                                               |
-| `POST /api/v1/admin/tools/sites/:id/reorder`                         | `tool:manage` | 同上，**组内**上移 / 下移一格                                                                 |
-| `POST /api/v1/admin/tools/sites/:id/move`                            | `tool:manage` | 同上，**组内**拖动排序（`{beforeId}`）                                                        |
+| 端点                                                                  | 权限          | 说明                                                                                   |
+| --------------------------------------------------------------------- | ------------- | -------------------------------------------------------------------------------------- |
+| `GET /api/v1/admin/tools/categories`                                  | `tool:manage` | 分类列表：**含已停用**，每条带 `siteCount`（该分类下启用中的网站数）                   |
+| `POST /api/v1/admin/tools/categories`                                 | `tool:manage` | `{name, code?, labelEn?, description?}`；名称或 code 撞车 409 `TOOL_CATEGORY_CONFLICT` |
+| `PATCH /api/v1/admin/tools/categories/:id`                            | `tool:manage` | 改 `name` / `labelEn` / `description`；`code` 不可改                                   |
+| `DELETE /api/v1/admin/tools/categories/:id`                           | `tool:manage` | 软删除；**分类下还有网站时 409**，提示先移走或删除                                     |
+| `POST /api/v1/admin/tools/categories/:id/activate`（或 `deactivate`） | `tool:manage` | 启用 / 停用。停用后整组从公开页消失，数据不删                                          |
+| `POST /api/v1/admin/tools/categories/:id/reorder`                     | `tool:manage` | `{direction:"UP"\|"DOWN"}`；已在首末位时幂等成功，不写审计                             |
+| `POST /api/v1/admin/tools/categories/:id/move`                        | `tool:manage` | `{beforeId: string \| null}`（`null` = 拖到末尾）；落点没变时幂等成功                  |
+| `GET /api/v1/admin/tools/sites`                                       | `tool:manage` | 全部网站：**含已停用**，按组内序号排序；界面自己按 `categoryId` 分组                   |
+| `POST /api/v1/admin/tools/sites`                                      | `tool:manage` | `{categoryId, name, url, description?}`；网址非法 400，组内重复 409                    |
+| `PATCH /api/v1/admin/tools/sites/:id`                                 | `tool:manage` | 改字段；改 `categoryId` 后排到目标分类末尾                                             |
+| `DELETE /api/v1/admin/tools/sites/:id`                                | `tool:manage` | 软删除，公开页立即不再显示                                                             |
+| `POST /api/v1/admin/tools/sites/:id/activate`（或 `deactivate`）      | `tool:manage` | 启用 / 停用单条                                                                        |
+| `POST /api/v1/admin/tools/sites/:id/reorder`                          | `tool:manage` | 同上，**组内**上移 / 下移一格                                                          |
+| `POST /api/v1/admin/tools/sites/:id/move`                             | `tool:manage` | `{beforeId, categoryId?}`；可在同一次请求中换组和排序                                  |
 
 ### 约定
 
-- **提供删除**（软删除），这一点与技能标签、故障分类刻意不同：技能标签被 `user_skills` 引用，
-  删掉会让历史无声消失；而工具网站没有任何别的表引用它，「删掉」就是使用者的真实意图。
-  行仍保留在库里（`deleted_at`），审计与排障都还查得到。
-- **分类非空不许删**：外键是 `ON DELETE RESTRICT`，硬删会被数据库拒绝并冒泡成 500。
-  这里提前判成 409，并给出「该分类下还有 N 个网站，请先移走或删除」这句可操作的信息。
-- **网址只接受 `http` / `https` 绝对地址**，入库前把协议与主机名小写化
-  （`HTTPS://Steam.com` 与 `https://steam.com` 是同一条记录）。`javascript:` 与 `data:`
-  一律 400 `VALIDATION_FAILED` —— 前者是明确的 XSS 入口，后者在 `target="_blank"` 下行为不可预期。
-  公开页渲染外链一律带 `rel="noopener noreferrer"`。
-- **组内网址唯一**：同一分类下不允许重复收录同一个网址，换分组不算重复；
-  撞车返回 409 `TOOL_SITE_CONFLICT`。
-- **顺序有两层**：分类序号是全局的 `0..n-1`；网站序号是**组内**的，不同分组各自从 0 开始，
-  组间顺序完全由分类序号决定，与网站序号无关。所以网站排序、拖动的全集都先按 `categoryId` 收窄 ——
-  跨组拖动的语义是「换分类」，那要走 `PATCH` 改 `categoryId`，而不是往别人的组里插一行。
-- 两套序号都写稠密值，与技能标签 / 故障分类共用 `src/features/admin/reorder.ts`：
-  历史数据里重复的 `sort_order` 会让「只交换两行」看起来像没反应，压平就避免了这类假象。
-- **停用分类 = 整组从公开页消失；停用单个网站只隐藏那一条**。两者都不删数据，都可以随时恢复。
-- 审计动作 `tool_category.*` / `tool_site.*`，`targetType` 分别是 `ToolCategory` / `ToolSite`：
-  `created`、`updated`、`activated`、`deactivated`、`reordered`、`moved`、`deleted`。
-  `after` 只带名称、网址、分类 ID 这类结构化字段。
-- **两级兜底**：`toolService.listPublicGroups()` 在库连不上、或库里查不到任何启用中的网站时，
-  回退到 `src/config/tools.ts` 的内置清单（28 条）。这道兜底只用于避免「库挂了整页空白」，
-  不是第二条维护路径 —— 后台改动的正确性一律以库为准。
-
-新增权限码：`tool:manage`（仅 `ADMIN`）。与 `settings:manage` 分开，是因为这条权限的效果是
-**改公开页面内容**，而不是改系统配置；站长可能想把前者单独交给负责内容维护的同学。
-
-新增错误码：`TOOL_CATEGORY_CONFLICT`(409)、`TOOL_SITE_CONFLICT`(409)。
+- 分类和网站均使用软删除。分类下仍有未删除的网站时返回 409。分类 `code` 永久保留，使用已占用的标识返回 409 `TOOL_CATEGORY_CONFLICT`。分类英文名最多 64 字符，说明最多 500 字符。
+- 网址及外链只接受 `http` / `https` 绝对地址。服务端规范化网址，组内创建、改址和换组时在事务内锁定分类再检查重复。停用的网站仍占用网址，软删除后可重新收录。重复返回 409 `TOOL_SITE_CONFLICT`。
+- 分类按全局顺序排列，网站按组内顺序排列。新增追加到末尾，删除和换组后压实受影响的序号。`beforeId: null` 表示放到目标分类末尾。
+- `tool:manage` 仅授予 ADMIN。写操作在业务事务内记录 `tool_category.*` / `tool_site.*` 审计，`targetType` 为 `ToolCategory` / `ToolSite`。
+- 公共目录只显示启用且未删除的分类和网站。两张表都没有记录时使用内置清单；数据库读取失败时记录服务端告警并使用同一清单。
 
 ### 数据库
 
-Migration `20261127120000_tool_navigation` 新建 `tool_categories` / `tool_sites` 两张表
-（`utf8mb4_unicode_ci` / `InnoDB`，外键 `ON DELETE RESTRICT ON UPDATE CASCADE`）。
-`pnpm db:seed` 导入 6 个分类与 28 个网站，**只补不覆盖**（`upsert` 的 `update` 分支为空对象），
-重复执行不会把管理员改过的名称复原。部署顺序：`pnpm prisma migrate deploy` → `pnpm db:seed`，
-不执行 seed 也能正常访问 `/docs`（走内置清单兜底），只是 `/admin/tools` 列表为空。
+Migration `20261127120000_tool_navigation` 创建 `tool_categories` 和 `tool_sites`
+（`utf8mb4_unicode_ci`、InnoDB、`ON DELETE RESTRICT`）。执行 `pnpm db:migrate:deploy`
+后可用 `pnpm db:seed` 导入 6 个分类与 31 个网站。重复 Seed 保留管理员的修改和软删除记录，跳过已删除的分类。

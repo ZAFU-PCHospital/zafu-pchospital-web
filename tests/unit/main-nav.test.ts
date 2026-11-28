@@ -14,7 +14,7 @@ test("公开 mainNav 为 首页→维修活动→关于→加入→工具，编�
       { index: "02", href: "/repair-activities", label: "维修活动" },
       { index: "03", href: "/about", label: "关于我们" },
       { index: "04", href: "/join", label: "加入我们" },
-      { index: "05", href: "/docs", label: "实用工具" },
+      { index: "05", href: "/tools", label: "实用工具" },
     ],
   );
 });

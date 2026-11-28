@@ -58,7 +58,7 @@ test("sitemap 只收录公开页面，且地址全部基于 siteConfig.url", () 
     }
   }
 
-  for (const route of ["/", "/about", "/join", "/docs", "/repair-activities"]) {
+  for (const route of ["/", "/about", "/join", "/tools", "/repair-activities"]) {
     assert.ok(paths.includes(route), `sitemap 缺少公开路由 ${route}`);
   }
 });

@@ -186,7 +186,7 @@ pnpm --version           # 应与上一条一致；不一致时先按环境指�
 | 命令                         | 说明                                                                                                          |
 | ---------------------------- | ------------------------------------------------------------------------------------------------------------- |
 | `pnpm install`               | 安装依赖、生成 Prisma Client，并补占位文档清单                                                                |
-| `pnpm dev`                   | 启动开发服务器（`predev` 同样补清单）                                                                         |
+| `pnpm dev`                   | 生成 Prisma Client、补占位文档清单、启动开发服务器                                                            |
 | `pnpm build`                 | 生产构建，**含站内技术文档**（需要 mdBook，见第 7 节）                                                        |
 | `pnpm build:site`            | 只编译官网，跳过文档构建（用当时磁盘上的清单，**不要用于部署**）                                              |
 | `pnpm docs:build`            | 只生成站内技术文档到 `public/handbook/`                                                                       |
@@ -244,7 +244,7 @@ DATABASE_URL="mysql://app_user:change-me@127.0.0.1:3307/zafu_pchospital_test" pn
 
 ## 7. 站内文档构建（`/handbook`）
 
-`/docs` 页指向站内的 `/handbook/`，正文由独立仓库
+`/tools` 页指向站内的 `/handbook/`，正文由独立仓库
 [`ZAFU-PCHospital-Doc`](https://github.com/ZAFU-PCHospital/ZAFU-PCHospital-Doc)
 在**构建期**生成。`pnpm build` 已包含这一步，因此多出两个前置条件：
 
@@ -272,7 +272,7 @@ DATABASE_URL="mysql://app_user:change-me@127.0.0.1:3307/zafu_pchospital_test" pn
 > `public/handbook/` 同样是构建产物：`pnpm dev` 下 `/handbook/` 是空的
 > （`/handbook` → `/handbook/index.html` 会 404），要本地看文档先跑一次 `pnpm docs:build`。
 
-> `pnpm build:site` 用的是**当时磁盘上的**清单：若还是占位清单，`/docs` 页会显示 0 个条目。
+> `pnpm build:site` 用的是**当时磁盘上的**清单：若还是占位清单，`/tools` 页会显示 0 个条目。
 > **不要用它部署** —— 部署必须用 `pnpm build`（含文档构建）。
 
 文档仓库的 `theme/pc-hospital.css` 是 `globals.css` 主题层的**拷贝**（mdBook 只吃静态 CSS，
@@ -398,7 +398,7 @@ git switch -c feat/xxx  # 确认不在 main 上直接开发
 3. 安装**固定版** mdBook（版本写在 workflow 的 `MDBOOK_VERSION`，不用 `latest`）
 4. `pnpm install` → `pnpm audit`（**不阻断**，见下）→ `pnpm lint` → `pnpm build`（含文档）
 5. 校验构建产物：`public/handbook/index.html`、`searchindex`、官网主题 CSS/JS、清单结构
-6. 起生产服务冒烟：`/`、`/about`、`/join`、`/docs`、`/handbook/` 必须全部 200
+6. 起生产服务冒烟：`/`、`/about`、`/join`、`/tools`、`/handbook/` 必须全部 200
 
 `main` 合并后不会自动发布：生产部署由维护者在本地按 [README 的「部署与维护」](README.md#部署与维护)
 执行 `tools/deploy/deploy-prod.sh`（本地构建、备份、迁移核对、原子切换与回滚）。

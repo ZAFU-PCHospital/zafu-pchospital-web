@@ -7,7 +7,7 @@ const returnMarker = 'data-pc-hospital-return="true"';
 const bootstrapMarker = 'data-pc-hospital-theme-bootstrap="true"';
 const fontMarker = 'data-pc-hospital-font="true"';
 const returnLink =
-  `<a href="/docs" class="pc-hospital-return" title="返回电脑医院官网" ${returnMarker}>` +
+  `<a href="/tools" class="pc-hospital-return" title="返回电脑医院官网" ${returnMarker}>` +
   `<span aria-hidden="true">←</span><span>电脑医院官网</span></a>`;
 const siteFont = `<style ${fontMarker}>@font-face{font-family:Archivo;src:url("/fonts/archivo-latin-wdth.woff2") format("woff2-variations");font-weight:100 900;font-stretch:62% 125%;font-style:normal;font-display:swap}</style>`;
 // 与官网保持同一解析顺序：显式偏好 → 系统偏好 → 正常模式。

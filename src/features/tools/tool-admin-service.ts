@@ -1,12 +1,11 @@
 import { randomUUID } from "node:crypto";
 
 import type { Prisma } from "@/generated/prisma/client";
-import { movedIds, nextSortOrder, reorderedIds } from "@/features/admin/reorder";
+import { movedIds, reorderedIds } from "@/features/admin/reorder";
 import { toolRepository } from "@/features/tools/tool-repository";
 import { AppError } from "@/lib/api/errors";
 import { appendAuditLog } from "@/lib/audit/audit-service";
 import { requirePermission } from "@/lib/auth/permissions";
-import { getDb } from "@/lib/db/client";
 import { inSerializableTransaction } from "@/lib/db/transaction";
 import { stableCodeFromName } from "@/lib/stable-code";
 import type {
@@ -23,6 +22,8 @@ import type {
   UpdateToolSiteInput,
 } from "@/types/contracts";
 import {
+  TOOL_CATEGORY_DESCRIPTION_MAX_LENGTH,
+  TOOL_CATEGORY_LABEL_EN_MAX_LENGTH,
   TOOL_CATEGORY_NAME_MAX_LENGTH,
   TOOL_SITE_DESCRIPTION_MAX_LENGTH,
   TOOL_SITE_NAME_MAX_LENGTH,
@@ -62,29 +63,47 @@ export const toolCategoryAdminService: ToolCategoryAdminServiceContract = {
     if (!/^[A-Z][A-Z0-9_]{1,63}$/.test(code)) {
       throw new AppError("VALIDATION_FAILED", "分类标识无效");
     }
-    const duplicate = await getDb().toolCategory.findFirst({
-      where: { deletedAt: null, OR: [{ name }, { code }] },
-    });
-    if (duplicate) {
-      throw new AppError(
-        "TOOL_CATEGORY_CONFLICT",
-        duplicate.name === name ? "该分类名称已存在" : "该分类标识已被占用",
-      );
-    }
+    const fields = categoryText(input);
     return inSerializableTransaction(async (tx) => {
-      const created = await tx.toolCategory.create({
-        data: {
-          id: randomUUID(),
-          code,
-          name,
-          labelEn: input.labelEn?.trim() || null,
-          description: input.description?.trim() || null,
-          // 不给序号就排到末尾：顺序由列表里的上移 / 下移与拖动调整。
-          sortOrder: input.sortOrder ?? (await nextSortOrder(tx, "tool_categories")),
-          createdBy: actor.userId,
-          createdAt: new Date(),
-        },
+      const duplicate = await tx.toolCategory.findFirst({
+        where: { OR: [{ deletedAt: null, name }, { code }] },
+        select: { code: true },
       });
+      if (duplicate) {
+        throw new AppError(
+          "TOOL_CATEGORY_CONFLICT",
+          duplicate.code === code ? "该分类标识已被占用" : "该分类名称已存在",
+        );
+      }
+      const rows = await orderedCategories(tx);
+      await writeCategoryOrder(
+        tx,
+        rows.map((row) => row.id),
+        rows,
+      );
+      const created = await tx.toolCategory
+        .create({
+          data: {
+            id: randomUUID(),
+            code,
+            name,
+            ...fields,
+            sortOrder: rows.length,
+            createdBy: actor.userId,
+            createdAt: new Date(),
+          },
+        })
+        .catch((error: unknown) => {
+          if (
+            typeof error === "object" &&
+            error !== null &&
+            "code" in error &&
+            error.code === "P2002"
+          ) {
+            throw new AppError("TOOL_CATEGORY_CONFLICT", "该分类标识已被占用");
+          }
+          throw error;
+        });
       await appendAuditLog(tx, {
         actor,
         actorType: "USER",
@@ -105,32 +124,25 @@ export const toolCategoryAdminService: ToolCategoryAdminServiceContract = {
     actor: AuthorizedActor,
   ): Promise<ToolCategoryView> {
     requirePermission(actor, "tool:manage");
-    const before = await getDb().toolCategory.findFirst({
-      where: { id: categoryId, deletedAt: null },
-    });
-    if (!before) throw new AppError("RESOURCE_NOT_FOUND", "工具分类不存在");
-    if (
-      input.name !== undefined &&
-      (!input.name.trim() || input.name.trim().length > TOOL_CATEGORY_NAME_MAX_LENGTH)
-    ) {
+    const name = input.name?.trim();
+    if (name !== undefined && (!name || name.length > TOOL_CATEGORY_NAME_MAX_LENGTH)) {
       throw new AppError("VALIDATION_FAILED", "分类名称无效");
     }
-    if (input.name !== undefined && input.name.trim() !== before.name) {
-      const duplicate = await getDb().toolCategory.findFirst({
-        where: { deletedAt: null, name: input.name.trim(), id: { not: categoryId } },
-      });
-      if (duplicate) throw new AppError("TOOL_CATEGORY_CONFLICT", "该分类名称已存在");
-    }
+    const fields = categoryText(input);
     return inSerializableTransaction(async (tx) => {
+      const before = await tx.toolCategory.findFirst({
+        where: { id: categoryId, deletedAt: null },
+      });
+      if (!before) throw new AppError("RESOURCE_NOT_FOUND", "工具分类不存在");
+      if (name !== undefined && name !== before.name) {
+        const duplicate = await tx.toolCategory.findFirst({
+          where: { deletedAt: null, name, id: { not: categoryId } },
+        });
+        if (duplicate) throw new AppError("TOOL_CATEGORY_CONFLICT", "该分类名称已存在");
+      }
       const updated = await tx.toolCategory.update({
         where: { id: categoryId },
-        data: {
-          name: input.name?.trim(),
-          labelEn: input.labelEn === undefined ? undefined : input.labelEn?.trim() || null,
-          description:
-            input.description === undefined ? undefined : input.description?.trim() || null,
-          sortOrder: input.sortOrder,
-        },
+        data: { name, ...fields },
       });
       await appendAuditLog(tx, {
         actor,
@@ -159,7 +171,10 @@ export const toolCategoryAdminService: ToolCategoryAdminServiceContract = {
       const current = await tx.toolCategory.findUnique({ where: { id: categoryId } });
       if (!current || current.deletedAt) throw new AppError("RESOURCE_NOT_FOUND", "工具分类不存在");
       if (current.isActive === isActive) return toCategoryView(current);
-      const updated = await tx.toolCategory.update({ where: { id: categoryId }, data: { isActive } });
+      const updated = await tx.toolCategory.update({
+        where: { id: categoryId },
+        data: { isActive },
+      });
       await appendAuditLog(tx, {
         actor,
         actorType: "USER",
@@ -182,11 +197,7 @@ export const toolCategoryAdminService: ToolCategoryAdminServiceContract = {
   ): Promise<void> {
     requirePermission(actor, "tool:manage");
     await inSerializableTransaction(async (tx) => {
-      const rows = await tx.toolCategory.findMany({
-        where: { deletedAt: null },
-        orderBy: [{ sortOrder: "asc" }, { code: "asc" }],
-        select: { id: true },
-      });
+      const rows = await orderedCategories(tx);
       const order = reorderedIds(
         rows.map((row) => row.id),
         categoryId,
@@ -195,7 +206,7 @@ export const toolCategoryAdminService: ToolCategoryAdminServiceContract = {
         "工具分类不存在",
       );
       if (!order) return; // 已在边界：幂等成功，不写审计
-      await writeCategoryOrder(tx, order);
+      await writeCategoryOrder(tx, order, rows);
       await appendAuditLog(tx, {
         actor,
         actorType: "USER",
@@ -212,11 +223,7 @@ export const toolCategoryAdminService: ToolCategoryAdminServiceContract = {
   async move(categoryId: string, beforeId: string | null, actor: AuthorizedActor): Promise<void> {
     requirePermission(actor, "tool:manage");
     await inSerializableTransaction(async (tx) => {
-      const rows = await tx.toolCategory.findMany({
-        where: { deletedAt: null },
-        orderBy: [{ sortOrder: "asc" }, { code: "asc" }],
-        select: { id: true },
-      });
+      const rows = await orderedCategories(tx);
       const order = movedIds(
         rows.map((row) => row.id),
         categoryId,
@@ -225,7 +232,7 @@ export const toolCategoryAdminService: ToolCategoryAdminServiceContract = {
         "工具分类不存在",
       );
       if (!order) return;
-      await writeCategoryOrder(tx, order);
+      await writeCategoryOrder(tx, order, rows);
       await appendAuditLog(tx, {
         actor,
         actorType: "USER",
@@ -245,8 +252,6 @@ export const toolCategoryAdminService: ToolCategoryAdminServiceContract = {
       await tx.$queryRaw`SELECT id FROM tool_categories WHERE id = ${categoryId} FOR UPDATE`;
       const current = await tx.toolCategory.findUnique({ where: { id: categoryId } });
       if (!current || current.deletedAt) throw new AppError("RESOURCE_NOT_FOUND", "工具分类不存在");
-      // 分组里还有网站时不允许删：外键 RESTRICT 会拒绝写入并变成 500，
-      // 这里提前给出「先移走或删除」这个可操作的信息。
       const remaining = await tx.toolSite.count({ where: { categoryId, deletedAt: null } });
       if (remaining > 0) {
         throw new AppError(
@@ -258,6 +263,12 @@ export const toolCategoryAdminService: ToolCategoryAdminServiceContract = {
         where: { id: categoryId },
         data: { deletedAt: new Date(), isActive: false },
       });
+      const rows = await orderedCategories(tx);
+      await writeCategoryOrder(
+        tx,
+        rows.map((row) => row.id),
+        rows,
+      );
       await appendAuditLog(tx, {
         actor,
         actorType: "USER",
@@ -291,19 +302,15 @@ export const toolSiteAdminService: ToolSiteAdminServiceContract = {
     if ((input.description ?? "").length > TOOL_SITE_DESCRIPTION_MAX_LENGTH) {
       throw new AppError("VALIDATION_FAILED", "说明过长");
     }
-    const category = await getDb().toolCategory.findFirst({
-      where: { id: input.categoryId, deletedAt: null },
-      select: { id: true },
-    });
-    if (!category) throw new AppError("VALIDATION_FAILED", "请选择有效的分类");
-    await assertUrlNotDuplicated(input.categoryId, url);
     return inSerializableTransaction(async (tx) => {
-      // 序号在**组内**追加到末尾：不同分组各自从 0 开始，
-      // 组间顺序由分类表的 sortOrder 决定，与网站序号无关。
-      const max = await tx.toolSite.aggregate({
-        where: { categoryId: input.categoryId, deletedAt: null },
-        _max: { sortOrder: true },
-      });
+      await lockCategory(tx, input.categoryId);
+      await assertUrlNotDuplicated(tx, input.categoryId, url);
+      const rows = await orderedSites(tx, input.categoryId);
+      await writeSiteOrder(
+        tx,
+        rows.map((row) => row.id),
+        rows,
+      );
       const created = await tx.toolSite.create({
         data: {
           id: randomUUID(),
@@ -311,7 +318,7 @@ export const toolSiteAdminService: ToolSiteAdminServiceContract = {
           name,
           url,
           description: input.description?.trim() || null,
-          sortOrder: input.sortOrder ?? (max._max.sortOrder ?? -1) + 1,
+          sortOrder: rows.length,
           createdBy: actor.userId,
           createdAt: new Date(),
         },
@@ -330,10 +337,12 @@ export const toolSiteAdminService: ToolSiteAdminServiceContract = {
     });
   },
 
-  async update(siteId: string, input: UpdateToolSiteInput, actor: AuthorizedActor): Promise<ToolSiteView> {
+  async update(
+    siteId: string,
+    input: UpdateToolSiteInput,
+    actor: AuthorizedActor,
+  ): Promise<ToolSiteView> {
     requirePermission(actor, "tool:manage");
-    const before = await getDb().toolSite.findFirst({ where: { id: siteId, deletedAt: null } });
-    if (!before) throw new AppError("RESOURCE_NOT_FOUND", "网站不存在");
     const name = input.name === undefined ? undefined : input.name.trim();
     if (name !== undefined && (!name || name.length > TOOL_SITE_NAME_MAX_LENGTH)) {
       throw new AppError("VALIDATION_FAILED", "网站名称无效");
@@ -345,30 +354,40 @@ export const toolSiteAdminService: ToolSiteAdminServiceContract = {
     if ((input.description ?? "").length > TOOL_SITE_DESCRIPTION_MAX_LENGTH) {
       throw new AppError("VALIDATION_FAILED", "说明过长");
     }
-    if (input.categoryId !== undefined) {
-      const category = await getDb().toolCategory.findFirst({
-        where: { id: input.categoryId, deletedAt: null },
-        select: { id: true },
-      });
-      if (!category) throw new AppError("VALIDATION_FAILED", "请选择有效的分类");
-    }
-    const effectiveCategoryId = input.categoryId ?? before.categoryId;
-    const effectiveUrl = url ?? before.url;
-    if (effectiveCategoryId !== before.categoryId || effectiveUrl !== before.url) {
-      await assertUrlNotDuplicated(effectiveCategoryId, effectiveUrl, siteId);
-    }
     return inSerializableTransaction(async (tx) => {
+      const before = await lockSite(tx, siteId);
+      const categoryId = input.categoryId ?? before.categoryId;
+      const changingCategory = categoryId !== before.categoryId;
+      const effectiveUrl = url ?? before.url;
+      await lockSiteCategories(tx, before.categoryId, categoryId);
+      if (changingCategory || effectiveUrl !== before.url) {
+        await assertUrlNotDuplicated(tx, categoryId, effectiveUrl, siteId);
+      }
+      const targetRows = changingCategory ? await orderedSites(tx, categoryId) : null;
       const updated = await tx.toolSite.update({
         where: { id: siteId },
         data: {
-          categoryId: input.categoryId,
+          categoryId,
           name,
           url,
           description:
             input.description === undefined ? undefined : input.description?.trim() || null,
-          sortOrder: input.sortOrder,
+          sortOrder: targetRows?.length,
         },
       });
+      if (targetRows) {
+        const sourceRows = await orderedSites(tx, before.categoryId);
+        await writeSiteOrder(
+          tx,
+          sourceRows.map((row) => row.id),
+          sourceRows,
+        );
+        await writeSiteOrder(
+          tx,
+          targetRows.map((row) => row.id),
+          targetRows,
+        );
+      }
       await appendAuditLog(tx, {
         actor,
         actorType: "USER",
@@ -388,12 +407,14 @@ export const toolSiteAdminService: ToolSiteAdminServiceContract = {
     });
   },
 
-  async setActive(siteId: string, isActive: boolean, actor: AuthorizedActor): Promise<ToolSiteView> {
+  async setActive(
+    siteId: string,
+    isActive: boolean,
+    actor: AuthorizedActor,
+  ): Promise<ToolSiteView> {
     requirePermission(actor, "tool:manage");
     return inSerializableTransaction(async (tx) => {
-      await tx.$queryRaw`SELECT id FROM tool_sites WHERE id = ${siteId} FOR UPDATE`;
-      const current = await tx.toolSite.findUnique({ where: { id: siteId } });
-      if (!current || current.deletedAt) throw new AppError("RESOURCE_NOT_FOUND", "网站不存在");
+      const current = await lockSite(tx, siteId);
       if (current.isActive === isActive) return toSiteView(current);
       const updated = await tx.toolSite.update({ where: { id: siteId }, data: { isActive } });
       await appendAuditLog(tx, {
@@ -411,19 +432,25 @@ export const toolSiteAdminService: ToolSiteAdminServiceContract = {
     });
   },
 
-  async reorder(siteId: string, direction: ReorderDirection, actor: AuthorizedActor): Promise<void> {
+  async reorder(
+    siteId: string,
+    direction: ReorderDirection,
+    actor: AuthorizedActor,
+  ): Promise<void> {
     requirePermission(actor, "tool:manage");
-    const target = await getDb().toolSite.findFirst({
-      where: { id: siteId, deletedAt: null },
-      select: { categoryId: true },
-    });
-    if (!target) throw new AppError("RESOURCE_NOT_FOUND", "网站不存在");
     await inSerializableTransaction(async (tx) => {
-      const order = await siteOrder(tx, target.categoryId, siteId, (ids) =>
-        reorderedIds(ids, siteId, direction, "RESOURCE_NOT_FOUND", "网站不存在"),
+      const site = await lockSite(tx, siteId);
+      await lockCategory(tx, site.categoryId);
+      const rows = await orderedSites(tx, site.categoryId);
+      const order = reorderedIds(
+        rows.map((row) => row.id),
+        siteId,
+        direction,
+        "RESOURCE_NOT_FOUND",
+        "网站不存在",
       );
       if (!order) return;
-      await writeSiteOrder(tx, order);
+      await writeSiteOrder(tx, order, rows);
       await appendAuditLog(tx, {
         actor,
         actorType: "USER",
@@ -437,19 +464,32 @@ export const toolSiteAdminService: ToolSiteAdminServiceContract = {
     });
   },
 
-  async move(siteId: string, beforeId: string | null, actor: AuthorizedActor): Promise<void> {
+  async move(siteId, beforeId, actor, targetCategoryId) {
     requirePermission(actor, "tool:manage");
-    const target = await getDb().toolSite.findFirst({
-      where: { id: siteId, deletedAt: null },
-      select: { categoryId: true },
-    });
-    if (!target) throw new AppError("RESOURCE_NOT_FOUND", "网站不存在");
     await inSerializableTransaction(async (tx) => {
-      const order = await siteOrder(tx, target.categoryId, siteId, (ids) =>
-        movedIds(ids, siteId, beforeId, "RESOURCE_NOT_FOUND", "网站不存在"),
-      );
-      if (!order) return;
-      await writeSiteOrder(tx, order);
+      const site = await lockSite(tx, siteId);
+      const categoryId = targetCategoryId ?? site.categoryId;
+      const changingCategory = categoryId !== site.categoryId;
+      await lockSiteCategories(tx, site.categoryId, categoryId);
+      const rows = await orderedSites(tx, categoryId);
+      const ids = rows.map((row) => row.id);
+      if (changingCategory) {
+        if (beforeId === siteId) throw new AppError("RESOURCE_NOT_FOUND", "目标网站不存在");
+        await assertUrlNotDuplicated(tx, categoryId, site.url, siteId);
+        ids.push(siteId);
+      }
+      const order = movedIds(ids, siteId, beforeId, "RESOURCE_NOT_FOUND", "目标网站不存在");
+      if (!order && !changingCategory) return;
+      if (changingCategory) {
+        await tx.toolSite.update({ where: { id: siteId }, data: { categoryId } });
+        const sourceRows = await orderedSites(tx, site.categoryId);
+        await writeSiteOrder(
+          tx,
+          sourceRows.map((row) => row.id),
+          sourceRows,
+        );
+      }
+      await writeSiteOrder(tx, order ?? ids, [...rows, ...(changingCategory ? [site] : [])]);
       await appendAuditLog(tx, {
         actor,
         actorType: "USER",
@@ -458,7 +498,8 @@ export const toolSiteAdminService: ToolSiteAdminServiceContract = {
         targetType: "ToolSite",
         targetId: siteId,
         result: "SUCCESS",
-        after: { beforeId },
+        before: { categoryId: site.categoryId },
+        after: { categoryId, beforeId },
       });
     });
   },
@@ -466,13 +507,18 @@ export const toolSiteAdminService: ToolSiteAdminServiceContract = {
   async remove(siteId: string, actor: AuthorizedActor): Promise<void> {
     requirePermission(actor, "tool:manage");
     await inSerializableTransaction(async (tx) => {
-      await tx.$queryRaw`SELECT id FROM tool_sites WHERE id = ${siteId} FOR UPDATE`;
-      const current = await tx.toolSite.findUnique({ where: { id: siteId } });
-      if (!current || current.deletedAt) throw new AppError("RESOURCE_NOT_FOUND", "网站不存在");
+      const current = await lockSite(tx, siteId);
+      await lockCategory(tx, current.categoryId);
       await tx.toolSite.update({
         where: { id: siteId },
         data: { deletedAt: new Date(), isActive: false },
       });
+      const rows = await orderedSites(tx, current.categoryId);
+      await writeSiteOrder(
+        tx,
+        rows.map((row) => row.id),
+        rows,
+      );
       await appendAuditLog(tx, {
         actor,
         actorType: "USER",
@@ -555,11 +601,12 @@ function normalizeUrl(raw: string): string {
 
 /** 同一分组内不允许重复收录同一个网址（换分组不算重复）。 */
 async function assertUrlNotDuplicated(
+  tx: Tx,
   categoryId: string,
   url: string,
   excludeId?: string,
 ): Promise<void> {
-  const duplicate = await getDb().toolSite.findFirst({
+  const duplicate = await tx.toolSite.findFirst({
     where: {
       categoryId,
       url,
@@ -571,36 +618,69 @@ async function assertUrlNotDuplicated(
   if (duplicate) throw new AppError("TOOL_SITE_CONFLICT", "该分类下已经收录了这个网址");
 }
 
-/** 分类的稠密序号写入。 */
-async function writeCategoryOrder(tx: Tx, order: readonly string[]): Promise<void> {
-  for (const [position, id] of order.entries()) {
-    await tx.toolCategory.update({ where: { id }, data: { sortOrder: position } });
+function categoryText(input: Pick<UpdateToolCategoryInput, "labelEn" | "description">) {
+  const labelEn = input.labelEn?.trim() || (input.labelEn === undefined ? undefined : null);
+  const description =
+    input.description?.trim() || (input.description === undefined ? undefined : null);
+  if ((labelEn?.length ?? 0) > TOOL_CATEGORY_LABEL_EN_MAX_LENGTH) {
+    throw new AppError("VALIDATION_FAILED", "分类英文名过长");
   }
+  if ((description?.length ?? 0) > TOOL_CATEGORY_DESCRIPTION_MAX_LENGTH) {
+    throw new AppError("VALIDATION_FAILED", "分类说明过长");
+  }
+  return { labelEn, description };
 }
 
-/** 网站的稠密序号写入（组内）。 */
-async function writeSiteOrder(tx: Tx, order: readonly string[]): Promise<void> {
-  for (const [position, id] of order.entries()) {
-    await tx.toolSite.update({ where: { id }, data: { sortOrder: position } });
-  }
+/** 分类行锁保护组内去重和排序，并与分类删除互斥。 */
+async function lockCategory(tx: Tx, categoryId: string) {
+  const rows = await tx.$queryRaw<{ id: string }[]>`SELECT id FROM tool_categories
+    WHERE id = ${categoryId} AND deleted_at IS NULL FOR UPDATE`;
+  if (rows.length === 0) throw new AppError("VALIDATION_FAILED", "请选择有效的分类");
 }
 
-/**
- * 按组取网站顺序再算出新顺序。
- *
- * 网站排序是**组内**的：跨组拖动的语义是「换分类」，那要走 `PATCH` 改 `categoryId`，
- * 而不是在别人的组里插一行 —— 所以这里先按 `categoryId` 收窄全集。
- */
-async function siteOrder(
-  tx: Tx,
-  categoryId: string,
-  siteId: string,
-  compute: (ids: string[]) => string[] | null,
-): Promise<string[] | null> {
-  const rows = await tx.toolSite.findMany({
-    where: { categoryId, deletedAt: null },
-    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
-    select: { id: true },
+async function lockSiteCategories(tx: Tx, source: string, target: string) {
+  for (const id of [...new Set([source, target])].sort()) await lockCategory(tx, id);
+}
+
+async function lockSite(tx: Tx, siteId: string) {
+  await tx.$queryRaw`SELECT id FROM tool_sites WHERE id = ${siteId} FOR UPDATE`;
+  const site = await tx.toolSite.findUnique({ where: { id: siteId } });
+  if (!site || site.deletedAt) throw new AppError("RESOURCE_NOT_FOUND", "网站不存在");
+  return site;
+}
+
+function orderedCategories(tx: Tx) {
+  return tx.toolCategory.findMany({
+    where: { deletedAt: null },
+    orderBy: [{ sortOrder: "asc" }, { code: "asc" }],
+    select: { id: true, sortOrder: true },
   });
-  return compute(rows.map((row) => row.id));
+}
+
+function orderedSites(tx: Tx, categoryId: string) {
+  return tx.toolSite.findMany({
+    where: { categoryId, deletedAt: null },
+    orderBy: [{ sortOrder: "asc" }, { name: "asc" }, { id: "asc" }],
+    select: { id: true, sortOrder: true },
+  });
+}
+
+type OrderedRow = { id: string; sortOrder: number };
+
+async function writeCategoryOrder(tx: Tx, order: readonly string[], rows: OrderedRow[]) {
+  const previous = new Map(rows.map((row) => [row.id, row.sortOrder]));
+  for (const [sortOrder, id] of order.entries()) {
+    if (previous.get(id) !== sortOrder) {
+      await tx.toolCategory.update({ where: { id }, data: { sortOrder } });
+    }
+  }
+}
+
+async function writeSiteOrder(tx: Tx, order: readonly string[], rows: OrderedRow[]) {
+  const previous = new Map(rows.map((row) => [row.id, row.sortOrder]));
+  for (const [sortOrder, id] of order.entries()) {
+    if (previous.get(id) !== sortOrder) {
+      await tx.toolSite.update({ where: { id }, data: { sortOrder } });
+    }
+  }
 }

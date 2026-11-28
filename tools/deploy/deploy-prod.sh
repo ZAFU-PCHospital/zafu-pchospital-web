@@ -1291,7 +1291,7 @@ smoke() {
   code="$(curl -sL --max-time 20 -o /dev/null -w '%{http_code}' "$BASE_URL$p" || echo 000)"
   if [ "$code" = "200" ]; then ok "$p -> 200"; else warn "$p -> $code（期望 200）"; SMOKE_FAIL=1; fi
 }
-for p in / /about /join /docs /repair-activities /robots.txt /sitemap.xml /handbook/; do smoke "$p"; done
+for p in / /about /join /tools /repair-activities /robots.txt /sitemap.xml /handbook/; do smoke "$p"; done
 
 if [ -n "$CHUNK_PATH" ]; then
   code="$(curl -s --max-time 20 -o /dev/null -w '%{http_code}' "$BASE_URL$CHUNK_PATH" || echo 000)"

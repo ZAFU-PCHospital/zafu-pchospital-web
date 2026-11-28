@@ -160,7 +160,7 @@ export const Permission = [
   // 技能标签库与故障分类是两类资源，各自管理；不复用 `member:manage`
   // （那是「给某个成员分配标签」，和「维护标签库本身」不是一件事）。
   "skill:manage",
-  // 工具导航（公开 /docs 页的分组与网站）：内容对外可见，但维护入口只在后台，
+  // 工具导航（公开 /tools 页的分组与网站）：内容对外可见，但维护入口只在后台，
   // 与 `settings:manage`（展示策略开关）区分开。
   "tool:manage",
   // 公开统计展示策略决定官网对外展示什么，与站内管理操作分开。
@@ -1825,7 +1825,7 @@ export interface AccountNotificationServiceContract {
 }
 
 // ---------------------------------------------------------------------------
-// 工具导航（公开 /docs 页）：分组与网站由后台维护
+// 工具导航（公开 /tools 页）：分组与网站由后台维护
 // ---------------------------------------------------------------------------
 
 /** 网站名称上限，对应 `tool_sites.name` 的 VarChar(80)。 */
@@ -1836,6 +1836,8 @@ export const TOOL_SITE_URL_MAX_LENGTH = 500;
 export const TOOL_SITE_DESCRIPTION_MAX_LENGTH = 200;
 /** 分类名称上限，对应 `tool_categories.name` 的 VarChar(80)。 */
 export const TOOL_CATEGORY_NAME_MAX_LENGTH = 80;
+export const TOOL_CATEGORY_LABEL_EN_MAX_LENGTH = 64;
+export const TOOL_CATEGORY_DESCRIPTION_MAX_LENGTH = 500;
 
 /** 分类展示视图。`code` 是稳定机器码，改名不影响它。 */
 export type ToolCategoryView = {
@@ -1866,14 +1868,12 @@ export type CreateToolCategoryInput = {
   name: string;
   labelEn?: string | null;
   description?: string | null;
-  sortOrder?: number;
 };
 
 export type UpdateToolCategoryInput = {
   name?: string;
   labelEn?: string | null;
   description?: string | null;
-  sortOrder?: number;
 };
 
 export type CreateToolSiteInput = {
@@ -1881,7 +1881,6 @@ export type CreateToolSiteInput = {
   name: string;
   url: string;
   description?: string | null;
-  sortOrder?: number;
 };
 
 export type UpdateToolSiteInput = {
@@ -1889,7 +1888,6 @@ export type UpdateToolSiteInput = {
   name?: string;
   url?: string;
   description?: string | null;
-  sortOrder?: number;
 };
 
 /** 公开页的分组视图：已按 sortOrder 排好序，组内网站同样有序。 */
@@ -1925,7 +1923,12 @@ export interface ToolSiteAdminServiceContract {
   update(siteId: string, input: UpdateToolSiteInput, actor: AuthorizedActor): Promise<ToolSiteView>;
   setActive(siteId: string, isActive: boolean, actor: AuthorizedActor): Promise<ToolSiteView>;
   reorder(siteId: string, direction: ReorderDirection, actor: AuthorizedActor): Promise<void>;
-  move(siteId: string, beforeId: string | null, actor: AuthorizedActor): Promise<void>;
+  move(
+    siteId: string,
+    beforeId: string | null,
+    actor: AuthorizedActor,
+    categoryId?: string,
+  ): Promise<void>;
   /** 软删除。后台「删除」按钮走这里，行保留供审计追溯。 */
   remove(siteId: string, actor: AuthorizedActor): Promise<void>;
 }

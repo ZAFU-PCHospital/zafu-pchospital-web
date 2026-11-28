@@ -22,7 +22,7 @@
 <p align="center">
   <a href="https://pczafu.cn/">访问官网</a> ·
   <a href="https://pczafu.cn/repair-activities">维修活动</a> ·
-  <a href="https://pczafu.cn/docs">技术文档</a> ·
+  <a href="https://pczafu.cn/tools">实用工具</a> ·
   <a href="#快速开始">本地运行</a> ·
   <a href="CONTRIBUTING.md">参与贡献</a>
 </p>
@@ -116,15 +116,15 @@ pnpm dev
 
 完整目录与历史文档的查阅方式见 [维护文档目录](docs/README.md)。
 
-| 想了解什么                           | 从这里开始                                                                                                      |
-| ------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
-| 项目环境、命令、验证、CI             | [工程手册 AGENTS.md](AGENTS.md)                                                                                 |
-| 页面布局、主题与组件复用             | [设计系统](docs/design-system.md)                                                                               |
-| 目录职责与 Service / Repository 边界 | [项目架构](docs/architecture.md)                                                                                |
-| 本地数据库、迁移与测试隔离           | [数据库指南](docs/database.md) · [Windows 环境](docs/database-windows.md)                                       |
-| API、数据与跨模块约定                | [公共契约](docs/contracts/)                                                                                     |
-| 分支、提交与 PR 协作                 | [Git 工作流](docs/git-workflow.md)                                                                              |
-| 面向师生的维修技术资料               | [在线技术文档](https://pczafu.cn/docs) · [文档源码仓库](https://github.com/ZAFU-PCHospital/ZAFU-PCHospital-Doc) |
+| 想了解什么                           | 从这里开始                                                                                                       |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
+| 项目环境、命令、验证、CI             | [工程手册 AGENTS.md](AGENTS.md)                                                                                  |
+| 页面布局、主题与组件复用             | [设计系统](docs/design-system.md)                                                                                |
+| 目录职责与 Service / Repository 边界 | [项目架构](docs/architecture.md)                                                                                 |
+| 本地数据库、迁移与测试隔离           | [数据库指南](docs/database.md) · [Windows 环境](docs/database-windows.md)                                        |
+| API、数据与跨模块约定                | [公共契约](docs/contracts/)                                                                                      |
+| 分支、提交与 PR 协作                 | [Git 工作流](docs/git-workflow.md)                                                                               |
+| 面向师生的维修技术资料               | [在线技术文档](https://pczafu.cn/tools) · [文档源码仓库](https://github.com/ZAFU-PCHospital/ZAFU-PCHospital-Doc) |
 
 ## 部署与维护
 

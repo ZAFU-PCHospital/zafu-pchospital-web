@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 // 后台与公开页共用同一套卡片样式：视觉只有一份定义，改前台就等于改后台。
-import "@/app/docs/tools.css";
+import "@/app/tools/tools.css";
 import "./tools-admin.css";
 
 import { ToolAdminPanel } from "@/components/admin/ToolAdminPanel";

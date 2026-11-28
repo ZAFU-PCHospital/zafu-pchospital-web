@@ -5,7 +5,7 @@ import { type DocListItem } from "@/lib/docs";
  * DocList —— 文档目录列表
  *
  * 对应设计基准中 docs 区块的 `.docpreview__list`。
- * 首页的文档预览与 /docs 入口页共用同一实现。
+ * 首页的文档预览与 /tools 入口页共用同一实现。
  *
  * 已就绪条目跳转到同域 mdBook 页面；待撰写条目为不可点击的状态展示。
  */
