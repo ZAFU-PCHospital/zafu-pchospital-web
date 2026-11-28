@@ -160,6 +160,9 @@ export const Permission = [
   // 技能标签库与故障分类是两类资源，各自管理；不复用 `member:manage`
   // （那是「给某个成员分配标签」，和「维护标签库本身」不是一件事）。
   "skill:manage",
+  // 工具导航（公开 /tools 页的分组与网站）：内容对外可见，但维护入口只在后台，
+  // 与 `settings:manage`（展示策略开关）区分开。
+  "tool:manage",
   // 公开统计展示策略决定官网对外展示什么，与站内管理操作分开。
   "settings:manage",
   // 维修活动：管理 CRUD / 报名管理 vs 成员出勤签到接待。
@@ -1819,4 +1822,121 @@ export interface AccountNotificationServiceContract {
   get(applicationId: string, actor: AuthorizedActor): Promise<AccountNotificationView | null>;
   retry(applicationId: string, actor: AuthorizedActor): Promise<AccountNotificationView>;
   runBatch(input?: { limit?: number }): Promise<AccountNotificationBatchResult>;
+}
+
+// ---------------------------------------------------------------------------
+// 工具导航（公开 /tools 页）：分组与网站由后台维护
+// ---------------------------------------------------------------------------
+
+/** 网站名称上限，对应 `tool_sites.name` 的 VarChar(80)。 */
+export const TOOL_SITE_NAME_MAX_LENGTH = 80;
+/** 网站地址上限，对应 `tool_sites.url` 的 VarChar(500)。 */
+export const TOOL_SITE_URL_MAX_LENGTH = 500;
+/** 卡片说明上限，对应 `tool_sites.description` 的 VarChar(200)。 */
+export const TOOL_SITE_DESCRIPTION_MAX_LENGTH = 200;
+/** 分类名称上限，对应 `tool_categories.name` 的 VarChar(80)。 */
+export const TOOL_CATEGORY_NAME_MAX_LENGTH = 80;
+export const TOOL_CATEGORY_LABEL_EN_MAX_LENGTH = 64;
+export const TOOL_CATEGORY_DESCRIPTION_MAX_LENGTH = 500;
+
+/** 分类展示视图。`code` 是稳定机器码，改名不影响它。 */
+export type ToolCategoryView = {
+  id: string;
+  code: string;
+  name: string;
+  labelEn: string | null;
+  description: string | null;
+  sortOrder: number;
+  isActive: boolean;
+  /** 乐观并发令牌：后台 PATCH 时原样回传，服务端比对后再写。 */
+  updatedAt: string;
+};
+
+/** 网站展示视图。`siteCount` 只统计**启用中且未删除**的网站，回答「停用这一组会隐藏几个」。 */
+export type ToolSiteView = {
+  id: string;
+  categoryId: string;
+  name: string;
+  url: string;
+  description: string | null;
+  sortOrder: number;
+  isActive: boolean;
+  /** 乐观并发令牌：后台 PATCH 时原样回传，服务端比对后再写。 */
+  updatedAt: string;
+};
+
+export type ToolCategoryAdminView = ToolCategoryView & { siteCount: number };
+
+export type CreateToolCategoryInput = {
+  code?: string;
+  name: string;
+  labelEn?: string | null;
+  description?: string | null;
+};
+
+export type UpdateToolCategoryInput = {
+  name?: string;
+  labelEn?: string | null;
+  description?: string | null;
+  /** 打开编辑弹窗时拿到的 `updatedAt`；与当前行不一致时拒绝写入。 */
+  expectedUpdatedAt?: string;
+};
+
+export type CreateToolSiteInput = {
+  categoryId: string;
+  name: string;
+  url: string;
+  description?: string | null;
+};
+
+export type UpdateToolSiteInput = {
+  categoryId?: string;
+  name?: string;
+  url?: string;
+  description?: string | null;
+  /** 打开编辑弹窗时拿到的 `updatedAt`；与当前行不一致时拒绝写入。 */
+  expectedUpdatedAt?: string;
+};
+
+/** 公开页的分组视图：已按 sortOrder 排好序，组内网站同样有序。 */
+export type PublicToolGroup = {
+  id: string;
+  label: string;
+  labelEn: string;
+  sites: { id: string; name: string; href: string; description: string }[];
+};
+
+export interface ToolCategoryAdminServiceContract {
+  list(actor: AuthorizedActor): Promise<ToolCategoryAdminView[]>;
+  create(input: CreateToolCategoryInput, actor: AuthorizedActor): Promise<ToolCategoryView>;
+  update(
+    categoryId: string,
+    input: UpdateToolCategoryInput,
+    actor: AuthorizedActor,
+  ): Promise<ToolCategoryView>;
+  setActive(
+    categoryId: string,
+    isActive: boolean,
+    actor: AuthorizedActor,
+  ): Promise<ToolCategoryView>;
+  reorder(categoryId: string, direction: ReorderDirection, actor: AuthorizedActor): Promise<void>;
+  move(categoryId: string, beforeId: string | null, actor: AuthorizedActor): Promise<void>;
+  /** 软删除。分类下还有网站时拒绝（409），避免外键 RESTRICT 冒泡成 500。 */
+  remove(categoryId: string, actor: AuthorizedActor): Promise<void>;
+}
+
+export interface ToolSiteAdminServiceContract {
+  list(actor: AuthorizedActor): Promise<ToolSiteView[]>;
+  create(input: CreateToolSiteInput, actor: AuthorizedActor): Promise<ToolSiteView>;
+  update(siteId: string, input: UpdateToolSiteInput, actor: AuthorizedActor): Promise<ToolSiteView>;
+  setActive(siteId: string, isActive: boolean, actor: AuthorizedActor): Promise<ToolSiteView>;
+  reorder(siteId: string, direction: ReorderDirection, actor: AuthorizedActor): Promise<void>;
+  move(
+    siteId: string,
+    beforeId: string | null,
+    actor: AuthorizedActor,
+    categoryId?: string,
+  ): Promise<void>;
+  /** 软删除。后台「删除」按钮走这里，行保留供审计追溯。 */
+  remove(siteId: string, actor: AuthorizedActor): Promise<void>;
 }

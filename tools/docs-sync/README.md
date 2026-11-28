@@ -100,7 +100,7 @@ DOCS_SYNC_BASE_URL=http://127.0.0.1:8080/handbook/ \
 
 ## 已知边界
 
-- `/docs` 清单在 `next build` 时静态 import；增删页仍需下一次整站部署更新清单。
+- `/tools` 清单在 `next build` 时静态 import；增删页仍需下一次整站部署更新清单。
 - 上游源码 main 与 gh-pages 分别发布；两者或官网配色不一致时拒绝同步，等待正确版本。
 - 服务器外网、HTTP 入口或权限异常会导致本次失败，下一次 timer 会重试；通过日志定位。
 - HTTP 校验覆盖文档资源与首页，不验证生产浏览器的主题交互，也不自动修改 nginx。

@@ -6,7 +6,7 @@ import { pad2 } from "@/lib/utils";
  * DocReadout —— 文档仓库读数面板
  *
  * 数值直接读取 src/data/doc-manifest.json，是真实数据而非装饰。
- * 首页 Hero、首页文档区块、/docs 入口页共用。
+ * 首页 Hero、首页文档区块、/tools 入口页共用。
  */
 
 export type DocReadoutProps = {

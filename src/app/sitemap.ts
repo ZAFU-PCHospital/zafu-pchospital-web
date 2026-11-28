@@ -6,7 +6,7 @@ import { docPageUrl, docTree, flattenDocTree } from "@/lib/docs";
 /**
  * sitemap.xml（构建期生成）
  *
- * 只列公开且无需登录的页面：五个主栏目（含 /docs 工具页）+ 站内技术文档。
+ * 只列公开且无需登录的页面：五个主栏目（含 /tools 工具页）+ 站内技术文档。
  *
  * 两条约束：
  * - 后台（/admin）、成员工作台（/member）、账号页（/account）与接口不收录，
@@ -19,7 +19,7 @@ import { docPageUrl, docTree, flattenDocTree } from "@/lib/docs";
 const staticRoutes: MetadataRoute.Sitemap = [
   { url: "/", changeFrequency: "weekly", priority: 1 },
   { url: "/repair-activities", changeFrequency: "weekly", priority: 0.8 },
-  { url: "/docs", changeFrequency: "monthly", priority: 0.7 },
+  { url: "/tools", changeFrequency: "monthly", priority: 0.7 },
   { url: "/about", changeFrequency: "monthly", priority: 0.6 },
   { url: "/join", changeFrequency: "monthly", priority: 0.6 },
 ];

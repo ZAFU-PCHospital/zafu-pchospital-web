@@ -10,7 +10,7 @@
   },
   "scripts": {
     "postinstall": "prisma generate && node tools/ensure-doc-manifest.mjs",
-    "predev": "node tools/ensure-doc-manifest.mjs",
+    "predev": "prisma generate && node tools/ensure-doc-manifest.mjs",
     "dev": "next dev",
     "build": "node tools/build-docs.mjs && next build",
     "prebuild:site": "node tools/ensure-doc-manifest.mjs",

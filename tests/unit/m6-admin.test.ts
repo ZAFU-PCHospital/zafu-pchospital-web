@@ -214,7 +214,7 @@ test("后台导航不进入公开导航，且全部模块都有首页目录说�
   assert.equal(new Set(indexes).size, indexes.length, "后台入口编号重复");
   assert.equal(ADMIN_SECTION_INDEX.home, "00");
   // 工作台重构：首页「全部模块」目录覆盖每一个模块，且每项都有非空说明。
-  assert.equal(adminNav.length, 10);
+  assert.equal(adminNav.length, 11);
   for (const item of adminNav) {
     const desc = adminCopy.home.directoryDesc[item.href];
     assert.ok(typeof desc === "string" && desc.length > 0, `${item.href} 缺 directoryDesc`);

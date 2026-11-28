@@ -204,7 +204,7 @@ ssh -i "$KEY" "$DEPLOY_HOST" '
 
 脚本 P9 已自动跑冒烟；以下是补充清单。
 
-- 冒烟页面：`/`、`/about`、`/join`、`/docs`、`/repair-activities`、`/robots.txt`、`/sitemap.xml`、
+- 冒烟页面：`/`、`/about`、`/join`、`/tools`、`/repair-activities`、`/robots.txt`、`/sitemap.xml`、
   `/handbook/` 必须 200。文档站注意：`/handbook` 是 **302 → `/handbook/` → 200**（nginx 静态服务）。
   **CI 里没有 nginx、由 Next 自己服务 public 文件，两边表现不同，不要互相套用。**
 - 登录态：管理端真实登录一次（账号密码由管理员提供，**不要写进文件**）：
@@ -264,7 +264,7 @@ ssh -i "$KEY" "$DEPLOY_HOST" '
   `.pc-hospital-docs-revision`，`deployed-sha` 没变但目录被部署换成旧版时会被发现并重新同步。
 - **`--rollback` 也会失效 docs-sync 状态**：回滚后下一次同步仍按 gh-pages 发布文档，
   `handbook.old` 可能被新文档替换；若必须固定回滚时的旧文档，先停 `docs-sync.timer` 再处理。
-- 部署后验证文档：`/docs` 只是入口页，正文看 `/handbook/`；至少抽查一个本次文档仓库新增/修改的页面
+- 部署后验证文档：`/tools` 只是入口页，正文看 `/handbook/`；至少抽查一个本次文档仓库新增/修改的页面
   （新页面 200，或在 HTML 里搜到新段落），并确认 `deployed-sha` 与文档仓库 `gh-pages` 一致。
   需要立即刷新时手工执行 `systemctl start docs-sync.service`（oneshot，幂等）。
 - 健康判据：`curl -sL https://pczafu.cn/handbook` 200；主题 CSS/JS/searchindex 均可访问。

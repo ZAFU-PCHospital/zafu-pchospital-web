@@ -1,7 +1,7 @@
 # 官网构建与站内文档的持续集成
 #
 # 为什么需要它：仓库此前**没有任何 CI**，而「lint/build 必须通过」只写在文档里，
-# 合并前没有任何机器检查。站内文档集成（/docs → /handbook/）尤其容易漏：
+# 合并前没有任何机器检查。站内文档集成（/tools → /handbook/）尤其容易漏：
 # 只跑 pnpm build:site 也能「构建成功」，但 /handbook/ 会整片 404，
 # 而本仓库**没有配置部署前的任何拦截**。这个 workflow 就是那道拦截。
 #
@@ -162,12 +162,12 @@ jobs:
 
           ready=""
           for _ in $(seq 1 40); do
-            if curl -fsS -o /dev/null "http://127.0.0.1:3311/docs"; then ready="yes"; break; fi
+            if curl -fsS -o /dev/null "http://127.0.0.1:3311/tools"; then ready="yes"; break; fi
             sleep 1
           done
           if [ -z "$ready" ]; then echo "::error::生产服务未在 40s 内就绪"; cat /tmp/next-start.log; exit 1; fi
 
-          for path in / /about /join /docs /handbook/ /handbook/index.html; do
+          for path in / /about /join /tools /handbook/ /handbook/index.html; do
             code=$(curl -sS -o /dev/null -w '%{http_code}' -L "http://127.0.0.1:3311${path}")
             echo "${path} → ${code}"
             [ "$code" = "200" ] || { echo "::error::${path} 返回 ${code}"; exit 1; }

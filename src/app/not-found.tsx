@@ -33,7 +33,7 @@ export default function NotFound() {
           <Button variant="solid" href="/" icon="chevronRight">
             回到首页
           </Button>
-          <Button variant="ghost" href="/docs" trailingIcon="chevronRight">
+          <Button variant="ghost" href="/tools" trailingIcon="chevronRight">
             浏览实用工具
           </Button>
         </div>

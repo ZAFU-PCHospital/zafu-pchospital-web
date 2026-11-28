@@ -46,7 +46,8 @@ export function AdminModal({
   subtitle?: string;
   onClose: () => void;
   children: ReactNode;
-  size?: "default" | "compact";
+  /** `narrow` 用于「字段少、但输入内容长」的表单（如网址）：默认档 64rem 铺满一屏显得空。 */
+  size?: "default" | "compact" | "narrow";
   /** 供嵌套窗口关闭后恢复焦点，不依赖正文是否有数据。 */
   dialogRef?: RefObject<HTMLDivElement | null>;
 }) {
@@ -65,7 +66,11 @@ export function AdminModal({
 
       <div
         ref={windowRef}
-        className={cn("admin-modal__window", size === "compact" && "admin-modal__window--compact")}
+        className={cn(
+          "admin-modal__window",
+          size === "compact" && "admin-modal__window--compact",
+          size === "narrow" && "admin-modal__window--narrow",
+        )}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
