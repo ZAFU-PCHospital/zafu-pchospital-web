@@ -20,6 +20,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         name: bodyOptionalString(body, "name") ?? undefined,
         url: bodyOptionalString(body, "url") ?? undefined,
         description: bodyOptionalString(body, "description"),
+        expectedUpdatedAt: bodyOptionalString(body, "expectedUpdatedAt") ?? undefined,
       },
       actor,
     );

@@ -16,6 +16,7 @@ const categorySelect = {
   description: true,
   sortOrder: true,
   isActive: true,
+  updatedAt: true,
 } as const;
 
 const siteSelect = {
@@ -26,6 +27,7 @@ const siteSelect = {
   description: true,
   sortOrder: true,
   isActive: true,
+  updatedAt: true,
 } as const;
 
 export type ToolCategoryRow = {
@@ -36,6 +38,7 @@ export type ToolCategoryRow = {
   description: string | null;
   sortOrder: number;
   isActive: boolean;
+  updatedAt: Date;
 };
 
 export type ToolSiteRow = {
@@ -46,6 +49,7 @@ export type ToolSiteRow = {
   description: string | null;
   sortOrder: number;
   isActive: boolean;
+  updatedAt: Date;
 };
 
 export const toolRepository = {

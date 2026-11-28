@@ -275,10 +275,17 @@ export function ToolAdminPanel() {
         url: data.url ?? "",
         categoryId: data.categoryId ?? site.categoryId,
         description: data.description || null,
+        expectedUpdatedAt: site.updatedAt,
       },
     });
     setBusy(false);
     if (!result.ok) {
+      if (result.code === "TOOL_VERSION_CONFLICT") {
+        setSiteModal(null);
+        await load();
+        setToast({ text: copy.editConflict, tone: "neutral" });
+        return;
+      }
       reportFailure(result.code === "TOOL_SITE_CONFLICT" ? copy.create.conflict : result.message);
       return;
     }
@@ -400,11 +407,18 @@ export function ToolAdminPanel() {
           name: data.name ?? "",
           labelEn: data.labelEn || null,
           description: data.description || null,
+          expectedUpdatedAt: category.updatedAt,
         },
       },
     );
     setBusy(false);
     if (!result.ok) {
+      if (result.code === "TOOL_VERSION_CONFLICT") {
+        setCategoryModal(null);
+        await load();
+        setToast({ text: copy.editConflict, tone: "neutral" });
+        return;
+      }
       reportFailure(result.message);
       return;
     }

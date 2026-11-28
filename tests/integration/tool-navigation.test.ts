@@ -61,6 +61,21 @@ test("工具导航的权限、并发去重、排序和软删除", { skip: !run }
   const prefix = `工具集成 ${userId.slice(0, 8)}`;
   const source = await categories.create({ name: `${prefix} 来源` }, actor);
   const target = await categories.create({ name: `${prefix} 目标` }, actor);
+  // 乐观并发：拿旧 updatedAt 保存应 409，而不是静默覆盖别人的修改。
+  await assert.rejects(
+    categories.update(
+      source.id,
+      { description: "旧版本覆盖", expectedUpdatedAt: new Date(0).toISOString() },
+      actor,
+    ),
+    { code: "TOOL_VERSION_CONFLICT" },
+  );
+  const renamed = await categories.update(
+    source.id,
+    { description: "并发校验", expectedUpdatedAt: source.updatedAt },
+    actor,
+  );
+  assert.ok(Date.parse(renamed.updatedAt) > Date.parse(source.updatedAt));
   await assert.rejects(categories.update(source.id, { labelEn: "x".repeat(65) }, actor), {
     code: "VALIDATION_FAILED",
   });
@@ -83,6 +98,20 @@ test("工具导航的权限、并发去重、排序和软删除", { skip: !run }
   );
   const [first] = (await sites.list(actor)).filter((site) => site.categoryId === source.id);
   assert.equal(first.sortOrder, 0);
+  await assert.rejects(
+    sites.update(
+      first.id,
+      { name: "旧版本覆盖", expectedUpdatedAt: new Date(0).toISOString() },
+      actor,
+    ),
+    { code: "TOOL_VERSION_CONFLICT" },
+  );
+  const savedSite = await sites.update(
+    first.id,
+    { description: "并发校验", expectedUpdatedAt: first.updatedAt },
+    actor,
+  );
+  assert.ok(Date.parse(savedSite.updatedAt) >= Date.parse(first.updatedAt));
   await assert.rejects(categories.remove(source.id, actor), { code: "TOOL_CATEGORY_CONFLICT" });
   await sites.setActive(first.id, false, actor);
   assert.ok((await toolService.listPublicGroups()).every((group) => group.id !== source.id));

@@ -1848,6 +1848,8 @@ export type ToolCategoryView = {
   description: string | null;
   sortOrder: number;
   isActive: boolean;
+  /** 乐观并发令牌：后台 PATCH 时原样回传，服务端比对后再写。 */
+  updatedAt: string;
 };
 
 /** 网站展示视图。`siteCount` 只统计**启用中且未删除**的网站，回答「停用这一组会隐藏几个」。 */
@@ -1859,6 +1861,8 @@ export type ToolSiteView = {
   description: string | null;
   sortOrder: number;
   isActive: boolean;
+  /** 乐观并发令牌：后台 PATCH 时原样回传，服务端比对后再写。 */
+  updatedAt: string;
 };
 
 export type ToolCategoryAdminView = ToolCategoryView & { siteCount: number };
@@ -1874,6 +1878,8 @@ export type UpdateToolCategoryInput = {
   name?: string;
   labelEn?: string | null;
   description?: string | null;
+  /** 打开编辑弹窗时拿到的 `updatedAt`；与当前行不一致时拒绝写入。 */
+  expectedUpdatedAt?: string;
 };
 
 export type CreateToolSiteInput = {
@@ -1888,6 +1894,8 @@ export type UpdateToolSiteInput = {
   name?: string;
   url?: string;
   description?: string | null;
+  /** 打开编辑弹窗时拿到的 `updatedAt`；与当前行不一致时拒绝写入。 */
+  expectedUpdatedAt?: string;
 };
 
 /** 公开页的分组视图：已按 sortOrder 排好序，组内网站同样有序。 */

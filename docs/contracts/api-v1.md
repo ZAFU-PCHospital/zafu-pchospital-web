@@ -1450,14 +1450,14 @@ IP、User-Agent、Cookie 与错误内容都不写入日志。实现见
 | --------------------------------------------------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------- |
 | `GET /api/v1/admin/tools/categories`                                  | `tool:manage` | 分类列表：**含已停用**，每条带 `siteCount`（该分类下启用中的网站数）                                          |
 | `POST /api/v1/admin/tools/categories`                                 | `tool:manage` | `{name, code?, labelEn?, description?}`；同名软删分类会复活，与现有分类撞名/撞码 409 `TOOL_CATEGORY_CONFLICT` |
-| `PATCH /api/v1/admin/tools/categories/:id`                            | `tool:manage` | 改 `name` / `labelEn` / `description`；`code` 不可改                                                          |
+| `PATCH /api/v1/admin/tools/categories/:id`                            | `tool:manage` | 改 `name` / `labelEn` / `description`；`code` 不可改；`expectedUpdatedAt` 过期时 409 `TOOL_VERSION_CONFLICT`  |
 | `DELETE /api/v1/admin/tools/categories/:id`                           | `tool:manage` | 软删除；**分类下还有网站时 409**，提示先移走或删除                                                            |
 | `POST /api/v1/admin/tools/categories/:id/activate`（或 `deactivate`） | `tool:manage` | 启用 / 停用。停用后整组从公开页消失，数据不删                                                                 |
 | `POST /api/v1/admin/tools/categories/:id/reorder`                     | `tool:manage` | `{direction:"UP"\|"DOWN"}`；已在首末位时幂等成功，不写审计                                                    |
 | `POST /api/v1/admin/tools/categories/:id/move`                        | `tool:manage` | `{beforeId: string \| null}`（`null` = 拖到末尾）；落点没变时幂等成功                                         |
 | `GET /api/v1/admin/tools/sites`                                       | `tool:manage` | 全部网站：**含已停用**，按组内序号排序；界面自己按 `categoryId` 分组                                          |
 | `POST /api/v1/admin/tools/sites`                                      | `tool:manage` | `{categoryId, name, url, description?}`；网址非法 400，组内重复 409                                           |
-| `PATCH /api/v1/admin/tools/sites/:id`                                 | `tool:manage` | 改字段；改 `categoryId` 后排到目标分类末尾                                                                    |
+| `PATCH /api/v1/admin/tools/sites/:id`                                 | `tool:manage` | 改字段；改 `categoryId` 后排到目标分类末尾；`expectedUpdatedAt` 过期时 409 `TOOL_VERSION_CONFLICT`            |
 | `DELETE /api/v1/admin/tools/sites/:id`                                | `tool:manage` | 软删除，公开页立即不再显示                                                                                    |
 | `POST /api/v1/admin/tools/sites/:id/activate`（或 `deactivate`）      | `tool:manage` | 启用 / 停用单条                                                                                               |
 | `POST /api/v1/admin/tools/sites/:id/reorder`                          | `tool:manage` | 同上，**组内**上移 / 下移一格                                                                                 |
@@ -1468,6 +1468,7 @@ IP、User-Agent、Cookie 与错误内容都不写入日志。实现见
 - 分类和网站均使用软删除。分类下仍有未删除的网站时返回 409。分类 `code` 全局唯一；软删除后同名重建会复活原行（恢复启用并排到末尾，写 `tool_category.restored` 审计），与现有分类撞名或撞码仍返回 409 `TOOL_CATEGORY_CONFLICT`。分类英文名最多 64 字符，说明最多 500 字符。
 - 网址及外链只接受 `http` / `https` 绝对地址。服务端规范化网址，组内创建、改址和换组时在事务内锁定分类再检查重复。停用的网站仍占用网址，软删除后可重新收录。重复返回 409 `TOOL_SITE_CONFLICT`。
 - 分类按全局顺序排列，网站按组内顺序排列。新增追加到末尾，删除和换组后压实受影响的序号。`beforeId: null` 表示放到目标分类末尾。
+- 分类与网站的编辑支持乐观并发：列表与写响应都带 `updatedAt`，PATCH 可回传 `expectedUpdatedAt`；服务端在事务内锁行后比对，被其他管理员抢先修改时返回 409 `TOOL_VERSION_CONFLICT`，不会静默覆盖。不传时保持 last-write-wins（兼容旧客户端）。
 - `tool:manage` 仅授予 ADMIN。写操作在业务事务内记录 `tool_category.*` / `tool_site.*` 审计，`targetType` 为 `ToolCategory` / `ToolSite`。
 - 公共目录只显示启用且未删除的分类和网站。两张表都没有记录时使用内置清单；数据库读取失败时记录服务端告警并使用同一清单。
 

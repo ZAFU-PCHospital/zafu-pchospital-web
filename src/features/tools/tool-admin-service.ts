@@ -50,7 +50,10 @@ export const toolCategoryAdminService: ToolCategoryAdminServiceContract = {
       toolRepository.listCategories({ activeOnly: false }),
       toolRepository.countSitesByCategory(),
     ]);
-    return rows.map((row) => ({ ...row, siteCount: counts.get(row.id) ?? 0 }));
+    return rows.map((row) => ({
+      ...toCategoryView(row),
+      siteCount: counts.get(row.id) ?? 0,
+    }));
   },
 
   async create(input: CreateToolCategoryInput, actor: AuthorizedActor): Promise<ToolCategoryView> {
@@ -162,10 +165,11 @@ export const toolCategoryAdminService: ToolCategoryAdminServiceContract = {
     }
     const fields = categoryText(input);
     return inSerializableTransaction(async (tx) => {
-      const before = await tx.toolCategory.findFirst({
-        where: { id: categoryId, deletedAt: null },
-      });
-      if (!before) throw new AppError("RESOURCE_NOT_FOUND", "工具分类不存在");
+      // 先锁行再读：并发保存时后到的事务会等前一个提交，然后看到新的 `updatedAt`。
+      await tx.$queryRaw`SELECT id FROM tool_categories WHERE id = ${categoryId} FOR UPDATE`;
+      const before = await tx.toolCategory.findUnique({ where: { id: categoryId } });
+      if (!before || before.deletedAt) throw new AppError("RESOURCE_NOT_FOUND", "工具分类不存在");
+      assertVersion(before.updatedAt, input.expectedUpdatedAt);
       if (name !== undefined && name !== before.name) {
         const duplicate = await tx.toolCategory.findFirst({
           where: { deletedAt: null, name, id: { not: categoryId } },
@@ -318,7 +322,7 @@ export const toolCategoryAdminService: ToolCategoryAdminServiceContract = {
 export const toolSiteAdminService: ToolSiteAdminServiceContract = {
   async list(actor: AuthorizedActor): Promise<ToolSiteView[]> {
     requirePermission(actor, "tool:manage");
-    return toolRepository.listSites({ activeOnly: false });
+    return (await toolRepository.listSites({ activeOnly: false })).map(toSiteView);
   },
 
   async create(input: CreateToolSiteInput, actor: AuthorizedActor): Promise<ToolSiteView> {
@@ -388,6 +392,7 @@ export const toolSiteAdminService: ToolSiteAdminServiceContract = {
     }
     return inSerializableTransaction(async (tx) => {
       const before = await lockSite(tx, siteId);
+      assertVersion(before.updatedAt, input.expectedUpdatedAt);
       const categoryId = input.categoryId ?? before.categoryId;
       const changingCategory = categoryId !== before.categoryId;
       const effectiveUrl = url ?? before.url;
@@ -577,6 +582,7 @@ function toCategoryView(row: {
   description: string | null;
   sortOrder: number;
   isActive: boolean;
+  updatedAt: Date;
 }): ToolCategoryView {
   return {
     id: row.id,
@@ -586,6 +592,7 @@ function toCategoryView(row: {
     description: row.description,
     sortOrder: row.sortOrder,
     isActive: row.isActive,
+    updatedAt: row.updatedAt.toISOString(),
   };
 }
 
@@ -597,6 +604,7 @@ function toSiteView(row: {
   description: string | null;
   sortOrder: number;
   isActive: boolean;
+  updatedAt: Date;
 }): ToolSiteView {
   return {
     id: row.id,
@@ -606,7 +614,25 @@ function toSiteView(row: {
     description: row.description,
     sortOrder: row.sortOrder,
     isActive: row.isActive,
+    updatedAt: row.updatedAt.toISOString(),
   };
+}
+
+/**
+ * 乐观并发校验：后台编辑弹窗保存时回传打开那一刻的 `updatedAt`。
+ *
+ * 两个管理员同时编辑同一条时，后保存的人会在锁内看到已经变化的 `updatedAt`，
+ * 这里直接 409，而不是把前一个人的修改静默覆盖回旧值。
+ */
+function assertVersion(current: Date, expected: string | undefined): void {
+  if (expected === undefined) return;
+  const expectedMs = Date.parse(expected);
+  if (!Number.isFinite(expectedMs)) {
+    throw new AppError("VALIDATION_FAILED", "版本信息无效，请刷新后重试");
+  }
+  if (current.getTime() !== expectedMs) {
+    throw new AppError("TOOL_VERSION_CONFLICT", "这条内容已被其他管理员修改，请刷新后重试");
+  }
 }
 
 /**
